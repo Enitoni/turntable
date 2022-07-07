@@ -1,0 +1,23 @@
+[package]
+name = "gct"
+version = "0.0.1"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+tokio = { version = "1.19.2", features = ["full"] }
+
+[dependencies.serenity]
+default-features = false
+features = [
+    "builder",
+    "chrono",
+    "client",
+    "gateway",
+    "http",
+    "model",
+    "utils",
+    "rustls_backend",
+]
+version = "0.11"
