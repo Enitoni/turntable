@@ -2,20 +2,15 @@ use poise::serenity_prelude as serenity;
 use serenity::{GatewayIntents, GuildId};
 use std::env;
 
-type Error = Box<dyn std::error::Error + Send + Sync>;
-type Context<'a> = poise::Context<'a, State, Error>;
-type FrameworkContext<'a> = poise::FrameworkContext<'a, State, Error>;
+mod util;
 
-struct State {
+pub type Error = Box<dyn std::error::Error + Send + Sync>;
+pub type Context<'a> = poise::Context<'a, State, Error>;
+pub type FrameworkContext<'a> = poise::FrameworkContext<'a, State, Error>;
+pub type CommandList = Vec<poise::Command<State, Error>>;
+
+pub struct State {
     home_guild: GuildId,
-}
-
-/// Pong!
-#[poise::command(slash_command)]
-async fn ping(ctx: Context<'_>) -> Result<(), Error> {
-    ctx.say("Pong!").await?;
-
-    Ok(())
 }
 
 async fn event_handler(
@@ -51,9 +46,17 @@ async fn main() {
 
     let intents = GatewayIntents::GUILDS | GatewayIntents::GUILD_MESSAGES;
 
+    let commands = {
+        let mut commands = vec![register()];
+
+        commands.extend(crate::util::commands());
+
+        commands
+    };
+
     let framework = poise::Framework::build()
         .options(poise::FrameworkOptions {
-            commands: vec![register(), ping()],
+            commands,
             listener: |a, b, c, d| Box::pin(event_handler(a, b, c, d)),
             ..Default::default()
         })
