@@ -1,4 +1,4 @@
-use crate::{CommandList, Context, Error};
+use super::{CommandList, Context, Error};
 use chrono::prelude::*;
 
 /// Calculates the latency of calling a command
@@ -6,12 +6,10 @@ use chrono::prelude::*;
 async fn ping(ctx: Context<'_>) -> Result<(), Error> {
     let now = Utc::now();
 
-    let incoming_latency = ctx
-        .created_at()
-        .signed_duration_since(now)
-        .num_milliseconds() as f32;
+    let incoming_latency = ctx.created_at().unix_timestamp_nanos() / 1_000_000;
+    let milliseconds = (incoming_latency as i64 - now.timestamp_millis()) as f32;
 
-    ctx.say(format!("Pong! ({}s)", incoming_latency.abs() / 1000.))
+    ctx.say(format!("Pong! ({}s)", milliseconds.abs() / 1000.))
         .await?;
 
     Ok(())

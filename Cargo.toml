@@ -7,5 +7,19 @@ edition = "2021"
 
 [dependencies]
 tokio = { version = "1.19.2", features = ["full"] }
-poise = "0.2.2"
 chrono = "0.4"
+
+[dependencies.poise]
+git = "https://github.com/GnomedDev/poise"
+branch = "personal"
+
+[dependencies.songbird]
+git = "https://github.com/GnomedDev/songbird"
+branch = "symphonia-personal"
+
+[patch."https://github.com/serenity-rs/serenity"]
+serenity = { git = "https://github.com/GnomedDev/serenity", branch = "personal" }
+
+[patch.crates-io."serenity"]
+git = "https://github.com/GnomedDev/serenity"
+branch = "personal"
