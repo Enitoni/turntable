@@ -469,6 +469,7 @@ dependencies = [
  "chrono",
  "poise",
  "songbird",
+ "symphonia",
  "tokio",
 ]
 
@@ -1516,8 +1517,33 @@ version = "0.5.0"
 source = "git+https://github.com/FelixMcFelix/Symphonia?branch=songbird-fixes#12f29a5a895b8c3c1680fe3d55fc3e2df30000bd"
 dependencies = [
  "lazy_static",
+ "symphonia-bundle-mp3",
+ "symphonia-codec-pcm",
+ "symphonia-core",
+ "symphonia-format-ogg",
+ "symphonia-format-wav",
+ "symphonia-metadata",
+]
+
+[[package]]
+name = "symphonia-bundle-mp3"
+version = "0.5.0"
+source = "git+https://github.com/FelixMcFelix/Symphonia?branch=songbird-fixes#12f29a5a895b8c3c1680fe3d55fc3e2df30000bd"
+dependencies = [
+ "bitflags",
+ "lazy_static",
+ "log",
  "symphonia-core",
  "symphonia-metadata",
+]
+
+[[package]]
+name = "symphonia-codec-pcm"
+version = "0.5.0"
+source = "git+https://github.com/FelixMcFelix/Symphonia?branch=songbird-fixes#12f29a5a895b8c3c1680fe3d55fc3e2df30000bd"
+dependencies = [
+ "log",
+ "symphonia-core",
 ]
 
 [[package]]
@@ -1533,6 +1559,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "symphonia-format-ogg"
+version = "0.5.0"
+source = "git+https://github.com/FelixMcFelix/Symphonia?branch=songbird-fixes#12f29a5a895b8c3c1680fe3d55fc3e2df30000bd"
+dependencies = [
+ "log",
+ "symphonia-core",
+ "symphonia-metadata",
+ "symphonia-utils-xiph",
+]
+
+[[package]]
+name = "symphonia-format-wav"
+version = "0.5.0"
+source = "git+https://github.com/FelixMcFelix/Symphonia?branch=songbird-fixes#12f29a5a895b8c3c1680fe3d55fc3e2df30000bd"
+dependencies = [
+ "log",
+ "symphonia-core",
+ "symphonia-metadata",
+]
+
+[[package]]
 name = "symphonia-metadata"
 version = "0.5.0"
 source = "git+https://github.com/FelixMcFelix/Symphonia?branch=songbird-fixes#12f29a5a895b8c3c1680fe3d55fc3e2df30000bd"
@@ -1541,6 +1588,15 @@ dependencies = [
  "lazy_static",
  "log",
  "symphonia-core",
+]
+
+[[package]]
+name = "symphonia-utils-xiph"
+version = "0.5.0"
+source = "git+https://github.com/FelixMcFelix/Symphonia?branch=songbird-fixes#12f29a5a895b8c3c1680fe3d55fc3e2df30000bd"
+dependencies = [
+ "symphonia-core",
+ "symphonia-metadata",
 ]
 
 [[package]]

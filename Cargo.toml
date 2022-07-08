@@ -9,6 +9,12 @@ edition = "2021"
 tokio = { version = "1.19.2", features = ["full"] }
 chrono = "0.4"
 
+[dependencies.symphonia]
+git = "https://github.com/FelixMcFelix/Symphonia"
+features = ["mp3", "ogg", "wav", "pcm"]
+branch = "songbird-fixes"
+default-features = false
+
 [dependencies.poise]
 git = "https://github.com/GnomedDev/poise"
 branch = "personal"

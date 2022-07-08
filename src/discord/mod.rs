@@ -2,6 +2,7 @@
 
 mod bot;
 mod util;
+mod voice;
 
 pub use bot::*;
 pub type Error = Box<dyn std::error::Error + Send + Sync>;

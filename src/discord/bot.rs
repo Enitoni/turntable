@@ -1,20 +1,10 @@
 use std::{env, sync::Arc};
 
-use crate::{
-    audio::AudioSystem,
-    discord::{util, Context, Error},
-};
-use poise::{
-    serenity::client,
-    serenity_prelude::{ChannelId, GatewayIntents, GuildId},
-};
+use crate::audio::AudioSystem;
+use poise::serenity_prelude::{ChannelId, GatewayIntents, GuildId};
 use songbird::{SerenityInit, Songbird};
 
-// This is GCT's Discords server
-const HOME_GUILD_ID: u64 = 671811819597201421;
-
-// The channel to join for streaming
-const VOICE_CHANNEL_ID: u64 = 671859933876191265;
+use super::{util, voice, Context, Error};
 
 pub struct Bot {
     audio: Arc<AudioSystem>,
@@ -22,14 +12,24 @@ pub struct Bot {
 }
 
 impl Bot {
+    // This is GCT's Discords server
+    const HOME_GUILD_ID: u64 = 671811819597201421;
+
+    // The channel to join for streaming
+    const VOICE_CHANNEL_ID: u64 = 671859933876191265;
+
     pub async fn run(audio: Arc<AudioSystem>) {
         let token = env::var("GCT_DISCORD_TOKEN").expect("GCT_DISCORD_TOKEN was not specified.");
-        let intents = GatewayIntents::GUILDS | GatewayIntents::GUILD_MESSAGES;
+
+        let intents = GatewayIntents::GUILDS
+            | GatewayIntents::GUILD_MESSAGES
+            | GatewayIntents::GUILD_VOICE_STATES;
 
         let commands = {
             let mut list = vec![register()];
 
             list.extend(util::commands().into_iter());
+            list.extend(voice::commands().into_iter());
             list
         };
 
@@ -51,6 +51,14 @@ impl Bot {
             .user_data_setup(move |_ctx, _ready, _framework| Box::pin(async move { Ok(bot) }));
 
         framework.run().await.unwrap();
+    }
+
+    pub fn home_guild(&self) -> GuildId {
+        GuildId::new(Bot::HOME_GUILD_ID)
+    }
+
+    pub fn voice_channel(&self) -> ChannelId {
+        ChannelId::new(Bot::VOICE_CHANNEL_ID)
     }
 }
 
