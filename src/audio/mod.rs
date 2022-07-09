@@ -1,6 +1,9 @@
 use std::sync::Arc;
 
+mod buffering;
 mod stream;
+
+pub use buffering::*;
 pub use stream::*;
 
 pub struct AudioSystem {
@@ -14,8 +17,8 @@ impl AudioSystem {
         }
     }
 
-    pub fn stream(&self) -> AudioStreamConsumer {
-        self.stream.read()
+    pub fn stream(&self) -> AudioBufferConsumer {
+        self.stream.get_consumer()
     }
 
     pub fn run(&self) {

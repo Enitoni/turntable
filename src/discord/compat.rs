@@ -2,11 +2,11 @@
 
 use std::io::Seek;
 
-use crate::audio::{AudioStreamConsumer, AudioSystem, CHANNEL_COUNT, PCM_MIME, SAMPLE_RATE};
+use crate::audio::{AudioBufferConsumer, AudioSystem, CHANNEL_COUNT, PCM_MIME, SAMPLE_RATE};
 use songbird::input::{Input, LiveInput, RawAdapter};
 use symphonia::core::{io::MediaSource, probe::Hint};
 
-impl MediaSource for AudioStreamConsumer {
+impl MediaSource for AudioBufferConsumer {
     fn byte_len(&self) -> Option<u64> {
         None
     }
@@ -38,7 +38,7 @@ impl AudioSystem {
     }
 }
 
-impl Seek for AudioStreamConsumer {
+impl Seek for AudioBufferConsumer {
     fn seek(&mut self, seek: std::io::SeekFrom) -> std::io::Result<u64> {
         // This is a no op
         Ok(0)

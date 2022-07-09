@@ -10,6 +10,8 @@ use std::{
     time::{Duration, Instant},
 };
 
+use super::{AudioBufferConsumer, BufferRegistry};
+
 pub const PCM_MIME: &str = "audio/pcm;rate=44100;encoding=float;bits=32";
 pub const SAMPLE_RATE: usize = 44100;
 pub const CHANNEL_COUNT: usize = 2;
@@ -17,10 +19,10 @@ pub const CHANNEL_COUNT: usize = 2;
 // How many samples should be pushed to buffers per iteration
 const SAMPLE_BUFFER_SIZE: usize = 4096;
 
-const BYTES_PER_SAMPLE: usize = 4 * CHANNEL_COUNT;
+pub const BYTES_PER_SAMPLE: usize = 4 * CHANNEL_COUNT;
 
 // How many bytes should a ring buffer contain
-const BUFFER_SIZE: usize = SAMPLE_BUFFER_SIZE * BYTES_PER_SAMPLE;
+pub const BUFFER_SIZE: usize = SAMPLE_BUFFER_SIZE * BYTES_PER_SAMPLE;
 
 // How many time to wake up the thread during a sleep
 const WAKE_UP_DIVISOR: f32 = 3.;
@@ -37,7 +39,7 @@ type ArcMut<T> = Arc<Mutex<T>>;
 pub struct AudioStream {
     signal: ArcMut<Box<dyn AudioUnit32>>,
     state: ArcMut<StreamState>,
-    producers: ArcMut<Vec<Producer<u8>>>,
+    registry: Arc<BufferRegistry>,
 }
 
 impl AudioStream {
@@ -47,7 +49,7 @@ impl AudioStream {
         Self {
             signal: Arc::new(signal.into()),
             state: Arc::new(StreamState::Idle.into()),
-            producers: Arc::new(vec![].into()),
+            registry: BufferRegistry::new().into(),
         }
     }
 
@@ -57,73 +59,62 @@ impl AudioStream {
         println!("Running AudioStream!");
 
         let state = self.state.clone();
-        let producers = self.producers.clone();
-        let signal = self.signal.clone();
 
         // Ensure that processing starts
         *state.lock().unwrap() = StreamState::Processing;
 
-        thread::spawn(move || {
-            // Calculate optimal laziness
-            let total_samples = (SAMPLE_BUFFER_SIZE * CHANNEL_COUNT) as f32;
-            let seconds_per_sample = 1. / SAMPLE_RATE as f32;
+        thread::spawn({
+            let registry = Arc::clone(&self.registry);
+            let signal = Arc::clone(&self.signal);
 
-            let optimal_sleep_time = total_samples * seconds_per_sample / WAKE_UP_DIVISOR;
-            let time_to_sleep = Duration::from_secs_f32(optimal_sleep_time);
+            move || {
+                // Calculate optimal laziness
+                let total_samples = (SAMPLE_BUFFER_SIZE * CHANNEL_COUNT) as f32;
+                let seconds_per_sample = 1. / SAMPLE_RATE as f32;
 
-            let mut now = Instant::now();
+                let optimal_sleep_time = total_samples * seconds_per_sample / WAKE_UP_DIVISOR;
+                let time_to_sleep = Duration::from_secs_f32(optimal_sleep_time);
 
-            loop {
-                let state = state.lock().unwrap();
+                let mut now = Instant::now();
 
-                if let StreamState::Idle = *state {
-                    // Avoid processing if stream is idle
-                    continue;
+                loop {
+                    thread::sleep(time_to_sleep);
+                    let state = state.lock().unwrap();
+
+                    if let StreamState::Idle = *state {
+                        // Avoid processing if stream is idle
+                        continue;
+                    }
+
+                    let mut signal = signal.lock().expect("Signal not poisoned");
+                    let remaining = registry.samples_remaining();
+
+                    if remaining < 2 {
+                        continue;
+                    }
+
+                    let samples: Vec<_> = (0..remaining)
+                        .into_iter()
+                        .flat_map(|_| {
+                            let (left, right) = (*signal).get_stereo();
+                            [left, right]
+                        })
+                        .flat_map(|sample| sample.to_ne_bytes())
+                        .collect();
+
+                    // Push the samples into the ring buffers
+                    registry.write_byte_samples(&samples);
+
+                    // Ensure dead buffers are removed
+                    registry.recycle();
                 }
-
-                let mut producers = producers.lock().expect("Producers not poisoned");
-                let mut signal = signal.lock().expect("Signal not poisoned");
-
-                let remaining = producers
-                    .iter()
-                    .map(|p| p.remaining())
-                    .min()
-                    .unwrap_or(BUFFER_SIZE);
-
-                if remaining < 2 {
-                    continue;
-                }
-
-                // Calculate how many samples would fit
-                let samples_to_render = remaining / BYTES_PER_SAMPLE;
-
-                let samples: Vec<_> = (0..samples_to_render)
-                    .into_iter()
-                    .flat_map(|_| {
-                        let (left, right) = (*signal).get_stereo();
-                        [left, right]
-                    })
-                    .flat_map(|sample| sample.to_ne_bytes())
-                    .collect();
-
-                for producer in producers.iter_mut() {
-                    producer.push_slice(&samples);
-                }
-
-                thread::sleep(time_to_sleep);
             }
         });
     }
 
     /// Creates a new AudioStreamSource to read from the stream
-    pub fn read(&self) -> AudioStreamConsumer {
-        let buffer = RingBuffer::new(BUFFER_SIZE);
-        let (producer, consumer) = buffer.split();
-
-        let mut producers = self.producers.lock().unwrap();
-        producers.push(producer);
-
-        AudioStreamConsumer::new(consumer)
+    pub fn get_consumer(&self) -> AudioBufferConsumer {
+        self.registry.get_consumer()
     }
 
     pub fn setup() -> Box<dyn AudioUnit32> {
@@ -155,36 +146,5 @@ impl AudioStream {
 
         signal.reset(Some(44100.));
         Box::new(signal)
-    }
-}
-
-/// Represents a consumer
-pub struct AudioStreamConsumer {
-    consumer: Consumer<u8>,
-}
-
-impl AudioStreamConsumer {
-    pub fn new(consumer: Consumer<u8>) -> Self {
-        Self { consumer }
-    }
-}
-
-impl Read for AudioStreamConsumer {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        let requested_len = buf.len();
-
-        let mut read_len = 0;
-
-        while read_len < requested_len {
-            let slice = &mut buf[read_len..];
-            let bytes_read = self.consumer.read(slice);
-
-            match bytes_read {
-                Ok(len) => read_len += len,
-                Err(_) => continue,
-            }
-        }
-
-        Ok(requested_len)
     }
 }

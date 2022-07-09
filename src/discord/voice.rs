@@ -16,11 +16,12 @@ async fn join(ctx: Context<'_>) -> Result<(), Error> {
     if result.is_ok() {
         let mut call = handler.lock().await;
 
+        call.stop();
+
         let input = bot.audio.create_input();
         let handle = call.play_only_input(input);
 
         handle.set_volume(1.0)?;
-        handle.enable_loop();
 
         ctx.say(format!("Joined {}!", channel.mention())).await?;
     } else {

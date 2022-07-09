@@ -1,10 +1,13 @@
 use std::{env, sync::Arc};
 
 use crate::audio::AudioSystem;
-use poise::serenity_prelude::{ChannelId, GatewayIntents, GuildId};
+use poise::{
+    serenity_prelude::{ChannelId, Context as SerenityContext, GatewayIntents, GuildId},
+    Event,
+};
 use songbird::{SerenityInit, Songbird};
 
-use super::{util, voice, Context, Error};
+use super::{util, voice, Context, Error, FrameworkContext};
 
 pub struct Bot {
     pub audio: Arc<AudioSystem>,
@@ -43,6 +46,9 @@ impl Bot {
         let framework = poise::Framework::build()
             .options(poise::FrameworkOptions {
                 commands,
+                listener: |ctx, event, framework, user_data| {
+                    Box::pin(Bot::handle_event(ctx, event, framework, user_data))
+                },
                 ..Default::default()
             })
             .token(token)
@@ -51,6 +57,23 @@ impl Bot {
             .user_data_setup(move |_ctx, _ready, _framework| Box::pin(async move { Ok(bot) }));
 
         framework.run().await.unwrap();
+    }
+
+    pub async fn handle_event(
+        _ctx: &SerenityContext,
+        event: &poise::Event<'_>,
+        _framework: FrameworkContext<'_>,
+        bot: &Bot,
+    ) -> Result<(), Error> {
+        if let Event::VoiceStateUpdate { old: _, new } = event {
+            // Ensures that Songbird releases resources so buffers are not locked
+            // DO NOT REMOVE THIS.
+            if new.channel_id.is_none() {
+                bot.voice.remove(bot.home_guild()).await?;
+            }
+        }
+
+        Ok(())
     }
 
     pub fn home_guild(&self) -> GuildId {
