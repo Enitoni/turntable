@@ -18,7 +18,7 @@ impl MediaSource for AudioStreamRef {
 
 impl AudioSystem {
     fn source(&self) -> Box<dyn MediaSource> {
-        let adapter = RawAdapter::new(self.stream(), 44100, 1);
+        let adapter = RawAdapter::new(self.stream(), 44100, 2);
 
         Box::new(adapter)
     }
