@@ -7,8 +7,8 @@ use songbird::{SerenityInit, Songbird};
 use super::{util, voice, Context, Error};
 
 pub struct Bot {
-    audio: Arc<AudioSystem>,
-    voice: Arc<Songbird>,
+    pub audio: Arc<AudioSystem>,
+    pub voice: Arc<Songbird>,
 }
 
 impl Bot {
