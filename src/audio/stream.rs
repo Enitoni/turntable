@@ -7,9 +7,10 @@ use std::{
     io::{Read, Seek},
     sync::{Arc, Mutex},
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
+pub const PCM_MIME: &str = "audio/pcm;rate=44100;encoding=float;bits=32";
 pub const SAMPLE_RATE: usize = 44100;
 pub const CHANNEL_COUNT: usize = 2;
 
@@ -69,6 +70,8 @@ impl AudioStream {
 
             let optimal_sleep_time = total_samples * seconds_per_sample / WAKE_UP_DIVISOR;
             let time_to_sleep = Duration::from_secs_f32(optimal_sleep_time);
+
+            let mut now = Instant::now();
 
             loop {
                 let state = state.lock().unwrap();

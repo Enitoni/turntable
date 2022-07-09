@@ -2,11 +2,9 @@
 
 use std::io::Seek;
 
-use crate::audio::{AudioStreamConsumer, AudioSystem, CHANNEL_COUNT, SAMPLE_RATE};
+use crate::audio::{AudioStreamConsumer, AudioSystem, CHANNEL_COUNT, PCM_MIME, SAMPLE_RATE};
 use songbird::input::{Input, LiveInput, RawAdapter};
 use symphonia::core::{io::MediaSource, probe::Hint};
-
-const PCM_MIME: &str = "audio/pcm;rate=44100;encoding=float;bits=32";
 
 impl MediaSource for AudioStreamConsumer {
     fn byte_len(&self) -> Option<u64> {
