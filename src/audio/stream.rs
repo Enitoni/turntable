@@ -1,13 +1,32 @@
-use fundsp::{hacker32::*, oscillator::Sine};
+use fundsp::hacker32::*;
+
+use ringbuf::{Consumer, Producer, RingBuffer};
 
 use std::{
     io::{Read, Seek},
     sync::{Arc, Mutex},
+    thread,
 };
 
-// Represents a continuous stream of raw PCM audio.
+// How many samples should be pushed to buffers per iteration
+const SAMPLE_BUFFER_SIZE: usize = 4096;
+
+// How many bytes should a ring buffer contain
+const BUFFER_SIZE: usize = SAMPLE_BUFFER_SIZE * 4;
+
+enum StreamState {
+    Processing,
+    Idle,
+}
+
+type ArcMut<T> = Arc<Mutex<T>>;
+
+/// An infinite stream of audio that supports
+/// multiple consumers.
 pub struct AudioStream {
-    signal: Mutex<Box<dyn AudioUnit32>>,
+    signal: ArcMut<Box<dyn AudioUnit32>>,
+    state: ArcMut<StreamState>,
+    producers: ArcMut<Vec<Producer<u8>>>,
 }
 
 impl AudioStream {
@@ -15,8 +34,59 @@ impl AudioStream {
         let signal = Self::setup();
 
         Self {
-            signal: Mutex::new(signal),
+            signal: Arc::new(signal.into()),
+            state: Arc::new(StreamState::Idle.into()),
+            producers: Arc::new(vec![].into()),
         }
+    }
+
+    /// Start processing the stream.
+    /// This will push to ring buffers if state is set to Processing.
+    pub fn run(&self) {
+        println!("Running AudioStream!");
+
+        let state = self.state.clone();
+        let producers = self.producers.clone();
+        let signal = self.signal.clone();
+
+        // Ensure that processing starts
+        *state.lock().unwrap() = StreamState::Processing;
+
+        thread::spawn(move || loop {
+            let state = state.lock().unwrap();
+
+            if let StreamState::Idle = *state {
+                // Avoid processing if stream is idle
+                continue;
+            }
+
+            let mut producers = producers.lock().expect("Producers not poisoned");
+            let mut signal = signal.lock().expect("Signal not poisoned");
+
+            let samples: Vec<_> = (0..SAMPLE_BUFFER_SIZE)
+                .into_iter()
+                .flat_map(|_| {
+                    let (left, right) = (*signal).get_stereo();
+                    [left, right]
+                })
+                .flat_map(|sample| sample.to_ne_bytes())
+                .collect();
+
+            for producer in producers.iter_mut() {
+                producer.push_slice(&samples);
+            }
+        });
+    }
+
+    /// Creates a new AudioStreamSource to read from the stream
+    pub fn read(&self) -> AudioStreamConsumer {
+        let buffer = RingBuffer::new(BUFFER_SIZE);
+        let (producer, consumer) = buffer.split();
+
+        let mut producers = self.producers.lock().unwrap();
+        producers.push(producer);
+
+        AudioStreamConsumer::new(consumer)
     }
 
     pub fn setup() -> Box<dyn AudioUnit32> {
@@ -41,40 +111,25 @@ impl AudioStream {
     }
 }
 
-pub struct AudioStreamRef {
-    stream: Arc<AudioStream>,
+/// Represents a consumer
+pub struct AudioStreamConsumer {
+    consumer: Consumer<u8>,
 }
 
-impl AudioStreamRef {
-    pub fn new(stream: Arc<AudioStream>) -> Self {
-        Self { stream }
+impl AudioStreamConsumer {
+    pub fn new(consumer: Consumer<u8>) -> Self {
+        Self { consumer }
     }
 }
 
-impl Read for AudioStreamRef {
+impl Read for AudioStreamConsumer {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        let buffer_length = buf.len();
-        let samples_to_process = buffer_length / 4 / 2;
-
-        let mut signal = self.stream.signal.lock().expect("Locked oscillator");
-
-        let samples_as_bytes: Vec<u8> = (0..samples_to_process)
-            .into_iter()
-            .flat_map(|_| {
-                let (left, right) = signal.get_stereo();
-
-                [left.to_ne_bytes(), right.to_ne_bytes()]
-                    .into_iter()
-                    .flatten()
-            })
-            .collect();
-
-        buf.copy_from_slice(&samples_as_bytes);
-        Ok(buffer_length)
+        let len = self.consumer.read(buf).expect("Read into bytes");
+        Ok(len)
     }
 }
 
-impl Seek for AudioStreamRef {
+impl Seek for AudioStreamConsumer {
     fn seek(&mut self, _: std::io::SeekFrom) -> std::io::Result<u64> {
         panic!("Attempt to seek AudioStream!")
     }

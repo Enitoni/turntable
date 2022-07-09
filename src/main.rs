@@ -7,5 +7,7 @@ mod discord;
 async fn main() {
     let audio = Arc::new(audio::AudioSystem::default());
 
+    audio.run();
+
     discord::Bot::run(audio).await;
 }

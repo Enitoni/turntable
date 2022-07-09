@@ -14,8 +14,12 @@ impl AudioSystem {
         }
     }
 
-    pub fn stream(&self) -> AudioStreamRef {
-        AudioStreamRef::new(self.stream.clone())
+    pub fn stream(&self) -> AudioStreamConsumer {
+        self.stream.read()
+    }
+
+    pub fn run(&self) {
+        self.stream.run();
     }
 }
 

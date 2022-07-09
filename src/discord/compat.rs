@@ -1,12 +1,12 @@
 //! This file adds compatibility between Songbird and the decoupled audio engine
 
-use crate::audio::{AudioStreamRef, AudioSystem};
+use crate::audio::{AudioStreamConsumer, AudioSystem};
 use songbird::input::{Input, LiveInput, RawAdapter};
 use symphonia::core::{io::MediaSource, probe::Hint};
 
 const PCM_MIME: &str = "audio/pcm;rate=44100;encoding=float;bits=32";
 
-impl MediaSource for AudioStreamRef {
+impl MediaSource for AudioStreamConsumer {
     fn byte_len(&self) -> Option<u64> {
         None
     }
