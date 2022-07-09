@@ -20,6 +20,7 @@ async fn join(ctx: Context<'_>) -> Result<(), Error> {
         let handle = call.play_only_input(input);
 
         handle.set_volume(1.0)?;
+        handle.enable_loop();
 
         ctx.say(format!("Joined {}!", channel.mention())).await?;
     } else {

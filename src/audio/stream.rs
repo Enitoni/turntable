@@ -2,17 +2,24 @@ use fundsp::hacker32::*;
 
 use ringbuf::{Consumer, Producer, RingBuffer};
 
+use core::time;
 use std::{
     io::{Read, Seek},
     sync::{Arc, Mutex},
     thread,
+    time::Duration,
 };
 
+pub const SAMPLE_RATE: usize = 44100;
+pub const CHANNEL_COUNT: usize = 2;
+
 // How many samples should be pushed to buffers per iteration
-const SAMPLE_BUFFER_SIZE: usize = 4096;
+const SAMPLE_BUFFER_SIZE: usize = 1024;
+
+const BYTES_PER_SAMPLE: usize = 4 * CHANNEL_COUNT;
 
 // How many bytes should a ring buffer contain
-const BUFFER_SIZE: usize = SAMPLE_BUFFER_SIZE * 4;
+const BUFFER_SIZE: usize = SAMPLE_BUFFER_SIZE * BYTES_PER_SAMPLE;
 
 enum StreamState {
     Processing,
@@ -52,28 +59,46 @@ impl AudioStream {
         // Ensure that processing starts
         *state.lock().unwrap() = StreamState::Processing;
 
-        thread::spawn(move || loop {
-            let state = state.lock().unwrap();
+        thread::spawn(move || {
+            loop {
+                let state = state.lock().unwrap();
 
-            if let StreamState::Idle = *state {
-                // Avoid processing if stream is idle
-                continue;
-            }
+                if let StreamState::Idle = *state {
+                    // Avoid processing if stream is idle
+                    continue;
+                }
 
-            let mut producers = producers.lock().expect("Producers not poisoned");
-            let mut signal = signal.lock().expect("Signal not poisoned");
+                let mut producers = producers.lock().expect("Producers not poisoned");
+                let mut signal = signal.lock().expect("Signal not poisoned");
 
-            let samples: Vec<_> = (0..SAMPLE_BUFFER_SIZE)
-                .into_iter()
-                .flat_map(|_| {
-                    let (left, right) = (*signal).get_stereo();
-                    [left, right]
-                })
-                .flat_map(|sample| sample.to_ne_bytes())
-                .collect();
+                let remaining = producers
+                    .iter()
+                    .map(|p| p.remaining())
+                    .min()
+                    .unwrap_or(BUFFER_SIZE);
 
-            for producer in producers.iter_mut() {
-                producer.push_slice(&samples);
+                if remaining < 2 {
+                    let time_to_sleep = Duration::from_millis(20);
+                    thread::sleep(time_to_sleep);
+
+                    continue;
+                }
+
+                // Calculate how many samples would fit
+                let samples_to_render = remaining / BYTES_PER_SAMPLE;
+
+                let samples: Vec<_> = (0..samples_to_render)
+                    .into_iter()
+                    .flat_map(|_| {
+                        let (left, right) = (*signal).get_stereo();
+                        [left, right]
+                    })
+                    .flat_map(|sample| sample.to_ne_bytes())
+                    .collect();
+
+                for producer in producers.iter_mut() {
+                    producer.push_slice(&samples);
+                }
             }
         });
     }
@@ -90,10 +115,18 @@ impl AudioStream {
     }
 
     pub fn setup() -> Box<dyn AudioUnit32> {
-        let white = || noise() >> (lowpass_hz(100., 1.0) * 0.5);
+        let distortion = || shape(Shape::ClipTo(-1., 0.9));
+        let white = || noise() >> lowpass_hz(100., 1.0);
 
         let fundamental = 50.;
-        let harmonic = |n: f32, v: f32| sine_hz(fundamental * n) * v;
+        let harmonic = |n: f32, v: f32| {
+            lfo(move |t| {
+                let pitch = sin(t * (n));
+                let order = n;
+
+                (fundamental + (pitch * 0.1) * order)
+            }) >> sine()
+        };
 
         let harmonics = harmonic(1., 1.)
             + harmonic(2., 0.9)
@@ -102,9 +135,11 @@ impl AudioStream {
             + harmonic(8., 0.2)
             + harmonic(12., 0.2)
             + harmonic(13.1, 0.2)
-            + harmonic(14.1, 0.1);
+            + harmonic(14.1, 0.1)
+            + harmonic(19., 0.1)
+            + harmonic(20., 0.1);
 
-        let mut signal = (white() + harmonics * 0.3) >> split() >> reverb_stereo(1., 8.0);
+        let mut signal = (white() + harmonics) >> distortion() >> split() >> reverb_stereo(1., 8.0);
 
         signal.reset(Some(44100.));
         Box::new(signal)
@@ -124,13 +159,20 @@ impl AudioStreamConsumer {
 
 impl Read for AudioStreamConsumer {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        let len = self.consumer.read(buf).expect("Read into bytes");
-        Ok(len)
-    }
-}
+        let requested_len = buf.len();
 
-impl Seek for AudioStreamConsumer {
-    fn seek(&mut self, _: std::io::SeekFrom) -> std::io::Result<u64> {
-        panic!("Attempt to seek AudioStream!")
+        let mut read_len = 0;
+
+        while read_len < requested_len {
+            let slice = &mut buf[read_len..];
+            let bytes_read = self.consumer.read(slice);
+
+            match bytes_read {
+                Ok(len) => read_len += len,
+                Err(_) => continue,
+            }
+        }
+
+        Ok(requested_len)
     }
 }

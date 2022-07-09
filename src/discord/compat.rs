@@ -1,6 +1,8 @@
 //! This file adds compatibility between Songbird and the decoupled audio engine
 
-use crate::audio::{AudioStreamConsumer, AudioSystem};
+use std::io::Seek;
+
+use crate::audio::{AudioStreamConsumer, AudioSystem, CHANNEL_COUNT, SAMPLE_RATE};
 use songbird::input::{Input, LiveInput, RawAdapter};
 use symphonia::core::{io::MediaSource, probe::Hint};
 
@@ -18,7 +20,7 @@ impl MediaSource for AudioStreamConsumer {
 
 impl AudioSystem {
     fn source(&self) -> Box<dyn MediaSource> {
-        let adapter = RawAdapter::new(self.stream(), 44100, 2);
+        let adapter = RawAdapter::new(self.stream(), SAMPLE_RATE as u32, CHANNEL_COUNT as u32);
 
         Box::new(adapter)
     }
@@ -35,5 +37,12 @@ impl AudioSystem {
         let input = LiveInput::Raw(stream);
 
         Input::Live(input, None)
+    }
+}
+
+impl Seek for AudioStreamConsumer {
+    fn seek(&mut self, seek: std::io::SeekFrom) -> std::io::Result<u64> {
+        // This is a no op
+        Ok(0)
     }
 }
