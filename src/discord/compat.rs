@@ -39,7 +39,7 @@ impl AudioSystem {
 }
 
 impl Seek for AudioBufferConsumer {
-    fn seek(&mut self, seek: std::io::SeekFrom) -> std::io::Result<u64> {
+    fn seek(&mut self, _seek: std::io::SeekFrom) -> std::io::Result<u64> {
         // This is a no op
         Ok(0)
     }

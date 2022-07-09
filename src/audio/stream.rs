@@ -1,10 +1,9 @@
 use fundsp::hacker32::*;
 
-use ringbuf::{Consumer, Producer, RingBuffer};
 
-use core::time;
+
+
 use std::{
-    io::{Read, Seek},
     sync::{Arc, Mutex},
     thread,
     time::{Duration, Instant},
@@ -75,7 +74,7 @@ impl AudioStream {
                 let optimal_sleep_time = total_samples * seconds_per_sample / WAKE_UP_DIVISOR;
                 let time_to_sleep = Duration::from_secs_f32(optimal_sleep_time);
 
-                let mut now = Instant::now();
+                let _now = Instant::now();
 
                 loop {
                     thread::sleep(time_to_sleep);
@@ -123,12 +122,12 @@ impl AudioStream {
         let white = || noise() >> lowpass_hz(100., 1.0);
 
         let fundamental = 50.;
-        let harmonic = |n: f32, v: f32| {
+        let harmonic = |n: f32, _v: f32| {
             lfo(move |t| {
                 let pitch = sin(t * (n));
                 let order = n;
 
-                (fundamental + (pitch * 0.1) * order)
+                fundamental + (pitch * 0.1) * order
             }) >> sine()
         };
 

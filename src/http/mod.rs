@@ -1,4 +1,4 @@
-use std::{convert::Infallible, env, net::SocketAddr, str::FromStr, sync::Arc, thread};
+use std::{env, str::FromStr, sync::Arc};
 
 use tiny_http::{Header, Response, Server, StatusCode};
 

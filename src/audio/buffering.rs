@@ -1,6 +1,6 @@
 use std::{
     io::Read,
-    sync::{Arc, Mutex, MutexGuard, RwLock, Weak},
+    sync::{Arc, Mutex, Weak},
 };
 
 use ringbuf::{Consumer, Producer, RingBuffer};
