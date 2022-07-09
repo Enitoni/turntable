@@ -56,6 +56,8 @@ impl BufferRegistry {
     pub fn samples_remaining(&self) -> usize {
         let entries = self.entries.lock().unwrap();
 
+        //dbg!(entries.len());
+
         let remaining = entries
             .iter()
             .map(|p| p.underlying.remaining())
@@ -133,11 +135,7 @@ impl Read for AudioBufferConsumer {
 // Ensure state is updated when this is dropped
 impl Drop for AudioBufferConsumer {
     fn drop(&mut self) {
-        println!("AudioBufferConsumer was dropped.");
-
         let mut state = self.state.lock().unwrap();
         *state = ProducerState::Dead;
-
-        println!("State set to dead.")
     }
 }

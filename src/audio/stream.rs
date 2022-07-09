@@ -86,9 +86,13 @@ impl AudioStream {
                         continue;
                     }
 
+                    // Ensure dead buffers are removed
+                    registry.recycle();
+
                     let mut signal = signal.lock().expect("Signal not poisoned");
                     let remaining = registry.samples_remaining();
 
+                    // This will deadlock if dead buffers are not removed
                     if remaining < 2 {
                         continue;
                     }
@@ -104,9 +108,6 @@ impl AudioStream {
 
                     // Push the samples into the ring buffers
                     registry.write_byte_samples(&samples);
-
-                    // Ensure dead buffers are removed
-                    registry.recycle();
                 }
             }
         });
