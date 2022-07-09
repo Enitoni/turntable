@@ -14,12 +14,15 @@ pub const SAMPLE_RATE: usize = 44100;
 pub const CHANNEL_COUNT: usize = 2;
 
 // How many samples should be pushed to buffers per iteration
-const SAMPLE_BUFFER_SIZE: usize = 1024;
+const SAMPLE_BUFFER_SIZE: usize = 4096;
 
 const BYTES_PER_SAMPLE: usize = 4 * CHANNEL_COUNT;
 
 // How many bytes should a ring buffer contain
 const BUFFER_SIZE: usize = SAMPLE_BUFFER_SIZE * BYTES_PER_SAMPLE;
+
+// How many time to wake up the thread during a sleep
+const WAKE_UP_DIVISOR: f32 = 3.;
 
 enum StreamState {
     Processing,
@@ -60,6 +63,13 @@ impl AudioStream {
         *state.lock().unwrap() = StreamState::Processing;
 
         thread::spawn(move || {
+            // Calculate optimal laziness
+            let total_samples = (SAMPLE_BUFFER_SIZE * CHANNEL_COUNT) as f32;
+            let seconds_per_sample = 1. / SAMPLE_RATE as f32;
+
+            let optimal_sleep_time = total_samples * seconds_per_sample / WAKE_UP_DIVISOR;
+            let time_to_sleep = Duration::from_secs_f32(optimal_sleep_time);
+
             loop {
                 let state = state.lock().unwrap();
 
@@ -78,9 +88,6 @@ impl AudioStream {
                     .unwrap_or(BUFFER_SIZE);
 
                 if remaining < 2 {
-                    let time_to_sleep = Duration::from_millis(20);
-                    thread::sleep(time_to_sleep);
-
                     continue;
                 }
 
@@ -99,6 +106,8 @@ impl AudioStream {
                 for producer in producers.iter_mut() {
                     producer.push_slice(&samples);
                 }
+
+                thread::sleep(time_to_sleep);
             }
         });
     }
