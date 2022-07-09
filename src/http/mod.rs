@@ -1,4 +1,4 @@
-use std::{env, str::FromStr, sync::Arc};
+use std::{env, str::FromStr, sync::Arc, thread};
 
 use tiny_http::{Header, Response, Server, StatusCode};
 
@@ -16,12 +16,16 @@ pub fn run(audio: Arc<AudioSystem>) {
     println!("Running HTTP server on port {}!", port);
 
     for req in server.incoming_requests() {
-        let audio = audio.clone();
+        let audio = Arc::clone(&audio);
 
-        let mut res = Response::new(StatusCode(200), vec![], audio.stream(), None, None);
+        thread::spawn(move || {
+            let mut res = Response::new(StatusCode(200), vec![], audio.stream(), None, None);
 
-        res.add_header(Header::from_str(format!("Content-Type: {}", PCM_MIME).as_str()).unwrap());
+            res.add_header(
+                Header::from_str(format!("Content-Type: {}", PCM_MIME).as_str()).unwrap(),
+            );
 
-        let _ = req.respond(res);
+            let _ = req.respond(res);
+        });
     }
 }
