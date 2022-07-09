@@ -62,13 +62,13 @@ impl Bot {
     pub async fn handle_event(
         _ctx: &SerenityContext,
         event: &poise::Event<'_>,
-        _framework: FrameworkContext<'_>,
+        framework: FrameworkContext<'_>,
         bot: &Bot,
     ) -> Result<(), Error> {
         if let Event::VoiceStateUpdate { old: _, new } = event {
             // Ensures that Songbird releases resources so buffers are not locked
             // DO NOT REMOVE THIS.
-            if new.channel_id.is_none() {
+            if new.channel_id.is_none() && new.user_id == framework.bot_id {
                 bot.voice.remove(bot.home_guild()).await?;
             }
         }

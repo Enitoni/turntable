@@ -1,8 +1,5 @@
 use fundsp::hacker32::*;
 
-
-
-
 use std::{
     sync::{Arc, Mutex},
     thread,
@@ -118,31 +115,12 @@ impl AudioStream {
     }
 
     pub fn setup() -> Box<dyn AudioUnit32> {
-        let distortion = || shape(Shape::ClipTo(-1., 0.9));
-        let white = || noise() >> lowpass_hz(100., 1.0);
+        let vol = envelope(|t| sin_hz(1., t));
 
-        let fundamental = 50.;
-        let harmonic = |n: f32, _v: f32| {
-            lfo(move |t| {
-                let pitch = sin(t * (n));
-                let order = n;
+        let left = sine_hz(70.) >> pan(-1.);
+        let right = sine_hz(78.) >> pan(1.);
 
-                fundamental + (pitch * 0.1) * order
-            }) >> sine()
-        };
-
-        let harmonics = harmonic(1., 1.)
-            + harmonic(2., 0.9)
-            + harmonic(3., 0.1)
-            + harmonic(5.1, 0.1)
-            + harmonic(8., 0.2)
-            + harmonic(12., 0.2)
-            + harmonic(13.1, 0.2)
-            + harmonic(14.1, 0.1)
-            + harmonic(19., 0.1)
-            + harmonic(20., 0.1);
-
-        let mut signal = (white() + harmonics) >> distortion() >> split() >> reverb_stereo(1., 8.0);
+        let mut signal = vol >> split() >> (left + right);
 
         signal.reset(Some(44100.));
         Box::new(signal)
