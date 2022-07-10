@@ -99,7 +99,7 @@ impl AudioStream {
                             let (left, right) = (*signal).get_stereo();
                             [left, right]
                         })
-                        .flat_map(|sample| sample.to_ne_bytes())
+                        .flat_map(|sample| sample.to_le_bytes())
                         .collect();
 
                     // Push the samples into the ring buffers

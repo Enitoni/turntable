@@ -1,9 +1,11 @@
 use std::sync::Arc;
 
 mod buffering;
+mod encoding;
 mod stream;
 
 pub use buffering::*;
+pub use encoding::*;
 pub use stream::*;
 
 pub struct AudioSystem {
