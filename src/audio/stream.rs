@@ -6,7 +6,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use super::{AudioBufferConsumer, BufferRegistry};
+use super::{AudioBufferConsumer, BufferRegistry, Player};
 
 pub const PCM_MIME: &str = "audio/pcm;rate=44100;encoding=float;bits=32";
 pub const SAMPLE_RATE: usize = 44100;
@@ -33,19 +33,17 @@ type ArcMut<T> = Arc<Mutex<T>>;
 /// An infinite stream of audio that supports
 /// multiple consumers.
 pub struct AudioStream {
-    signal: ArcMut<Box<dyn AudioUnit32>>,
+    player: ArcMut<Player>,
     state: ArcMut<StreamState>,
     registry: Arc<BufferRegistry>,
 }
 
 impl AudioStream {
-    pub fn new() -> Self {
-        let signal = Self::setup();
-
+    pub fn new(player: ArcMut<Player>) -> Self {
         Self {
-            signal: Arc::new(signal.into()),
             state: Arc::new(StreamState::Idle.into()),
             registry: BufferRegistry::new().into(),
+            player,
         }
     }
 
@@ -61,7 +59,7 @@ impl AudioStream {
 
         thread::spawn({
             let registry = Arc::clone(&self.registry);
-            let signal = Arc::clone(&self.signal);
+            let player = Arc::clone(&self.player);
 
             move || {
                 // Calculate optimal laziness
@@ -85,7 +83,7 @@ impl AudioStream {
                     // Ensure dead buffers are removed
                     registry.recycle();
 
-                    let mut signal = signal.lock().expect("Signal not poisoned");
+                    let mut player = player.lock().unwrap();
                     let remaining = registry.samples_remaining();
 
                     // This will deadlock if dead buffers are not removed
@@ -93,17 +91,16 @@ impl AudioStream {
                         continue;
                     }
 
-                    let samples: Vec<_> = (0..remaining)
+                    let mut samples = vec![0.; remaining];
+                    player.next_chunk(&mut samples);
+
+                    let samples_as_bytes: Vec<_> = samples
                         .into_iter()
-                        .flat_map(|_| {
-                            let (left, right) = (*signal).get_stereo();
-                            [left, right]
-                        })
                         .flat_map(|sample| sample.to_le_bytes())
                         .collect();
 
                     // Push the samples into the ring buffers
-                    registry.write_byte_samples(&samples);
+                    registry.write_byte_samples(&samples_as_bytes);
                 }
             }
         });
@@ -112,17 +109,5 @@ impl AudioStream {
     /// Creates a new AudioStreamSource to read from the stream
     pub fn get_consumer(&self) -> AudioBufferConsumer {
         self.registry.get_consumer()
-    }
-
-    pub fn setup() -> Box<dyn AudioUnit32> {
-        let vol = envelope(|t| sin_hz(1., t));
-
-        let left = sine_hz(70.) >> pan(-1.);
-        let right = sine_hz(78.) >> pan(1.);
-
-        let mut signal = vol >> split() >> (left + right);
-
-        signal.reset(Some(44100.));
-        Box::new(signal)
     }
 }

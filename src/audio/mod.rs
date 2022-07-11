@@ -1,22 +1,28 @@
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 mod buffering;
 mod encoding;
+mod loading;
+mod playback;
 mod stream;
 
 pub use buffering::*;
 pub use encoding::*;
+pub use loading::*;
+pub use playback::*;
 pub use stream::*;
 
 pub struct AudioSystem {
     stream: Arc<AudioStream>,
+    player: Arc<Mutex<Player>>,
 }
 
 impl AudioSystem {
     fn new() -> Self {
-        Self {
-            stream: Arc::new(AudioStream::new()),
-        }
+        let player = Arc::new(Mutex::new(Player::new()));
+        let stream = Arc::new(AudioStream::new(player.clone()));
+
+        Self { player, stream }
     }
 
     pub fn stream(&self) -> AudioBufferConsumer {
