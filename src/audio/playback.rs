@@ -1,9 +1,11 @@
 use std::{
+    fs::File,
     ops::Range,
+    path::Path,
     sync::{Arc, Mutex},
 };
 
-use super::{AudioSource, AudioSourceLoader};
+use super::{decoding::decode_to_raw, AudioSource, AudioSourceLoader};
 
 /// Plays audio sources with no gaps
 // TODO: Make an abstraction for this sample concatenation
@@ -16,7 +18,7 @@ pub struct Player {
 }
 
 impl Player {
-    const CHUNK_SIZE: usize = 4096 * 2;
+    const CHUNK_SIZE: usize = 4096;
 
     /// At how many remaining samples should more be requested
     const PRELOAD_THRESHOLD: usize = 4096 * 4;
@@ -35,7 +37,8 @@ impl Player {
     }
 
     pub fn add(&mut self, track: Track) {
-        self.tracks.push(track);
+        self.tracks.push(track.clone());
+        self.loader.request(track.source, Self::CHUNK_SIZE);
     }
 
     /// Reads the next chunk of audio
@@ -44,33 +47,46 @@ impl Player {
         let mut current_track = self.current_track();
 
         while consumed < outgoing.len() {
-            let remaining = outgoing.len() - consumed;
-
-            let samples = current_track
-                .as_ref()
-                .map(|t| t.samples(self.sample_offset..remaining));
-
-            // There are no more tracks.
-            if samples.is_none() {
+            if current_track.is_none() {
                 break;
             }
 
-            let samples = samples.unwrap();
+            let remaining = outgoing.len() - consumed;
+
+            let start = self.sample_offset;
+            let end = start + remaining;
+
+            let is_finished = current_track.as_ref().map(|t| t.is_finished());
+            let should_skip = is_finished.is_none() || is_finished.unwrap();
+
+            dbg!(self.sample_offset);
+            dbg!("oops", is_finished);
 
             // Schedule next track
-            if samples.is_empty() {
+            if should_skip {
                 current_track = self.next_track();
                 continue;
             }
+
+            dbg!("SAMPLING!");
+
+            let samples = current_track
+                .as_ref()
+                .map(|t| t.samples(start..end))
+                .unwrap();
+
+            println!("GOT SAMPLES {}", samples.len());
 
             outgoing[consumed..samples.len()].copy_from_slice(&samples);
             consumed += samples.len();
         }
 
+        self.sample_offset += consumed;
+
         // TODO: This is temporary loading until a better abstraction
         // for this whole thing is made.
         if let Some(track) = current_track {
-            self.loader.request(track.source, Self::CHUNK_SIZE);
+            self.loader.request(track.source, Self::CHUNK_SIZE * 4);
         }
     }
 
@@ -79,6 +95,7 @@ impl Player {
     }
 
     pub fn next_track(&mut self) -> Option<Track> {
+        dbg!("NEW TRACK");
         self.sample_offset = 0;
         self.tracks.pop().map(|t| t.clone())
     }
@@ -96,12 +113,13 @@ impl Track {
 
         // Keep checking if data is missing but source is not finished
         while consumed < outgoing.len() {
-            let source = self.source.lock().unwrap();
-
+            let mut source = self.source.lock().unwrap();
             let start = consumed + range.start;
-            let samples = source.samples(start..range.end);
 
-            outgoing[consumed..samples.len()].copy_from_slice(samples);
+            let samples = source.samples(start..range.end);
+            let end = outgoing.len().min(samples.len());
+
+            outgoing[consumed..end].copy_from_slice(samples);
             consumed += samples.len();
 
             if source.is_finished() {
@@ -110,5 +128,20 @@ impl Track {
         }
 
         outgoing
+    }
+
+    pub fn is_finished(&self) -> bool {
+        let source = self.source.lock().unwrap();
+        source.is_finished()
+    }
+
+    pub fn from_file(path: &Path) -> Self {
+        let file = File::open(&path).unwrap();
+        let new_file = decode_to_raw(file, path.file_name().unwrap().to_str().unwrap());
+
+        let source = AudioSource::new(new_file);
+        Self {
+            source: Arc::new(source.into()),
+        }
     }
 }

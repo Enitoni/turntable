@@ -56,13 +56,11 @@ impl BufferRegistry {
     pub fn samples_remaining(&self) -> usize {
         let entries = self.entries.lock().unwrap();
 
-        //dbg!(entries.len());
-
         let remaining = entries
             .iter()
             .map(|p| p.underlying.remaining())
             .min()
-            .unwrap_or(BUFFER_SIZE);
+            .unwrap_or(0);
 
         remaining / BYTES_PER_SAMPLE
     }

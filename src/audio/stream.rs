@@ -21,7 +21,7 @@ pub const BYTES_PER_SAMPLE: usize = 4 * CHANNEL_COUNT;
 pub const BUFFER_SIZE: usize = SAMPLE_BUFFER_SIZE * BYTES_PER_SAMPLE;
 
 // How many time to wake up the thread during a sleep
-const WAKE_UP_DIVISOR: f32 = 3.;
+const WAKE_UP_DIVISOR: f32 = 5.;
 
 enum StreamState {
     Processing,

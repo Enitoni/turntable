@@ -1,5 +1,6 @@
 use std::{
     fmt::Display,
+    io::Read,
     ops::Range,
     sync::{Arc, Mutex},
     thread,
@@ -33,7 +34,6 @@ impl AudioSourceLoader {
     /// Request samples to be loaded into a source
     pub fn request(&self, source: Arc<Mutex<AudioSource>>, amount: usize) {
         let mut requests = self.requests.lock().unwrap();
-
         requests.push(LoadRequest { source, amount });
     }
 
@@ -43,6 +43,9 @@ impl AudioSourceLoader {
             let requests = self.requests.clone();
 
             move || loop {
+                // Sleeping first ensures mutexes aren't locked
+                thread::sleep(Self::SLEEP_DURATION);
+
                 let mut requests = requests.lock().unwrap();
 
                 while let Some(request) = requests.pop() {
@@ -56,6 +59,8 @@ impl AudioSourceLoader {
                         Err(err) => {
                             source.dead = err.is_fatal();
 
+                            println!("{}", err);
+
                             // Try again next iteration.
                             if !source.dead {
                                 requests.push(request.clone());
@@ -64,8 +69,6 @@ impl AudioSourceLoader {
                         }
                     };
                 }
-
-                thread::sleep(Self::SLEEP_DURATION);
             }
         });
     }
@@ -79,13 +82,15 @@ impl AudioSourceLoader {
 /// This is also always 32-bit floating point audio,
 /// though this may change in the future if needed.
 pub struct AudioSource {
-    id: usize,
+    //id: usize,
     /// Currently allocated samples.
     pub samples: Vec<f32>,
     /// Total amount of samples.
     pub length: usize,
-    /// Amount of samples consumed so far
+    /// Amount of samples loaded so far
     offset: usize,
+    /// Consumed
+    consumed: usize,
     /// Source of the samples.
     source: Box<dyn SampleSource + Sync + Send>,
     /// This source is dead and should be skipped.
@@ -97,6 +102,19 @@ impl AudioSource {
     /// This is equivalent to roughly one minute of 44.1khz sample rate.
     const BUFFER_SIZE: usize = 1024 * 1024 * 24;
 
+    pub fn new<T: 'static + SampleSource + Sync + Send>(source: T) -> Self {
+        let len = source.length();
+
+        Self {
+            samples: Default::default(),
+            source: Box::new(source),
+            length: len,
+            dead: false,
+            consumed: 0,
+            offset: 0,
+        }
+    }
+
     /// Tries to load the requested amount of samples.
     /// Returns the amount of samples loaded.
     fn load(&mut self, amount: usize) -> Result<usize, SampleSourceError> {
@@ -105,8 +123,8 @@ impl AudioSource {
         let remaining = self.length - self.offset;
         let amount_to_fetch = amount.min(remaining);
 
-        let buffer = vec![0.; amount_to_fetch];
-        let samples_read = self.source.read(&buffer)?;
+        let mut buffer = vec![0.; amount_to_fetch];
+        let samples_read = self.source.read(&mut buffer)?;
 
         self.samples.extend(buffer);
         self.offset += samples_read;
@@ -129,18 +147,36 @@ impl AudioSource {
         }
     }
 
-    pub fn samples(&self, range: Range<usize>) -> &[f32] {
+    pub fn samples(&mut self, range: Range<usize>) -> &[f32] {
         // This is never below 0.
         let absolute_start = self.offset - self.samples.len();
+        let safe_end = self.samples.len();
 
+        // If the buffer has been deallocated, this will ensure index stays within vec
         let relative_start = range.start - absolute_start;
-        let relative_end = range.end.min(self.offset);
+        let relative_end = relative_start + range.len();
 
-        &self.samples[relative_start..relative_end]
+        let start = relative_start.min(safe_end);
+        let end = relative_end.min(safe_end);
+
+        let samples = &self.samples[start..end];
+        self.consumed += samples.len();
+
+        dbg!(
+            &range,
+            self.offset,
+            self.consumed,
+            self.length,
+            self.samples.len(),
+            self.is_finished()
+        );
+
+        samples
     }
 
     pub fn is_finished(&self) -> bool {
-        self.offset == self.length || self.dead
+        dbg!("UH", self.consumed, self.length, self.dead);
+        self.consumed == self.length || self.dead
     }
 }
 
@@ -182,5 +218,31 @@ pub trait SampleSource {
     /// How many samples does this source return
     fn length(&self) -> usize;
 
-    fn read(&mut self, buf: &[f32]) -> Result<usize, SampleSourceError>;
+    fn read(&mut self, buf: &mut [f32]) -> Result<usize, SampleSourceError>;
+}
+
+impl SampleSource for std::fs::File {
+    fn length(&self) -> usize {
+        let meta = self.metadata().expect("Read metadata");
+
+        (meta.len() as usize) / 4
+    }
+
+    fn read(&mut self, buf: &mut [f32]) -> Result<usize, SampleSourceError> {
+        let mut intermediate = vec![0; buf.len() * 4];
+
+        <Self as Read>::read(self, &mut intermediate).map_err(|e| {
+            SampleSourceError::LoadFailed {
+                reason: e.to_string(),
+            }
+        })?;
+
+        let samples: Vec<_> = intermediate
+            .chunks_exact(4)
+            .map(|byte| f32::from_le_bytes([byte[0], byte[1], byte[2], byte[3]]))
+            .collect();
+
+        buf[..samples.len()].copy_from_slice(&samples);
+        Ok(samples.len())
+    }
 }
