@@ -24,6 +24,7 @@ pub struct SourceLoaderBuffer {
     sender: SyncSender<LoaderCommand>,
 }
 
+#[derive(Debug)]
 pub enum ReadResult {
     /// Samples were read successfully, and there may be more content.
     Read {
@@ -75,6 +76,7 @@ impl SourceLoaderBuffer {
         dbg!("Remember to remove me!");
         let _ = self.sender.send(LoaderCommand::Load(new_id, 0..length));
 
+        self.buffer.allocate(new_id, length);
         sources.push(loader);
     }
 
@@ -84,7 +86,9 @@ impl SourceLoaderBuffer {
         let result = self.buffer.read_samples(offset, buf);
 
         match result {
-            super::ReadBufferSamplesResult::All { samples_read } => (samples_read, samples_read),
+            super::ReadBufferSamplesResult::All { samples_read } => {
+                (samples_read, offset + samples_read)
+            }
             super::ReadBufferSamplesResult::Partial {
                 samples_read,
                 skip_offset,
@@ -318,7 +322,7 @@ impl SampleSource for std::fs::File {
         self.seek_read(&mut intermediate, offset as u64)
             .map_err(|e| SampleSourceError::LoadFailed {
                 reason: e.to_string(),
-            });
+            })?;
 
         let samples: Vec<_> = intermediate
             .chunks_exact(4)

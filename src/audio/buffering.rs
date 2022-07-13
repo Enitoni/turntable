@@ -1,4 +1,5 @@
 use std::{
+    fmt::Debug,
     io::Read,
     ops::Range,
     sync::{Arc, Mutex, Weak},
@@ -155,6 +156,7 @@ pub struct DynamicBufferAllocation<Id> {
     sample_ranges: Vec<Range<usize>>,
 }
 
+#[derive(Debug)]
 pub enum ReadBufferSamplesResult {
     All {
         samples_read: usize,
@@ -170,7 +172,7 @@ pub enum ReadBufferSamplesResult {
 
 impl<Id> DynamicBuffer<Id>
 where
-    Id: Clone + PartialEq,
+    Id: Clone + PartialEq + Debug,
 {
     /// 30 minutes of audio
     const INITIAL_BUFFER_LENGTH: usize = SAMPLE_RATE * CHANNEL_COUNT * 60 * 10;
@@ -222,14 +224,16 @@ where
         let mut samples_read = 0;
 
         while let Some(alloc) = allocations.pop() {
-            let buf_slice = &mut buf[samples_read..];
+            let remaining = buf.len() - samples_read;
 
             let alloc_range = {
                 let start = offset + samples_read;
-                let end = start + buf_slice.len();
+                let end = start + remaining;
 
                 alloc.clamped_range(start..end)
             };
+
+            let buf_slice = &mut buf[..remaining];
 
             samples_read += alloc_range.len();
             skip_offset = alloc.offset;
@@ -271,7 +275,12 @@ where
 
         allocations
             .iter()
-            .filter(|a| range.contains(&a.offset) || range.contains(&(a.offset + a.len)))
+            .filter(|a| {
+                let start_is_within = range.start > a.offset && range.start < a.end();
+                let end_is_within = range.end > a.offset && range.end < a.end();
+
+                start_is_within || end_is_within
+            })
             .cloned()
             .collect()
     }
@@ -325,7 +334,7 @@ impl<Id> DynamicBufferAllocation<Id> {
             .unwrap_or(0..0);
 
         let new_start = absolute_range.start + sample_range.start;
-        let new_end = new_start + sample_range.len();
+        let new_end = new_start + sample_range.len().min(absolute_range.len());
 
         new_start..new_end
     }

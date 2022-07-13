@@ -12,12 +12,12 @@ pub fn merge_ranges<T>(ranges: Vec<Range<T>>) -> Vec<Range<T>>
 where
     T: PartialOrd + Ord + Clone,
 {
-    let mut result = vec![];
-
     let mut current_range = ranges
         .get(0)
         .cloned()
         .expect("At least one range in the vec");
+
+    let mut result = vec![current_range.clone()];
 
     for range in ranges.into_iter().skip(1) {
         if current_range.contains(&range.start) {
