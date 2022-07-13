@@ -1,8 +1,7 @@
 use std::{
     fs::File,
-    ops::Range,
     path::Path,
-    sync::{Arc, Mutex},
+    sync::{Arc},
 };
 
 use super::{decoding::decode_to_raw, SourceLoaderBuffer};

@@ -291,8 +291,8 @@ where
             .find_map(|a| (offset > a.offset && offset < a.end()).then(|| a.id.clone()))
     }
 
-    pub fn empty_ranges_at(&self, range: Range<usize>) -> Vec<(Id, Range<usize>)> {
-        let allocations = self.allocations.lock().unwrap();
+    pub fn empty_ranges_at(&self, _range: Range<usize>) -> Vec<(Id, Range<usize>)> {
+        let _allocations = self.allocations.lock().unwrap();
 
         todo!()
     }

@@ -1,6 +1,5 @@
 use std::{
     fmt::Display,
-    io::Read,
     ops::Range,
     os::windows::prelude::FileExt,
     sync::{
@@ -8,7 +7,6 @@ use std::{
         Arc, Mutex,
     },
     thread,
-    time::Duration,
 };
 
 use crate::util::{merge_ranges, safe_range};
@@ -210,7 +208,7 @@ impl SourceLoader {
     }
 
     fn get_cached_samples(&self, offset: usize, buf: &mut [Sample]) -> usize {
-        let mut samples = self.samples.lock().unwrap();
+        let samples = self.samples.lock().unwrap();
 
         let range = {
             let ranges = self.sample_ranges.lock().unwrap();
@@ -264,8 +262,7 @@ impl SourceLoader {
 
     fn has_fatal_error(&self) -> bool {
         let err = self.err.lock().unwrap();
-        err.as_ref()
-            .and_then(|e| Some(e.is_fatal()))
+        err.as_ref().map(|e| e.is_fatal())
             .unwrap_or(false)
     }
 }
