@@ -16,6 +16,8 @@ pub use loading::*;
 pub use playback::*;
 pub use stream::*;
 
+pub type Sample = f32;
+
 pub struct AudioSystem {
     stream: Arc<AudioStream>,
     player: Arc<Mutex<Player>>,

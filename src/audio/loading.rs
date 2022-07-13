@@ -2,185 +2,269 @@ use std::{
     fmt::Display,
     io::Read,
     ops::Range,
-    sync::{Arc, Mutex},
+    os::windows::prelude::FileExt,
+    sync::{
+        mpsc::{sync_channel, Receiver, SyncSender},
+        Arc, Mutex,
+    },
     thread,
     time::Duration,
 };
 
-/// Loads an audio source.
-/// This runs on a separate thread to ensure loading does not
-/// block playback if samples are still available.
-pub struct AudioSourceLoader {
-    requests: Arc<Mutex<Vec<LoadRequest>>>,
+use crate::util::{merge_ranges, safe_range};
+
+use super::{DynamicBuffer, Sample, CHANNEL_COUNT, SAMPLE_RATE};
+
+pub type SourceId = u32;
+
+pub struct SourceLoaderBuffer {
+    buffer: DynamicBuffer<SourceId>,
+    sources: Mutex<Vec<SourceLoader>>,
+
+    sender: SyncSender<LoaderCommand>,
 }
 
-#[derive(Clone)]
-pub struct LoadRequest {
-    source: Arc<Mutex<AudioSource>>,
-    amount: usize,
+pub enum ReadResult {
+    /// Samples were read successfully, and there may be more content.
+    Read {
+        samples_read: usize,
+        new_offset: usize,
+    },
+    /// No data was read, because the chunk must be skipped.
+    /// This is usually due to an error.
+    Skip { new_offset: usize },
 }
 
-impl AudioSourceLoader {
-    /// Loading typically doesn't happen often,
-    /// so we can save a lot of CPU usage here.
-    const SLEEP_DURATION: Duration = Duration::from_millis(500);
+pub enum LoaderCommand {
+    Load(SourceId, Range<usize>),
+}
 
-    pub fn new() -> Self {
-        Self {
-            requests: Default::default(),
-        }
-    }
+impl SourceLoaderBuffer {
+    const COMMAND_BUFFER_SIZE: usize = 256;
 
-    /// Request samples to be loaded into a source
-    pub fn request(&self, source: Arc<Mutex<AudioSource>>, amount: usize) {
-        let mut requests = self.requests.lock().unwrap();
-        requests.push(LoadRequest { source, amount });
-    }
+    const PRELOAD_PADDING: usize = SAMPLE_RATE * CHANNEL_COUNT * 60;
+    const PRELOAD_THRESHOLD: usize = SAMPLE_RATE * CHANNEL_COUNT * 10;
 
-    /// Start the thread to load audio
-    pub fn run(&self) {
+    pub fn spawn() -> Arc<Self> {
+        let (sender, receiver) = sync_channel(Self::COMMAND_BUFFER_SIZE);
+
+        let new_buffer = Self {
+            buffer: DynamicBuffer::new(),
+            sources: Default::default(),
+            sender,
+        };
+
+        let arced = Arc::new(new_buffer);
+
         thread::spawn({
-            let requests = self.requests.clone();
+            let buffer = Arc::clone(&arced);
+            move || buffer.process_commands(receiver)
+        });
 
-            move || loop {
-                // Sleeping first ensures mutexes aren't locked
-                thread::sleep(Self::SLEEP_DURATION);
+        arced
+    }
 
-                let mut requests = requests.lock().unwrap();
+    pub fn add_source<T: 'static + SampleSource + Send + Sync>(&self, source: T) {
+        let mut sources = self.sources.lock().unwrap();
+        let new_id = (sources.len() + 1) as SourceId;
 
-                while let Some(request) = requests.pop() {
-                    let mut source = request.source.lock().unwrap();
-                    let result = source.load(request.amount);
+        let length = source.length();
+        let loader = SourceLoader::new(new_id, source);
 
-                    match result {
-                        Ok(_size) => {
-                            // TODO: Deal with this someday.
-                        }
-                        Err(err) => {
-                            source.dead = err.is_fatal();
+        // Temporary
+        dbg!("Remember to remove me!");
+        let _ = self.sender.send(LoaderCommand::Load(new_id, 0..length));
 
-                            println!("{}", err);
+        sources.push(loader);
+    }
 
-                            // Try again next iteration.
-                            if !source.dead {
-                                requests.push(request.clone());
-                                continue;
-                            }
-                        }
-                    };
+    /// Reads samples into the buffer and returns the amount written and the new offset.
+    /// This will block if there are pending ranges.
+    pub fn read_samples(&self, offset: usize, buf: &mut [Sample]) -> (usize, usize) {
+        let result = self.buffer.read_samples(offset, buf);
+
+        match result {
+            super::ReadBufferSamplesResult::All { samples_read } => (samples_read, samples_read),
+            super::ReadBufferSamplesResult::Partial {
+                samples_read,
+                skip_offset,
+            } => {
+                if self.should_skip(offset) {
+                    (samples_read, skip_offset)
+                } else {
+                    self.read_samples(offset + samples_read, &mut buf[samples_read..])
                 }
             }
-        });
+            super::ReadBufferSamplesResult::End { samples_read } => (samples_read, 0),
+        }
+    }
+
+    pub fn process_commands(&self, receiver: Receiver<LoaderCommand>) {
+        while let Ok(command) = receiver.recv() {
+            match command {
+                LoaderCommand::Load(source_id, range) => self.attempt_load_source(source_id, range),
+            }
+        }
+    }
+
+    fn should_skip(&self, offset: usize) -> bool {
+        let id = self.buffer.id_at_offset(offset);
+
+        if let Some(id) = id {
+            let sources = self.sources.lock().unwrap();
+
+            sources
+                .iter()
+                .find_map(|s| (s.id == id).then(|| s.has_fatal_error()))
+                .unwrap_or(false)
+        } else {
+            false
+        }
+    }
+
+    fn attempt_load_source(&self, source_id: SourceId, range: Range<usize>) {
+        let sources = self.sources.lock().unwrap();
+        let source = sources
+            .iter()
+            .find(|s| s.id == source_id)
+            .expect("Source exists in the SourceLoaderBuffer");
+
+        let samples_to_load = range.len();
+        let offset = range.start;
+
+        let mut buf = vec![0.; samples_to_load];
+        let mut samples_read = 0;
+
+        let result = source.read_samples(offset, &mut buf);
+
+        match result {
+            Ok(loaded) => {
+                source.set_error(None);
+
+                samples_read += loaded;
+                self.buffer.write_samples(source_id, offset, &buf);
+            }
+            Err(err) => {
+                source.set_error(Some(err.clone()));
+
+                if err.is_fatal() {
+                    return;
+                }
+            }
+        }
+
+        // Try loading again later
+        if samples_read < samples_to_load {
+            let start = samples_read;
+            let end = start + (samples_to_load - samples_read);
+
+            let _ = self.sender.send(LoaderCommand::Load(source_id, start..end));
+        }
     }
 }
 
-/// A normalized audio source.
-///
-/// This should have zero samples stripped from beginning and end to
-/// ensure optimal gapless.
-///
-/// This is also always 32-bit floating point audio,
-/// though this may change in the future if needed.
-pub struct AudioSource {
-    //id: usize,
-    /// Currently allocated samples.
-    pub samples: Vec<f32>,
-    /// Total amount of samples.
-    pub length: usize,
-    /// Amount of samples loaded so far
-    offset: usize,
-    /// Consumed
-    consumed: usize,
-    /// Source of the samples.
-    source: Box<dyn SampleSource + Sync + Send>,
-    /// This source is dead and should be skipped.
-    dead: bool,
+/// Loads a SampleSource and keeps track of the ranges
+/// that have been loaded.
+pub struct SourceLoader {
+    id: SourceId,
+    source: Mutex<Box<dyn SampleSource + Send + Sync>>,
+
+    samples: Mutex<Vec<Sample>>,
+    sample_ranges: Mutex<Vec<Range<usize>>>,
+
+    err: Mutex<Option<SampleSourceError>>,
 }
 
-impl AudioSource {
-    /// Amount of samples to keep in memory.
-    /// This is equivalent to roughly one minute of 44.1khz sample rate.
-    const BUFFER_SIZE: usize = 1024 * 1024 * 24;
-
-    pub fn new<T: 'static + SampleSource + Sync + Send>(source: T) -> Self {
-        let len = source.length();
+impl SourceLoader {
+    fn new<T: 'static + SampleSource + Send + Sync>(id: SourceId, source: T) -> Self {
+        let length = source.length();
+        let samples = vec![0.; length];
 
         Self {
-            samples: Default::default(),
-            source: Box::new(source),
-            length: len,
-            dead: false,
-            consumed: 0,
-            offset: 0,
+            id,
+            source: Mutex::new(Box::new(source)),
+            samples: samples.into(),
+            sample_ranges: Default::default(),
+            err: Mutex::new(None),
         }
     }
 
-    /// Tries to load the requested amount of samples.
-    /// Returns the amount of samples loaded.
-    fn load(&mut self, amount: usize) -> Result<usize, SampleSourceError> {
-        self.deallocate_used();
+    fn read_samples(&self, offset: usize, buf: &mut [Sample]) -> Result<usize, SampleSourceError> {
+        let mut amount_read = 0;
 
-        let remaining = self.length - self.offset;
-        let amount_to_fetch = amount.min(remaining);
+        amount_read += self.get_cached_samples(offset, buf);
 
-        let mut buffer = vec![0.; amount_to_fetch];
-        let samples_read = self.source.read(&mut buffer)?;
+        let new_offset = offset + amount_read;
+        let new_buf = &mut buf[amount_read..];
 
-        self.samples.extend(buffer);
-        self.offset += samples_read;
+        let mut source = self.source.lock().unwrap();
+        amount_read += source.read_samples(new_offset, new_buf)?;
 
-        Ok(samples_read)
+        Ok(amount_read)
     }
 
-    /// Clear out samples that have been consumed if the
-    /// allocated amount of samples exceeds a certain amount.
-    fn deallocate_used(&mut self) {
-        let amount_allocated = self.samples.len();
+    fn get_cached_samples(&self, offset: usize, buf: &mut [Sample]) -> usize {
+        let mut samples = self.samples.lock().unwrap();
 
-        let limit = Self::BUFFER_SIZE as i32;
-        let overflow = (amount_allocated as i32) - limit;
+        let range = {
+            let ranges = self.sample_ranges.lock().unwrap();
+            let range = ranges.iter().find(|r| r.contains(&offset));
 
-        // Remove a third of the buffer size
-        if overflow > limit / 3 {
-            let amount_to_remove = 0..(limit / 3) as usize;
-            self.samples.drain(amount_to_remove);
-        }
+            if let Some(range) = range {
+                offset..range.len().min(buf.len())
+            } else {
+                // There are no cached samples at offset range
+                return 0;
+            }
+        };
+
+        let samples_written = range.len();
+
+        buf.copy_from_slice(&samples[range]);
+        samples_written
     }
 
-    pub fn samples(&mut self, range: Range<usize>) -> &[f32] {
-        // This is never below 0.
-        let absolute_start = self.offset - self.samples.len();
-        let safe_end = self.samples.len();
+    /// Submits samples to the cache, returning a copy of them.
+    fn submit_samples(&self, offset: usize, new_samples: Vec<Sample>) -> Vec<Sample> {
+        let mut samples = self.samples.lock().unwrap();
 
-        // If the buffer has been deallocated, this will ensure index stays within vec
-        let relative_start = range.start - absolute_start;
-        let relative_end = relative_start + range.len();
+        let range = offset..new_samples.len();
+        let range = safe_range(samples.len(), range);
+        let len = range.len();
 
-        let start = relative_start.min(safe_end);
-        let end = relative_end.min(safe_end);
+        self.submit_range(range.clone());
 
-        let samples = &self.samples[start..end];
-        self.consumed += samples.len();
+        // Safely copy the new samples to the cache
+        samples[range].copy_from_slice(&new_samples[..len]);
 
-        dbg!(
-            &range,
-            self.offset,
-            self.consumed,
-            self.length,
-            self.samples.len(),
-            self.is_finished()
-        );
-
-        samples
+        new_samples
     }
 
-    pub fn is_finished(&self) -> bool {
-        dbg!("UH", self.consumed, self.length, self.dead);
-        self.consumed == self.length || self.dead
+    /// Submits the range of loaded samples and merging with existing
+    /// ranges if it is possible.
+    fn submit_range(&self, new_range: Range<usize>) {
+        let mut ranges = self.sample_ranges.lock().unwrap();
+
+        *ranges = merge_ranges({
+            ranges.push(new_range);
+            ranges.to_vec()
+        });
+    }
+
+    fn set_error(&self, new_err: Option<SampleSourceError>) {
+        let mut err = self.err.lock().unwrap();
+        *err = new_err;
+    }
+
+    fn has_fatal_error(&self) -> bool {
+        let err = self.err.lock().unwrap();
+        err.as_ref()
+            .and_then(|e| Some(e.is_fatal()))
+            .unwrap_or(false)
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum SampleSourceError {
     /// Loading samples failed for whatever reason.
     /// This could be network related, for example.
@@ -218,7 +302,7 @@ pub trait SampleSource {
     /// How many samples does this source return
     fn length(&self) -> usize;
 
-    fn read(&mut self, buf: &mut [f32]) -> Result<usize, SampleSourceError>;
+    fn read_samples(&mut self, offset: usize, buf: &mut [f32]) -> Result<usize, SampleSourceError>;
 }
 
 impl SampleSource for std::fs::File {
@@ -228,14 +312,13 @@ impl SampleSource for std::fs::File {
         (meta.len() as usize) / 4
     }
 
-    fn read(&mut self, buf: &mut [f32]) -> Result<usize, SampleSourceError> {
+    fn read_samples(&mut self, offset: usize, buf: &mut [f32]) -> Result<usize, SampleSourceError> {
         let mut intermediate = vec![0; buf.len() * 4];
 
-        <Self as Read>::read(self, &mut intermediate).map_err(|e| {
-            SampleSourceError::LoadFailed {
+        self.seek_read(&mut intermediate, offset as u64)
+            .map_err(|e| SampleSourceError::LoadFailed {
                 reason: e.to_string(),
-            }
-        })?;
+            });
 
         let samples: Vec<_> = intermediate
             .chunks_exact(4)

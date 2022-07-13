@@ -92,7 +92,7 @@ impl AudioStream {
                     }
 
                     let mut samples = vec![0.; remaining];
-                    player.next_chunk(&mut samples);
+                    player.read(&mut samples);
 
                     let samples_as_bytes: Vec<_> = samples
                         .into_iter()

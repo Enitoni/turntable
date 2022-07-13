@@ -4,6 +4,7 @@ use tokio::runtime::Runtime;
 mod audio;
 mod discord;
 mod http;
+mod util;
 
 fn main() {
     let audio = Arc::new(audio::AudioSystem::default());
