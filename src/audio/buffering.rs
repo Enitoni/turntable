@@ -156,7 +156,7 @@ pub struct DynamicBufferAllocation<Id> {
     sample_ranges: Vec<Range<usize>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum ReadBufferSamplesResult {
     All {
         samples_read: usize,
@@ -224,16 +224,14 @@ where
         let mut samples_read = 0;
 
         while let Some(alloc) = allocations.pop() {
-            let remaining = buf.len() - samples_read;
-
             let alloc_range = {
                 let start = offset + samples_read;
-                let end = start + remaining;
+                let end = start + buf.len();
 
                 alloc.clamped_range(start..end)
             };
 
-            let buf_slice = &mut buf[..remaining];
+            let buf_slice = &mut buf[..alloc_range.len()];
 
             samples_read += alloc_range.len();
             skip_offset = alloc.offset;
@@ -334,7 +332,12 @@ impl<Id> DynamicBufferAllocation<Id> {
             .unwrap_or(0..0);
 
         let new_start = absolute_range.start + sample_range.start;
-        let new_end = new_start + sample_range.len().min(absolute_range.len());
+        let remaining = self
+            .len
+            .checked_sub(offset - sample_range.start)
+            .unwrap_or_default();
+
+        let new_end = new_start + remaining.min(absolute_range.len());
 
         new_start..new_end
     }
@@ -360,7 +363,7 @@ impl<Id> DynamicBufferAllocation<Id> {
     }
 
     fn relative_offset(&self, offset: usize) -> usize {
-        self.offset.checked_sub(offset).unwrap_or_default()
+        offset.checked_sub(self.offset).unwrap_or_default()
     }
 
     fn relative_range(&self, absolute_range: Range<usize>) -> Range<usize> {
@@ -368,5 +371,26 @@ impl<Id> DynamicBufferAllocation<Id> {
         let end = (start + absolute_range.len()).min(self.len);
 
         start..end
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::{DynamicBuffer, ReadBufferSamplesResult};
+
+    #[test]
+    fn dynamic_buffers_are_read_correctly_at_end() {
+        let buffer = DynamicBuffer::new();
+
+        buffer.allocate(1, 20);
+        buffer.write_samples(1, 0, &[0.; 20]);
+
+        buffer.allocate(2, 30);
+        buffer.write_samples(2, 0, &[1.; 30]);
+
+        let mut buf = vec![0.; 10];
+        let amount = buffer.read_samples(45, &mut buf);
+
+        assert_eq!(amount, ReadBufferSamplesResult::End { samples_read: 5 });
     }
 }

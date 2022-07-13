@@ -99,7 +99,9 @@ impl SourceLoaderBuffer {
                     self.read_samples(offset + samples_read, &mut buf[samples_read..])
                 }
             }
-            super::ReadBufferSamplesResult::End { samples_read } => (samples_read, 0),
+            super::ReadBufferSamplesResult::End { samples_read } => {
+                self.read_samples(0, &mut buf[samples_read..])
+            }
         }
     }
 

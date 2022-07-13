@@ -30,7 +30,7 @@ impl AudioSystem {
         {
             let mut player_guard = player.lock().unwrap();
 
-            for _ in 0..5 {
+            for _ in 0..1 {
                 // Temporary testing
                 let track_one = Track::from_file(Path::new("./assets/blue1.wav"));
                 let track_two = Track::from_file(Path::new("./assets/blue2.wav"));
