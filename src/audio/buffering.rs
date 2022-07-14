@@ -204,18 +204,12 @@ where
 
     pub fn allocate(&self, id: Id, len: usize) {
         let offset = self.len();
-        let mut allocations = self.allocations.lock().unwrap();
+        self.resize_if_necessary(len * 2);
 
         let new_allocation = DynamicBufferAllocation::new(id, offset, len);
+
+        let mut allocations = self.allocations.lock().unwrap();
         allocations.push(new_allocation);
-
-        let mut samples = self.samples.lock().unwrap();
-        let needs_reallocation = len * 2 > samples.len();
-
-        if needs_reallocation {
-            let new_length = samples.len() + len * 2;
-            samples.resize(new_length, 0.);
-        }
     }
 
     /// Writes samples to an allocation
@@ -321,6 +315,16 @@ where
             })
             .cloned()
             .collect()
+    }
+
+    fn resize_if_necessary(&self, new_len: usize) {
+        let mut samples = self.samples.lock().unwrap();
+        let needs_reallocation = new_len > samples.len();
+
+        if needs_reallocation {
+            let new_length = samples.len() + new_len;
+            samples.resize(new_length, 0.);
+        }
     }
 }
 
