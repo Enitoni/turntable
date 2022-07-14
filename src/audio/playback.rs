@@ -1,10 +1,6 @@
-use std::{
-    fs::File,
-    path::Path,
-    sync::{Arc},
-};
+use std::{fs::File, path::Path, sync::Arc};
 
-use super::{decoding::decode_to_raw, SourceLoaderBuffer};
+use super::{decoding::decode_to_raw, SourceLoaderBuffer, CHANNEL_COUNT, SAMPLE_RATE};
 
 /// Plays audio sources with no gaps
 // TODO: Make an abstraction for this sample concatenation
@@ -35,6 +31,10 @@ impl Player {
 
         self.sample_offset = new_offset;
         samples_read
+    }
+
+    pub fn current_time(&self) -> f32 {
+        (self.sample_offset as f32) / ((SAMPLE_RATE * CHANNEL_COUNT) as f32)
     }
 
     pub fn current_track(&mut self) -> Option<Track> {

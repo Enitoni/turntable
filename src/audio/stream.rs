@@ -12,13 +12,10 @@ pub const PCM_MIME: &str = "audio/pcm;rate=44100;encoding=float;bits=32";
 pub const SAMPLE_RATE: usize = 44100;
 pub const CHANNEL_COUNT: usize = 2;
 
-// How many samples should be pushed to buffers per iteration
-const SAMPLE_BUFFER_SIZE: usize = 4096;
-
 pub const BYTES_PER_SAMPLE: usize = 4 * CHANNEL_COUNT;
 
 // How many bytes should a ring buffer contain
-pub const BUFFER_SIZE: usize = SAMPLE_BUFFER_SIZE * BYTES_PER_SAMPLE;
+pub const BUFFER_SIZE: usize = (SAMPLE_RATE * BYTES_PER_SAMPLE) * 2;
 
 // How many time to wake up the thread during a sleep
 const WAKE_UP_DIVISOR: f32 = 5.;
@@ -39,6 +36,8 @@ pub struct AudioStream {
 }
 
 impl AudioStream {
+    const BUFFER_DURATION: Duration = Duration::from_millis(500);
+
     pub fn new(player: ArcMut<Player>) -> Self {
         Self {
             state: Arc::new(StreamState::Idle.into()),
@@ -62,36 +61,30 @@ impl AudioStream {
             let player = Arc::clone(&self.player);
 
             move || {
-                // Calculate optimal laziness
-                let total_samples = (SAMPLE_BUFFER_SIZE * CHANNEL_COUNT) as f32;
-                let seconds_per_sample = 1. / SAMPLE_RATE as f32;
+                let samples_per_sec = SAMPLE_RATE * CHANNEL_COUNT;
+                let samples_to_render = {
+                    let sps = samples_per_sec as u128;
+                    let duration = Self::BUFFER_DURATION.as_millis();
 
-                let optimal_sleep_time = total_samples * seconds_per_sample / WAKE_UP_DIVISOR;
-                let time_to_sleep = Duration::from_secs_f32(optimal_sleep_time);
-
-                let _now = Instant::now();
+                    (sps * duration / 1000) as usize
+                };
 
                 loop {
-                    thread::sleep(time_to_sleep);
-                    let state = state.lock().unwrap();
+                    {
+                        let state = state.lock().unwrap();
 
-                    if let StreamState::Idle = *state {
-                        // Avoid processing if stream is idle
-                        continue;
+                        if let StreamState::Idle = *state {
+                            // Avoid processing if stream is idle
+                            continue;
+                        }
                     }
 
                     // Ensure dead buffers are removed
                     registry.recycle();
 
                     let mut player = player.lock().unwrap();
-                    let remaining = registry.samples_remaining();
+                    let mut samples = vec![0.; samples_to_render];
 
-                    // This will deadlock if dead buffers are not removed
-                    if remaining < 2 {
-                        continue;
-                    }
-
-                    let mut samples = vec![0.; remaining];
                     player.read(&mut samples);
 
                     let samples_as_bytes: Vec<_> = samples
@@ -101,6 +94,7 @@ impl AudioStream {
 
                     // Push the samples into the ring buffers
                     registry.write_byte_samples(&samples_as_bytes);
+                    thread::sleep(Self::BUFFER_DURATION);
                 }
             }
         });

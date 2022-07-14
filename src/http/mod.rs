@@ -21,7 +21,11 @@ pub fn run(audio: Arc<AudioSystem>) {
 
         thread::spawn(move || {
             println!("Web stream connection opened for {}", &addr);
-            let stream = WaveStream::new(audio.stream());
+
+            let stream = audio.stream();
+            stream.wait_for_buffer();
+
+            let stream = WaveStream::new(stream);
             let mut res = Response::new(StatusCode(200), vec![], stream, None, None);
 
             res.add_header(

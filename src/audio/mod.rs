@@ -34,8 +34,10 @@ impl AudioSystem {
                 // Temporary testing
                 let track_one = Track::from_file(Path::new("./assets/blue1.wav"));
                 let track_two = Track::from_file(Path::new("./assets/blue2.wav"));
-                player_guard.add(track_one.clone());
-                player_guard.add(track_two.clone());
+                let track_three = Track::from_file(Path::new("./assets/you_right.flac"));
+                player_guard.add(track_one);
+                player_guard.add(track_two);
+                player_guard.add(track_three);
             }
         }
 

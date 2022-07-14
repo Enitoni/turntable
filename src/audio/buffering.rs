@@ -3,6 +3,8 @@ use std::{
     io::Read,
     ops::Range,
     sync::{Arc, Mutex, Weak},
+    thread,
+    time::Duration,
 };
 
 use ringbuf::{Consumer, Producer, RingBuffer};
@@ -106,6 +108,23 @@ pub struct AudioBufferConsumer {
 }
 
 impl AudioBufferConsumer {
+    const LOOK_AHEAD_MS: usize = 100;
+
+    pub fn wait_for_buffer(&self) {
+        let samples = self.samples();
+
+        let sample_per_sec = SAMPLE_RATE * CHANNEL_COUNT;
+        let duration_of_samples_ms = samples * sample_per_sec / 1000;
+
+        if duration_of_samples_ms < Self::LOOK_AHEAD_MS {
+            thread::sleep(Duration::from_millis(Self::LOOK_AHEAD_MS as u64));
+        }
+    }
+
+    fn samples(&self) -> usize {
+        self.underlying.len() / 4
+    }
+
     fn new(underlying: Consumer<u8>) -> Self {
         Self {
             underlying,
@@ -117,7 +136,6 @@ impl AudioBufferConsumer {
 impl Read for AudioBufferConsumer {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         let requested_len = buf.len();
-
         let mut read_len = 0;
 
         while read_len < requested_len {
