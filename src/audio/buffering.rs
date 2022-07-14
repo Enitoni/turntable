@@ -208,6 +208,14 @@ where
 
         let new_allocation = DynamicBufferAllocation::new(id, offset, len);
         allocations.push(new_allocation);
+
+        let mut samples = self.samples.lock().unwrap();
+        let needs_reallocation = len * 2 > samples.len();
+
+        if needs_reallocation {
+            let new_length = samples.len() + len * 2;
+            samples.resize(new_length, 0.);
+        }
     }
 
     /// Writes samples to an allocation
@@ -286,6 +294,20 @@ where
         allocations.iter().fold(0, |acc, x| acc + x.len)
     }
 
+    pub fn id_at_offset(&self, offset: usize) -> Option<Id> {
+        let allocations = self.allocations.lock().unwrap();
+
+        allocations
+            .iter()
+            .find_map(|a| (offset > a.offset && offset < a.end()).then(|| a.id.clone()))
+    }
+
+    pub fn empty_ranges_at(&self, _range: Range<usize>) -> Vec<(Id, Range<usize>)> {
+        let _allocations = self.allocations.lock().unwrap();
+
+        todo!()
+    }
+
     fn allocations_by_range(&self, range: Range<usize>) -> Vec<DynamicBufferAllocation<Id>> {
         let allocations = self.allocations.lock().unwrap();
 
@@ -299,20 +321,6 @@ where
             })
             .cloned()
             .collect()
-    }
-
-    pub fn id_at_offset(&self, offset: usize) -> Option<Id> {
-        let allocations = self.allocations.lock().unwrap();
-
-        allocations
-            .iter()
-            .find_map(|a| (offset > a.offset && offset < a.end()).then(|| a.id.clone()))
-    }
-
-    pub fn empty_ranges_at(&self, _range: Range<usize>) -> Vec<(Id, Range<usize>)> {
-        let _allocations = self.allocations.lock().unwrap();
-
-        todo!()
     }
 }
 
