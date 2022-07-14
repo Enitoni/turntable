@@ -8,6 +8,7 @@ mod decoding;
 mod encoding;
 mod loading;
 mod playback;
+mod queuing;
 mod stream;
 
 pub use buffering::*;
