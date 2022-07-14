@@ -13,6 +13,7 @@ pub const SAMPLE_RATE: usize = 44100;
 pub const CHANNEL_COUNT: usize = 2;
 
 pub const BYTES_PER_SAMPLE: usize = 4 * CHANNEL_COUNT;
+pub const SAMPLES_PER_SEC: usize = SAMPLE_RATE * CHANNEL_COUNT;
 
 // How many bytes should a ring buffer contain
 pub const BUFFER_SIZE: usize = (SAMPLE_RATE * BYTES_PER_SAMPLE) * 2;

@@ -1,61 +1,46 @@
 use std::{
-    collections::hash_map::DefaultHasher,
-    fmt::Display,
-    hash::{Hash, Hasher},
+    hash::Hasher,
     ops::Range,
-    os::windows::prelude::FileExt,
     sync::{
-        mpsc::{sync_channel, Receiver, SyncSender},
+        mpsc::{sync_channel, SyncSender},
         Arc, Mutex,
     },
     thread,
 };
 
-use super::source::Error as SourceError;
+use super::{queuing::QueueEvent, source::Error as SourceError, AudioEvent, SAMPLES_PER_SEC};
 use crate::util::{merge_ranges, safe_range};
 
-use super::{
-    queuing::Queue, AudioEventChannel, AudioSource, DynamicBuffer, Sample, CHANNEL_COUNT,
-    SAMPLE_RATE,
-};
+use super::{queuing::Queue, AudioEventChannel, AudioSource, DynamicBuffer, Sample};
 
 pub type SourceId = u64;
 
 /// This needs a better name. Maybe something like, scheduler?
+/// It would be better to separate it out into its own thing.
 pub struct SourceLoaderBuffer {
     events: AudioEventChannel,
-    buffer: DynamicBuffer<SourceId>,
-
     queue: Arc<Queue>,
     registry: SourceLoaderRegistry,
-
-    sender: SyncSender<LoaderCommand>,
 }
 
 #[derive(Debug, Clone, Copy)]
 pub enum LoaderEvent {
+    /// Samples were read from the buffer with an offset.
+    Read(usize),
     Advance,
 }
 
-pub enum LoaderCommand {
-    Load(SourceId, Range<usize>),
-}
-
 impl SourceLoaderBuffer {
-    const SOURCE_LOADER_LOOKAHEAD: usize = 5;
-    const COMMAND_BUFFER_SIZE: usize = 256;
+    /// How many samples to load after hitting the threshold.
+    const PRELOAD_AMOUNT: usize = SAMPLES_PER_SEC * 60;
 
-    const PRELOAD_PADDING: usize = SAMPLE_RATE * CHANNEL_COUNT * 60;
-    const PRELOAD_THRESHOLD: usize = SAMPLE_RATE * CHANNEL_COUNT * 10;
+    /// The threshold at which loading more samples happens
+    const PRELOAD_THRESHOLD: usize = SAMPLES_PER_SEC * 20;
 
     pub fn spawn(events: AudioEventChannel, queue: Arc<Queue>) -> Arc<Self> {
-        let (sender, receiver) = sync_channel(Self::COMMAND_BUFFER_SIZE);
-
         let new_buffer = Self {
             queue,
-            sender,
             events,
-            buffer: DynamicBuffer::new(),
             registry: SourceLoaderRegistry::new(),
         };
 
@@ -63,129 +48,129 @@ impl SourceLoaderBuffer {
 
         thread::spawn({
             let buffer = Arc::clone(&arced);
-            move || buffer.process_commands(receiver)
+            move || buffer.run()
         });
 
         arced
     }
 
-    pub fn add_source<T: AudioSource>(&self, source: T) {
-        /*let mut sources = self.sources.lock().unwrap();
-        let new_id = (sources.len() + 1) as SourceId;
-
-        let length = source.length();
-        let loader = SourceLoader::new(new_id, source);
-
-        // Temporary
-        dbg!("Remember to remove me!");
-        let _ = self.sender.send(LoaderCommand::Load(new_id, 0..length));
-
-        self.buffer.allocate(new_id, length);
-        sources.push(loader); */
-        todo!()
-    }
-
     /// Reads samples into the buffer and returns the amount written and the new offset.
     /// This will block if there are pending ranges.
     pub fn read_samples(&self, offset: usize, buf: &mut [Sample]) -> (usize, usize) {
-        let result = self.buffer.read_samples(offset, buf);
+        let source = self.current_source();
 
-        match result {
-            super::ReadBufferSamplesResult::All { samples_read } => {
-                (samples_read, offset + samples_read)
+        let requested_samples = buf.len();
+        let samples_read = source.read_samples(offset, buf);
+
+        if requested_samples == samples_read {
+            return (samples_read, offset + samples_read);
+        }
+
+        // This is the end of the source.
+        if source.is_complete() {
+            self.advance();
+            return (samples_read, 0);
+        }
+
+        // Otherwise, keep trying
+        self.read_samples(offset + samples_read, &mut buf[samples_read..])
+    }
+
+    fn run(&self) {
+        loop {
+            let event = self.events.wait();
+
+            match event {
+                AudioEvent::Queue(e) => self.handle_queue_event(e),
+                AudioEvent::Loader(e) => self.handle_loader_event(e),
             }
-            super::ReadBufferSamplesResult::Partial {
-                samples_read,
-                skip_offset,
-            } => {
-                if self.should_skip(offset) {
-                    (samples_read, skip_offset)
-                } else {
-                    self.read_samples(offset + samples_read, &mut buf[samples_read..])
+        }
+    }
+
+    fn handle_queue_event(&self, event: QueueEvent) {
+        // To be implemented...
+    }
+
+    fn handle_loader_event(&self, event: LoaderEvent) {
+        match event {
+            LoaderEvent::Read(offset) => self.load_if_necessary(offset),
+            LoaderEvent::Advance => todo!(),
+        }
+    }
+
+    fn advance(&self) {
+        self.queue.next();
+    }
+
+    fn load_more(&self, initial_offset: usize) {
+        let mut offset = initial_offset;
+        let mut remaining = Self::PRELOAD_AMOUNT;
+
+        for source in self.sources() {
+            let load_result = source.load_samples(offset..remaining);
+
+            // In the next source we start loading from 0.
+            offset = 0;
+
+            match load_result {
+                Ok(samples_read) => remaining.checked_sub(samples_read).unwrap_or_default(),
+                Err(_err) => {
+                    todo!("Handle source loading error")
                 }
-            }
-            super::ReadBufferSamplesResult::End { samples_read } => {
-                self.read_samples(0, &mut buf[samples_read..])
-            }
-        }
-    }
+            };
 
-    pub fn process_commands(&self, receiver: Receiver<LoaderCommand>) {
-        while let Ok(command) = receiver.recv() {
-            match command {
-                LoaderCommand::Load(source_id, range) => self.attempt_load_source(source_id, range),
+            if remaining == 0 {
+                break;
             }
         }
     }
 
-    fn load_if_necessary(&self, offset: usize) {}
+    fn load_if_necessary(&self, offset: usize) {
+        let amount_loaded = self.continuous_amount_loaded_ahead(offset);
 
+        if amount_loaded < Self::PRELOAD_THRESHOLD {
+            self.load_more(offset);
+        }
+    }
+
+    /// Returns how many continuous loaded samples exist after the offset
     fn continuous_amount_loaded_ahead(&self, offset: usize) -> usize {
-        todo!()
-        //let sources = self.queue.peek_ahead(10).iter().fi
+        let sources = self.sources();
+
+        if sources.is_empty() {
+            return 0;
+        }
+
+        let mut current_source = sources.first().unwrap();
+        let mut current_amount = current_source.remaining_at_offset(offset);
+
+        for source in sources.iter().skip(1) {
+            if !current_source.is_continuous_with(source) {
+                break;
+            }
+
+            current_amount += source.samples_loaded_from_start();
+            current_source = source;
+        }
+
+        current_amount
     }
 
     fn should_skip(&self, offset: usize) -> bool {
-        let id = self.buffer.id_at_offset(offset);
-
-        if let Some(id) = id {
-            let sources = self.sources();
-
-            sources
-                .iter()
-                .find_map(|s| (s.id == id).then(|| s.has_fatal_error()))
-                .unwrap_or(false)
-        } else {
-            false
-        }
+        todo!("should_skip")
     }
 
-    fn attempt_load_source(&self, source_id: SourceId, range: Range<usize>) {
-        let sources = self.sources();
-        let source = sources
-            .iter()
-            .find(|s| s.id == source_id)
-            .expect("Source exists in the SourceLoaderBuffer");
-
-        let samples_to_load = range.len();
-        let offset = range.start;
-
-        let mut buf = vec![0.; samples_to_load];
-        let mut samples_read = 0;
-
-        let result = source.read_samples(offset, &mut buf);
-
-        match result {
-            Ok(loaded) => {
-                source.set_error(None);
-
-                samples_read += loaded;
-                self.buffer.write_samples(source_id, offset, &buf);
-            }
-            Err(err) => {
-                source.set_error(Some(err.clone()));
-
-                if err.is_fatal() {
-                    return;
-                }
-            }
-        }
-
-        // Try loading again later
-        if samples_read < samples_to_load {
-            let start = samples_read;
-            let end = start + (samples_to_load - samples_read);
-
-            let _ = self.sender.send(LoaderCommand::Load(source_id, start..end));
-        }
-    }
-
-    pub fn sources(&self) -> Vec<Arc<SourceLoader>> {
+    fn sources(&self) -> Vec<Arc<SourceLoader>> {
         self.queue
             .peek_ahead(10)
             .into_iter()
             .map(|t| self.registry.get_by_source(t.source()))
             .collect()
+    }
+
+    fn current_source(&self) -> Arc<SourceLoader> {
+        let track = self.queue.current_track();
+        self.registry.get_by_source(track.source())
     }
 }
 
@@ -260,7 +245,38 @@ impl SourceLoader {
         }
     }
 
-    fn read_samples(&self, offset: usize, buf: &mut [Sample]) -> Result<usize, SourceError> {
+    fn load_samples(&self, range: Range<usize>) -> Result<usize, SourceError> {
+        let mut buf = vec![0.; range.len()];
+        let mut source = self.source.lock().unwrap();
+
+        let samples_read = source.read_samples(range.start, &mut buf)?;
+
+        // We lock samples after reading so that it isn't blocked from playing.
+        let mut samples = self.samples.lock().unwrap();
+        samples[..range.len()].copy_from_slice(&buf);
+
+        Ok(samples_read)
+    }
+
+    fn read_samples(&self, offset: usize, buf: &mut [Sample]) -> usize {
+        let remaining = self.remaining_at_offset(offset);
+        let requested = buf.len();
+
+        if remaining > 0 {
+            let mut samples = self.samples.lock().unwrap();
+
+            let start = offset;
+            let end = start + remaining.min(requested);
+
+            buf[..remaining].copy_from_slice(&samples[start..end]);
+
+            (start..end).len()
+        } else {
+            0
+        }
+    }
+
+    fn read__samples(&self, offset: usize, buf: &mut [Sample]) -> Result<usize, SourceError> {
         let mut amount_read = 0;
 
         amount_read += self.get_cached_samples(offset, buf);
@@ -327,7 +343,12 @@ impl SourceLoader {
 
         ranges
             .iter()
-            .find_map(|r| r.contains(&offset).then(|| r.len()))
+            .find_map(|r| {
+                r.contains(&offset).then(|| {
+                    let used = offset.checked_sub(r.start).unwrap_or_default();
+                    r.len() - used
+                })
+            })
             .unwrap_or_default()
     }
 
@@ -339,6 +360,42 @@ impl SourceLoader {
             .get(0)
             .and_then(|r| Some(r.len() == samples.len()))
             .unwrap_or_default()
+    }
+
+    /// Returns true if this SourceLoader's range connects to `other`
+    /// without interruptions.
+    fn is_continuous_with(&self, other: &Self) -> bool {
+        other
+            .sample_start()
+            .zip(self.sample_end())
+            .map(|(start, end)| start == 0 && end == other.len())
+            .unwrap_or_default()
+    }
+
+    fn samples_loaded_from_start(&self) -> usize {
+        self.sample_ranges
+            .lock()
+            .unwrap()
+            .first()
+            .map(|r| r.len())
+            .unwrap_or_default()
+    }
+
+    /// Returns the start of the first loaded range
+    fn sample_start(&self) -> Option<usize> {
+        let ranges = self.sample_ranges.lock().unwrap();
+        ranges.first().map(|r| r.start)
+    }
+
+    /// Returns the end of the last loaded range
+    fn sample_end(&self) -> Option<usize> {
+        let ranges = self.sample_ranges.lock().unwrap();
+        ranges.last().map(|r| r.end)
+    }
+
+    /// Returns the total length
+    fn len(&self) -> usize {
+        self.samples.lock().unwrap().len()
     }
 
     fn set_error(&self, new_err: Option<SourceError>) {
