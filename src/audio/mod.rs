@@ -10,16 +10,20 @@ mod events;
 mod loading;
 mod playback;
 mod queuing;
+mod source;
 mod stream;
+mod track;
 
 pub use buffering::*;
 pub use encoding::*;
 pub use events::*;
 pub use loading::*;
 pub use playback::*;
+pub use source::{AudioSource, ToAudioSource};
 pub use stream::*;
 
 pub type Sample = f32;
+pub const SAMPLE_IN_BYTES: usize = 4;
 
 pub struct AudioSystem {
     events: AudioEventChannel,
@@ -36,10 +40,13 @@ impl AudioSystem {
             let mut player_guard = player.lock().unwrap();
 
             let tracks: Vec<_> = [
-                "red.mp3",
-                "rise.mp3",
-                "lies.mp3",
-                "gregor.wav",
+                "first_steps.mp3",
+                "friends.mp3",
+                "need_to_know.flac",
+                "submersion.wav",
+                "dessert.mp3",
+                "getintoit.flac",
+                "temple.mp3",
                 "you_right.flac",
             ]
             .into_iter()
