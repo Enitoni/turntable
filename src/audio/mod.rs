@@ -19,8 +19,9 @@ pub use encoding::*;
 pub use events::*;
 pub use loading::*;
 pub use playback::*;
-pub use source::{AudioSource, ToAudioSource};
+pub use source::AudioSource;
 pub use stream::*;
+pub use track::Track;
 
 pub type Sample = f32;
 pub const SAMPLE_IN_BYTES: usize = 4;
@@ -39,7 +40,7 @@ impl AudioSystem {
         {
             let mut player_guard = player.lock().unwrap();
 
-            let tracks: Vec<_> = [
+            /*let tracks: Vec<_> = [
                 "first_steps.mp3",
                 "friends.mp3",
                 "need_to_know.flac",
@@ -58,8 +59,8 @@ impl AudioSystem {
             .collect();
 
             for track in tracks {
-                player_guard.add(track)
-            }
+                //player_guard.add(track)
+            }*/
         }
 
         let stream = Arc::new(AudioStream::new(player.clone()));

@@ -6,6 +6,8 @@ use std::{
     thread,
 };
 
+use super::{Sample, SAMPLE_IN_BYTES};
+
 /// Decode any audio to raw 32-bit floating point.
 pub fn decode_to_raw<T: 'static + Read + Send + Sync>(mut input: T, name: &str) -> File {
     let path = format!("./processed/temp-{name}",);
@@ -47,4 +49,15 @@ pub fn decode_to_raw<T: 'static + Read + Send + Sync>(mut input: T, name: &str) 
 
     ffmpeg.wait().unwrap();
     File::open(path).unwrap()
+}
+
+/// Converts a slice of bytes into a vec of [Sample].
+pub fn raw_samples_from_bytes(bytes: &[u8]) -> Vec<Sample> {
+    bytes
+        .chunks_exact(SAMPLE_IN_BYTES)
+        .map(|b| {
+            let arr: [u8; SAMPLE_IN_BYTES] = [b[0], b[1], b[2], b[3]];
+            Sample::from_le_bytes(arr)
+        })
+        .collect()
 }

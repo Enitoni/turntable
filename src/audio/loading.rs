@@ -1,5 +1,7 @@
 use std::{
+    collections::hash_map::DefaultHasher,
     fmt::Display,
+    hash::{Hash, Hasher},
     ops::Range,
     os::windows::prelude::FileExt,
     sync::{
@@ -9,11 +11,15 @@ use std::{
     thread,
 };
 
+use super::source::Error as SourceError;
 use crate::util::{merge_ranges, safe_range};
 
-use super::{queuing::Queue, AudioEventChannel, DynamicBuffer, Sample, CHANNEL_COUNT, SAMPLE_RATE};
+use super::{
+    queuing::Queue, AudioEventChannel, AudioSource, DynamicBuffer, Sample, CHANNEL_COUNT,
+    SAMPLE_RATE,
+};
 
-pub type SourceId = u32;
+pub type SourceId = u64;
 
 /// This needs a better name. Maybe something like, scheduler?
 pub struct SourceLoaderBuffer {
@@ -21,7 +27,7 @@ pub struct SourceLoaderBuffer {
     buffer: DynamicBuffer<SourceId>,
 
     queue: Arc<Queue>,
-    sources: Mutex<Vec<SourceLoader>>,
+    registry: SourceLoaderRegistry,
 
     sender: SyncSender<LoaderCommand>,
 }
@@ -36,6 +42,7 @@ pub enum LoaderCommand {
 }
 
 impl SourceLoaderBuffer {
+    const SOURCE_LOADER_LOOKAHEAD: usize = 5;
     const COMMAND_BUFFER_SIZE: usize = 256;
 
     const PRELOAD_PADDING: usize = SAMPLE_RATE * CHANNEL_COUNT * 60;
@@ -45,11 +52,11 @@ impl SourceLoaderBuffer {
         let (sender, receiver) = sync_channel(Self::COMMAND_BUFFER_SIZE);
 
         let new_buffer = Self {
+            queue,
+            sender,
             events,
             buffer: DynamicBuffer::new(),
-            sources: Default::default(),
-            sender,
-            queue,
+            registry: SourceLoaderRegistry::new(),
         };
 
         let arced = Arc::new(new_buffer);
@@ -62,8 +69,8 @@ impl SourceLoaderBuffer {
         arced
     }
 
-    pub fn add_source<T: 'static + SampleSource + Send + Sync>(&self, source: T) {
-        let mut sources = self.sources.lock().unwrap();
+    pub fn add_source<T: AudioSource>(&self, source: T) {
+        /*let mut sources = self.sources.lock().unwrap();
         let new_id = (sources.len() + 1) as SourceId;
 
         let length = source.length();
@@ -74,7 +81,8 @@ impl SourceLoaderBuffer {
         let _ = self.sender.send(LoaderCommand::Load(new_id, 0..length));
 
         self.buffer.allocate(new_id, length);
-        sources.push(loader);
+        sources.push(loader); */
+        todo!()
     }
 
     /// Reads samples into the buffer and returns the amount written and the new offset.
@@ -110,11 +118,18 @@ impl SourceLoaderBuffer {
         }
     }
 
+    fn load_if_necessary(&self, offset: usize) {}
+
+    fn continuous_amount_loaded_ahead(&self, offset: usize) -> usize {
+        todo!()
+        //let sources = self.queue.peek_ahead(10).iter().fi
+    }
+
     fn should_skip(&self, offset: usize) -> bool {
         let id = self.buffer.id_at_offset(offset);
 
         if let Some(id) = id {
-            let sources = self.sources.lock().unwrap();
+            let sources = self.sources();
 
             sources
                 .iter()
@@ -126,7 +141,7 @@ impl SourceLoaderBuffer {
     }
 
     fn attempt_load_source(&self, source_id: SourceId, range: Range<usize>) {
-        let sources = self.sources.lock().unwrap();
+        let sources = self.sources();
         let source = sources
             .iter()
             .find(|s| s.id == source_id)
@@ -164,27 +179,80 @@ impl SourceLoaderBuffer {
             let _ = self.sender.send(LoaderCommand::Load(source_id, start..end));
         }
     }
+
+    pub fn sources(&self) -> Vec<Arc<SourceLoader>> {
+        self.queue
+            .peek_ahead(10)
+            .into_iter()
+            .map(|t| self.registry.get_by_source(t.source()))
+            .collect()
+    }
 }
 
-/// Loads a SampleSource and keeps track of the ranges
+/// Keeps track of SourceLoaders, de-allocating them automatically
+/// to save memory when necessary.
+#[derive(Default)]
+pub struct SourceLoaderRegistry {
+    loaders: Mutex<Vec<Arc<SourceLoader>>>,
+}
+
+impl SourceLoaderRegistry {
+    fn new() -> Self {
+        Self {
+            loaders: Default::default(),
+        }
+    }
+
+    fn get_loader_by_id(&self, id: SourceId) -> Option<Arc<SourceLoader>> {
+        let loaders = self.loaders.lock().unwrap();
+
+        loaders.iter().find(|s| s.id == id).cloned()
+    }
+
+    fn add_loader<T>(&self, source: T) -> Arc<SourceLoader>
+    where
+        T: AudioSource,
+    {
+        let mut loaders = self.loaders.lock().unwrap();
+        let loader = Arc::new(SourceLoader::new(source));
+
+        loaders.push(loader.clone());
+        loader
+    }
+
+    pub fn get_by_source<T>(&self, source: &T) -> Arc<SourceLoader>
+    where
+        T: AudioSource + Clone,
+    {
+        let id = source.id();
+
+        if let Some(existing) = self.get_loader_by_id(id) {
+            return existing;
+        }
+
+        self.add_loader(source.clone())
+    }
+}
+
+/// Loads an AudioSource and keeps track of the ranges
 /// that have been loaded.
 pub struct SourceLoader {
     id: SourceId,
-    source: Mutex<Box<dyn SampleSource + Send + Sync>>,
+    source: Mutex<Box<dyn AudioSource>>,
 
     samples: Mutex<Vec<Sample>>,
     sample_ranges: Mutex<Vec<Range<usize>>>,
 
-    err: Mutex<Option<SampleSourceError>>,
+    err: Mutex<Option<SourceError>>,
 }
 
 impl SourceLoader {
-    fn new<T: 'static + SampleSource + Send + Sync>(id: SourceId, source: T) -> Self {
+    fn new<T: AudioSource>(source: T) -> Self {
         let length = source.length();
         let samples = vec![0.; length];
 
         Self {
-            id,
+            id: source.id(),
             source: Mutex::new(Box::new(source)),
             samples: samples.into(),
             sample_ranges: Default::default(),
@@ -192,7 +260,7 @@ impl SourceLoader {
         }
     }
 
-    fn read_samples(&self, offset: usize, buf: &mut [Sample]) -> Result<usize, SampleSourceError> {
+    fn read_samples(&self, offset: usize, buf: &mut [Sample]) -> Result<usize, SourceError> {
         let mut amount_read = 0;
 
         amount_read += self.get_cached_samples(offset, buf);
@@ -254,7 +322,26 @@ impl SourceLoader {
         });
     }
 
-    fn set_error(&self, new_err: Option<SampleSourceError>) {
+    fn remaining_at_offset(&self, offset: usize) -> usize {
+        let ranges = self.sample_ranges.lock().unwrap();
+
+        ranges
+            .iter()
+            .find_map(|r| r.contains(&offset).then(|| r.len()))
+            .unwrap_or_default()
+    }
+
+    fn is_complete(&self) -> bool {
+        let ranges = self.sample_ranges.lock().unwrap();
+        let samples = self.samples.lock().unwrap();
+
+        ranges
+            .get(0)
+            .and_then(|r| Some(r.len() == samples.len()))
+            .unwrap_or_default()
+    }
+
+    fn set_error(&self, new_err: Option<SourceError>) {
         let mut err = self.err.lock().unwrap();
         *err = new_err;
     }
@@ -262,71 +349,5 @@ impl SourceLoader {
     fn has_fatal_error(&self) -> bool {
         let err = self.err.lock().unwrap();
         err.as_ref().map(|e| e.is_fatal()).unwrap_or(false)
-    }
-}
-
-#[derive(Debug, Clone)]
-pub enum SampleSourceError {
-    /// Loading samples failed for whatever reason.
-    /// This could be network related, for example.
-    LoadFailed { reason: String },
-    /// The SampleSource cannot be used anymore,
-    /// and should be skipped.
-    Fatal { reason: String },
-}
-
-impl SampleSourceError {
-    pub fn is_fatal(&self) -> bool {
-        matches!(self, Self::Fatal { .. })
-    }
-}
-
-impl Display for SampleSourceError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            SampleSourceError::LoadFailed { reason } => {
-                write!(f, "Source failed to load samples: \"{}\"", reason)?;
-            }
-            SampleSourceError::Fatal { reason } => write!(
-                f,
-                "Source is skipped because of fatal error: \"{}\"",
-                reason
-            )?,
-        };
-
-        Ok(())
-    }
-}
-
-/// A source of audio samples
-pub trait SampleSource {
-    /// How many samples does this source return
-    fn length(&self) -> usize;
-
-    fn read_samples(&mut self, offset: usize, buf: &mut [f32]) -> Result<usize, SampleSourceError>;
-}
-
-impl SampleSource for std::fs::File {
-    fn length(&self) -> usize {
-        let meta = self.metadata().expect("Read metadata");
-
-        (meta.len() as usize) / 4
-    }
-
-    fn read_samples(&mut self, offset: usize, buf: &mut [f32]) -> Result<usize, SampleSourceError> {
-        let mut intermediate = vec![0; buf.len() * 4];
-
-        self.seek_read(&mut intermediate, offset as u64)
-            .map_err(|e| SampleSourceError::LoadFailed {
-                reason: e.to_string(),
-            })?;
-
-        let samples: Vec<_> = intermediate
-            .chunks_exact(4)
-            .map(|byte| f32::from_le_bytes([byte[0], byte[1], byte[2], byte[3]]))
-            .collect();
-
-        buf[..samples.len()].copy_from_slice(&samples);
-        Ok(samples.len())
     }
 }

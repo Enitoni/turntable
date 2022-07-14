@@ -1,7 +1,7 @@
 use super::Sample;
 pub type SourceId = u64;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Error {
     /// The source could not provide samples.
     Read { reason: String, retry: bool },
@@ -18,7 +18,7 @@ impl Error {
 ///
 /// Though caching strategies are fine, this will probably cloned
 /// and therefore any state should only serve the purpose of providing samples.
-pub trait AudioSource: 'static + Send + Sync + Clone {
+pub trait AudioSource: 'static + Send + Sync + AudioSourceClone {
     /// How many samples does this source return
     fn length(&self) -> usize;
 
@@ -32,21 +32,22 @@ pub trait AudioSource: 'static + Send + Sync + Clone {
     fn read_samples(&mut self, offset: usize, buf: &mut [Sample]) -> Result<usize, Error>;
 }
 
-/// Convenience trait for converting to
-/// AudioSource.
-pub trait ToAudioSource<T>
-where
-    T: AudioSource,
-{
-    fn to_audio_source(&self) -> T;
+pub trait AudioSourceClone {
+    fn clone_box(&self) -> Box<dyn AudioSource>;
 }
 
-impl<T> ToAudioSource<T> for T
+impl<T> AudioSourceClone for T
 where
-    T: AudioSource,
+    T: 'static + AudioSource + Clone,
 {
-    fn to_audio_source(&self) -> T {
-        self.clone()
+    fn clone_box(&self) -> Box<dyn AudioSource> {
+        Box::new(self.clone())
+    }
+}
+
+impl Clone for Box<dyn AudioSource> {
+    fn clone(&self) -> Box<dyn AudioSource> {
+        self.clone_box()
     }
 }
 
@@ -74,7 +75,7 @@ mod file {
         }
 
         fn file(&self) -> File {
-            File::open(self.path).expect("File can be opened")
+            File::open(&self.path).expect("File can be opened")
         }
 
         fn meta(&self, file: &File) -> Metadata {
