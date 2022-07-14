@@ -18,7 +18,7 @@ pub struct AudioEventChannel {
 }
 
 #[derive(Debug)]
-pub struct AudioEventBroadcast {
+struct AudioEventBroadcast {
     channels: Mutex<Vec<(usize, Sender<AudioEvent>)>>,
 }
 

@@ -1,11 +1,14 @@
 use std::{fs::File, path::Path, sync::Arc};
 
 use super::{
-    decoding::decode_to_raw, queuing::Queue, SourceLoaderBuffer, CHANNEL_COUNT, SAMPLE_RATE,
+    decoding::decode_to_raw, queuing::Queue, AudioEventChannel, SourceLoaderBuffer, CHANNEL_COUNT,
+    SAMPLE_RATE,
 };
 
 /// Plays audio sources with no gaps
 pub struct Player {
+    events: AudioEventChannel,
+
     buffer: Arc<SourceLoaderBuffer>,
     queue: Arc<Queue>,
 
@@ -13,13 +16,15 @@ pub struct Player {
 }
 
 impl Player {
-    pub fn new() -> Self {
-        let queue = Arc::new(Queue::new());
+    pub fn new(events: AudioEventChannel) -> Self {
+        let queue = Arc::new(Queue::new(events.clone()));
+        let buffer = SourceLoaderBuffer::spawn(events.clone(), queue.clone());
 
         Self {
-            queue: queue.clone(),
+            queue,
+            buffer,
+            events,
             sample_offset: Default::default(),
-            buffer: SourceLoaderBuffer::spawn(queue),
         }
     }
 

@@ -11,11 +11,13 @@ use std::{
 
 use crate::util::{merge_ranges, safe_range};
 
-use super::{queuing::Queue, DynamicBuffer, Sample, CHANNEL_COUNT, SAMPLE_RATE};
+use super::{queuing::Queue, AudioEventChannel, DynamicBuffer, Sample, CHANNEL_COUNT, SAMPLE_RATE};
 
 pub type SourceId = u32;
 
+/// This needs a better name. Maybe something like, scheduler?
 pub struct SourceLoaderBuffer {
+    events: AudioEventChannel,
     buffer: DynamicBuffer<SourceId>,
 
     queue: Arc<Queue>,
@@ -24,16 +26,9 @@ pub struct SourceLoaderBuffer {
     sender: SyncSender<LoaderCommand>,
 }
 
-#[derive(Debug)]
-pub enum ReadResult {
-    /// Samples were read successfully, and there may be more content.
-    Read {
-        samples_read: usize,
-        new_offset: usize,
-    },
-    /// No data was read, because the chunk must be skipped.
-    /// This is usually due to an error.
-    Skip { new_offset: usize },
+#[derive(Debug, Clone, Copy)]
+pub enum LoaderEvent {
+    Advance,
 }
 
 pub enum LoaderCommand {
@@ -46,10 +41,11 @@ impl SourceLoaderBuffer {
     const PRELOAD_PADDING: usize = SAMPLE_RATE * CHANNEL_COUNT * 60;
     const PRELOAD_THRESHOLD: usize = SAMPLE_RATE * CHANNEL_COUNT * 10;
 
-    pub fn spawn(queue: Arc<Queue>) -> Arc<Self> {
+    pub fn spawn(events: AudioEventChannel, queue: Arc<Queue>) -> Arc<Self> {
         let (sender, receiver) = sync_channel(Self::COMMAND_BUFFER_SIZE);
 
         let new_buffer = Self {
+            events,
             buffer: DynamicBuffer::new(),
             sources: Default::default(),
             sender,

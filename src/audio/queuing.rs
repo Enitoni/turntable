@@ -1,10 +1,21 @@
 use std::sync::Mutex;
 
-use super::Track;
+use super::{AudioEvent, AudioEventChannel, Track};
 
 pub struct Queue {
+    events: AudioEventChannel,
+
     tracks: Mutex<Vec<Track>>,
     index: Mutex<usize>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum QueueEvent {
+    /// A request to advance the queue by x amount was made.
+    /// This can either be automatic or caused by a user.
+    Advance { amount: isize, new_index: usize },
+    /// The queue was updated from adding, or removing a track.
+    Update,
 }
 
 pub enum QueuePosition {
@@ -12,6 +23,14 @@ pub enum QueuePosition {
 }
 
 impl Queue {
+    pub fn new(events: AudioEventChannel) -> Self {
+        Self {
+            events,
+            tracks: Default::default(),
+            index: Default::default(),
+        }
+    }
+
     pub fn add_track(&self, track: Track, position: QueuePosition) {
         let current_index = self.current_index();
         let mut tracks = self.tracks.lock().unwrap();
@@ -22,6 +41,8 @@ impl Queue {
                 tracks.insert(at, track);
             }
         };
+
+        self.events.emit(QueueEvent::Update);
     }
 
     /// Advance the queue, returning the next track
@@ -56,7 +77,12 @@ impl Queue {
         let advanced_index = *current_index as isize + advance;
         let new_index = self.index_at(advanced_index as usize);
 
-        *current_index = new_index
+        *current_index = new_index;
+
+        self.events.emit(QueueEvent::Advance {
+            amount: advance,
+            new_index,
+        });
     }
 
     fn set_index(&self, new_index: usize) {
@@ -77,5 +103,11 @@ impl Queue {
         let normalized = index % tracks.len();
 
         normalized
+    }
+}
+
+impl From<QueueEvent> for AudioEvent {
+    fn from(e: QueueEvent) -> Self {
+        AudioEvent::Queue(e)
     }
 }

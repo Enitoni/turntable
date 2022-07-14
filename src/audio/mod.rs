@@ -6,6 +6,7 @@ use std::{
 mod buffering;
 mod decoding;
 mod encoding;
+mod events;
 mod loading;
 mod playback;
 mod queuing;
@@ -13,6 +14,7 @@ mod stream;
 
 pub use buffering::*;
 pub use encoding::*;
+pub use events::*;
 pub use loading::*;
 pub use playback::*;
 pub use stream::*;
@@ -20,13 +22,15 @@ pub use stream::*;
 pub type Sample = f32;
 
 pub struct AudioSystem {
+    events: AudioEventChannel,
     stream: Arc<AudioStream>,
     player: Arc<Mutex<Player>>,
 }
 
 impl AudioSystem {
     fn new() -> Self {
-        let player = Arc::new(Mutex::new(Player::new()));
+        let events = AudioEventChannel::new();
+        let player = Arc::new(Mutex::new(Player::new(events.clone())));
 
         {
             let mut player_guard = player.lock().unwrap();
@@ -53,7 +57,11 @@ impl AudioSystem {
 
         let stream = Arc::new(AudioStream::new(player.clone()));
 
-        Self { player, stream }
+        Self {
+            events,
+            player,
+            stream,
+        }
     }
 
     pub fn stream(&self) -> AudioBufferConsumer {
