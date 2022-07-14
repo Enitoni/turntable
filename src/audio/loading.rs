@@ -11,12 +11,14 @@ use std::{
 
 use crate::util::{merge_ranges, safe_range};
 
-use super::{DynamicBuffer, Sample, CHANNEL_COUNT, SAMPLE_RATE};
+use super::{queuing::Queue, DynamicBuffer, Sample, CHANNEL_COUNT, SAMPLE_RATE};
 
 pub type SourceId = u32;
 
 pub struct SourceLoaderBuffer {
     buffer: DynamicBuffer<SourceId>,
+
+    queue: Arc<Queue>,
     sources: Mutex<Vec<SourceLoader>>,
 
     sender: SyncSender<LoaderCommand>,
@@ -44,13 +46,14 @@ impl SourceLoaderBuffer {
     const PRELOAD_PADDING: usize = SAMPLE_RATE * CHANNEL_COUNT * 60;
     const PRELOAD_THRESHOLD: usize = SAMPLE_RATE * CHANNEL_COUNT * 10;
 
-    pub fn spawn() -> Arc<Self> {
+    pub fn spawn(queue: Arc<Queue>) -> Arc<Self> {
         let (sender, receiver) = sync_channel(Self::COMMAND_BUFFER_SIZE);
 
         let new_buffer = Self {
             buffer: DynamicBuffer::new(),
             sources: Default::default(),
             sender,
+            queue,
         };
 
         let arced = Arc::new(new_buffer);
@@ -262,8 +265,7 @@ impl SourceLoader {
 
     fn has_fatal_error(&self) -> bool {
         let err = self.err.lock().unwrap();
-        err.as_ref().map(|e| e.is_fatal())
-            .unwrap_or(false)
+        err.as_ref().map(|e| e.is_fatal()).unwrap_or(false)
     }
 }
 

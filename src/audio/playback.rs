@@ -1,22 +1,25 @@
 use std::{fs::File, path::Path, sync::Arc};
 
-use super::{decoding::decode_to_raw, SourceLoaderBuffer, CHANNEL_COUNT, SAMPLE_RATE};
+use super::{
+    decoding::decode_to_raw, queuing::Queue, SourceLoaderBuffer, CHANNEL_COUNT, SAMPLE_RATE,
+};
 
 /// Plays audio sources with no gaps
-// TODO: Make an abstraction for this sample concatenation
 pub struct Player {
     buffer: Arc<SourceLoaderBuffer>,
-    tracks: Vec<Track>,
+    queue: Arc<Queue>,
 
     sample_offset: usize,
 }
 
 impl Player {
     pub fn new() -> Self {
+        let queue = Arc::new(Queue::new());
+
         Self {
-            tracks: Default::default(),
+            queue: queue.clone(),
             sample_offset: Default::default(),
-            buffer: SourceLoaderBuffer::spawn(),
+            buffer: SourceLoaderBuffer::spawn(queue),
         }
     }
 
