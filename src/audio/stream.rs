@@ -36,7 +36,7 @@ pub struct AudioStream {
 }
 
 impl AudioStream {
-    const BUFFER_DURATION: Duration = Duration::from_millis(500);
+    const BUFFER_DURATION: Duration = Duration::from_millis(100);
 
     pub fn new(player: ArcMut<Player>) -> Self {
         Self {
@@ -70,6 +70,7 @@ impl AudioStream {
                 };
 
                 loop {
+                    let now = Instant::now();
                     {
                         let state = state.lock().unwrap();
 
@@ -94,7 +95,16 @@ impl AudioStream {
 
                     // Push the samples into the ring buffers
                     registry.write_byte_samples(&samples_as_bytes);
-                    thread::sleep(Self::BUFFER_DURATION);
+
+                    let elapsed = now.elapsed();
+                    let elapsed_micros = elapsed.as_micros();
+
+                    let duration_micros = Self::BUFFER_DURATION.as_micros();
+                    let corrected = duration_micros
+                        .checked_sub(elapsed_micros)
+                        .unwrap_or_default();
+
+                    spin_sleep::sleep(Duration::from_micros(corrected as u64));
                 }
             }
         });

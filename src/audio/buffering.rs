@@ -193,7 +193,7 @@ where
     Id: Clone + PartialEq + Debug,
 {
     /// 30 minutes of audio
-    const INITIAL_BUFFER_LENGTH: usize = SAMPLE_RATE * CHANNEL_COUNT * 60 * 10;
+    const INITIAL_BUFFER_LENGTH: usize = SAMPLE_RATE * CHANNEL_COUNT * 60 * 30;
 
     pub fn new() -> Self {
         Self {

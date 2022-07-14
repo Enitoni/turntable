@@ -30,14 +30,23 @@ impl AudioSystem {
         {
             let mut player_guard = player.lock().unwrap();
 
-            for _ in 0..1 {
-                // Temporary testing
-                let track_one = Track::from_file(Path::new("./assets/blue1.wav"));
-                let track_two = Track::from_file(Path::new("./assets/blue2.wav"));
-                let track_three = Track::from_file(Path::new("./assets/you_right.flac"));
-                player_guard.add(track_one);
-                player_guard.add(track_two);
-                player_guard.add(track_three);
+            let tracks: Vec<_> = [
+                "red.mp3",
+                "rise.mp3",
+                "lies.mp3",
+                "gregor.wav",
+                "you_right.flac",
+            ]
+            .into_iter()
+            .map(|x| {
+                let path = format!("./assets/{x}");
+                let path = Path::new(path.as_str());
+                Track::from_file(path)
+            })
+            .collect();
+
+            for track in tracks {
+                player_guard.add(track)
             }
         }
 
