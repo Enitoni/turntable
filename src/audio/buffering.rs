@@ -108,7 +108,7 @@ pub struct AudioBufferConsumer {
 }
 
 impl AudioBufferConsumer {
-    const LOOK_AHEAD_MS: usize = 100;
+    const LOOK_AHEAD_MS: usize = 10;
 
     pub fn wait_for_buffer(&self) {
         let samples = self.samples();
