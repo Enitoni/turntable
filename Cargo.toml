@@ -7,11 +7,14 @@ edition = "2021"
 
 [dependencies]
 tokio = { version = "1.19.2", features = ["full"] }
+fern = { version = "0.6.1", features = ["colored"] }
 spin_sleep = "1.1.1"
 tiny_http = "0.11.0"
 crossbeam = "0.8.1"
+colored = "2.0.0"
 ringbuf = "0.2.8"
 fundsp = "0.6.4"
+log = "0.4.17"
 chrono = "0.4"
 
 [dependencies.symphonia]

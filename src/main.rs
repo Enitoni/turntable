@@ -1,12 +1,16 @@
+use log::{error, info, warn};
 use std::{sync::Arc, thread, time::Duration};
 use tokio::runtime::Runtime;
 
 mod audio;
 mod discord;
 mod http;
+mod logging;
 mod util;
 
 fn main() {
+    logging::init_logger();
+
     let audio = Arc::new(audio::AudioSystem::default());
     audio.run();
 
