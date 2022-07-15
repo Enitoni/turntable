@@ -46,14 +46,23 @@ impl AudioSystem {
 
         {
             let tracks: Vec<_> = [
-                "first_steps.mp3",
+                "you_right.flac",
+                "caves.mp3",
                 "friends.mp3",
-                "need_to_know.flac",
+                "yes.wav",
+                "model.mp3",
                 "submersion.wav",
                 "dessert.mp3",
+                "three.wav",
+                "sound-failure.wav",
+                "need_to_know.flac",
+                "nicki.mp3",
+                "blue.mp3",
+                "oh yeah.wav",
+                "first_steps.mp3",
                 "getintoit.flac",
+                "gregor.wav",
                 "temple.mp3",
-                "you_right.flac",
             ]
             .into_iter()
             .map(|x| {
