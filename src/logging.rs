@@ -140,6 +140,7 @@ pub enum LogColor {
     Magenta,
     Blurple,
     LightGreen,
+    Success,
 }
 
 impl LogColor {
@@ -154,6 +155,7 @@ impl LogColor {
             LogColor::Orange => (252, 177, 3),
             LogColor::Magenta => (207, 105, 255),
             LogColor::Blurple => (88, 101, 242),
+            LogColor::Success => (112, 250, 150),
             LogColor::LightGreen => (112, 250, 150),
         }
     }

@@ -1,4 +1,5 @@
 use fundsp::hacker32::*;
+use log::{info, trace, warn};
 
 use std::{
     sync::{Arc, Mutex},
@@ -50,7 +51,7 @@ impl AudioStream {
     /// Start processing the stream.
     /// This will push to ring buffers if state is set to Processing.
     pub fn run(&self) {
-        println!("Running AudioStream!");
+        info!("Starting stream...");
 
         let state = self.state.clone();
 
@@ -71,6 +72,13 @@ impl AudioStream {
 
                         (sps * duration / 1000) as usize
                     };
+
+                    let sample_rate_in_k = SAMPLE_RATE as f32 / 1000.;
+
+                    info!(
+                        "Now processing {} sample/s at {:.1} kHz",
+                        samples_per_sec, sample_rate_in_k
+                    );
 
                     loop {
                         let now = Instant::now();
@@ -101,8 +109,18 @@ impl AudioStream {
 
                         let elapsed = now.elapsed();
                         let elapsed_micros = elapsed.as_micros();
+                        let elapsed_millis = elapsed_micros / 1000;
 
                         let duration_micros = Self::BUFFER_DURATION.as_micros();
+
+                        // This should not log if buffering is occurring.
+                        if elapsed_millis > SAMPLES_PER_SEC as u128 / 10000 {
+                            warn!(
+                                "Stream took too long ({}ms) to process samples!",
+                                elapsed_millis
+                            )
+                        }
+
                         let corrected = duration_micros
                             .checked_sub(elapsed_micros)
                             .unwrap_or_default();

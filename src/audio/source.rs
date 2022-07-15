@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use super::Sample;
 pub type SourceId = u64;
 
@@ -11,6 +13,20 @@ impl Error {
     /// Returns true if the source should be skipped.
     pub fn is_fatal(&self) -> bool {
         matches!(self, Self::Read { retry: false, .. })
+    }
+}
+
+impl Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let result = match self {
+            Error::Read { reason, retry } => format!(
+                "Read error ({}): {}",
+                retry.then(|| "retryable").unwrap_or("fatal"),
+                reason
+            ),
+        };
+
+        write!(f, "{}", result)
     }
 }
 

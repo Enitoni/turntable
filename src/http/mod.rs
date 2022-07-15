@@ -1,5 +1,6 @@
 use std::{env, str::FromStr, sync::Arc, thread};
 
+use log::info;
 use tiny_http::{Header, Response, Server, StatusCode};
 
 use crate::audio::{AudioSystem, WaveStream};
@@ -13,14 +14,14 @@ pub fn run(audio: Arc<AudioSystem>) {
     let addr = format!("127.0.0.1:{}", port);
     let server = Server::http(addr).unwrap();
 
-    println!("Running HTTP server on port {}!", port);
+    info!("Server listening on port {}", port);
 
     for req in server.incoming_requests() {
         let audio = Arc::clone(&audio);
         let addr = req.remote_addr().to_string();
 
         thread::spawn(move || {
-            println!("Web stream connection opened for {}", &addr);
+            info!("Audio stream connection opened for {}", &addr);
 
             let stream = audio.stream();
             stream.wait_for_buffer();
@@ -34,7 +35,7 @@ pub fn run(audio: Arc<AudioSystem>) {
 
             let _ = req.respond(res);
 
-            println!("Web stream connection closed for {}", &addr);
+            info!("Audio stream connection closed for {}", &addr);
         });
     }
 }

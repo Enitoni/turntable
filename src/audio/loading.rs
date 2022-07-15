@@ -8,8 +8,14 @@ use std::{
     thread,
 };
 
+use colored::Colorize;
+use log::{trace, warn};
+
 use super::{queuing::QueueEvent, source::Error as SourceError, AudioEvent, SAMPLES_PER_SEC};
-use crate::util::{merge_ranges, safe_range};
+use crate::{
+    logging::LogColor,
+    util::{merge_ranges, safe_range},
+};
 
 use super::{queuing::Queue, AudioEventChannel, AudioSource, DynamicBuffer, Sample};
 
@@ -81,9 +87,7 @@ impl SourceLoaderBuffer {
             return (new_offset, new_offset);
         }
 
-        // Otherwise, keep trying
-        self.wait_for_load(source.id);
-        self.read_samples(offset + samples_read, &mut buf[samples_read..])
+        (samples_read, offset + samples_read)
     }
 
     fn run(&self) {
@@ -121,47 +125,32 @@ impl SourceLoaderBuffer {
         let mut remaining = Self::PRELOAD_AMOUNT;
 
         for source in self.sources() {
+            let start = offset;
             let end = offset + remaining;
 
-            let load_result = source.load_samples(offset..end);
+            let range_to_load = start..end;
+            let samples_to_load = range_to_load.len();
 
-            // In the next source we start loading from 0.
-            offset = 0;
+            let load_result = source.load_samples(range_to_load);
 
             let samples_read = match load_result {
                 Ok(samples_read) => samples_read,
-                Err(_err) => {
-                    todo!("Handle source loading error")
+                Err(err) => {
+                    return warn!(
+                        "Failed to load {} samples for source {}: {}",
+                        remaining, source.id, err
+                    );
                 }
             };
 
             remaining = remaining.checked_sub(samples_read).unwrap_or_default();
             self.events.emit(LoaderEvent::Load(source.id));
 
+            // In the next source we start loading from 0.
+            offset = 0;
+
             if remaining == 0 {
                 break;
-            }
-        }
-    }
-
-    /// Waits for a source to load, blocking
-    /// the thread until it does so.
-    fn wait_for_load(&self, id: SourceId) {
-        let channel = self.events.clone();
-
-        loop {
-            let event = match channel.wait() {
-                AudioEvent::Loader(e) => e,
-                _ => continue,
-            };
-
-            match event {
-                LoaderEvent::Load(incoming_id) => {
-                    if incoming_id == id {
-                        break;
-                    }
-                }
-                _ => continue,
             }
         }
     }
@@ -295,7 +284,30 @@ impl SourceLoader {
         let mut buf = vec![0.; safe_range.len()];
         let mut source = self.source.lock().unwrap();
 
+        trace!(
+            "Source {}: {}",
+            self.id,
+            format!(
+                "Loading {} samples at offset {}",
+                safe_range.len(),
+                safe_range.start
+            )
+            .color(LogColor::White),
+        );
+
         let samples_read = source.read_samples(range.start, &mut buf)?;
+
+        trace!(
+            "Source {}: {}",
+            self.id,
+            format!(
+                "Received {}/{} samples from offset {}",
+                samples_read,
+                safe_range.len(),
+                safe_range.start
+            )
+            .color(LogColor::Success),
+        );
 
         // We lock samples after reading so that it isn't blocked from playing.
         let mut samples = self.samples.lock().unwrap();

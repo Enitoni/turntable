@@ -1,6 +1,7 @@
 use std::{env, sync::Arc};
 
 use crate::audio::AudioSystem;
+use log::info;
 use poise::{
     serenity_prelude::{ChannelId, Context as SerenityContext, GatewayIntents, GuildId},
     Event,
@@ -70,9 +71,9 @@ impl Bot {
             call.stop();
 
             let input = self.audio.create_input();
-            let handle = call.play_only_input(input);
+            let _ = call.play_only_input(input);
 
-            //handle.set_volume(1.0)?;
+            info!("Connected to voice channel");
         }
     }
 
@@ -82,7 +83,12 @@ impl Bot {
         framework: FrameworkContext<'_>,
         bot: &Bot,
     ) -> Result<(), Error> {
-        if let Event::Ready { data_about_bot: _ } = event {
+        if let Event::Ready { data_about_bot } = event {
+            info!(
+                "Bot connected to Discord as {}#{}",
+                data_about_bot.user.name, data_about_bot.user.discriminator
+            );
+
             bot.play_audio().await;
         }
 
