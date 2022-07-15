@@ -24,7 +24,6 @@ pub fn run(audio: Arc<AudioSystem>) {
             info!("Audio stream connection opened for {}", &addr);
 
             let stream = audio.stream();
-            stream.wait_for_buffer();
 
             let stream = WaveStream::new(stream);
             let mut res = Response::new(StatusCode(200), vec![], stream, None, None);

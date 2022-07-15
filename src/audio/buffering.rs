@@ -11,7 +11,7 @@ use ringbuf::{Consumer, Producer, RingBuffer};
 
 use crate::util::merge_ranges;
 
-use super::{Sample, BUFFER_SIZE, BYTES_PER_SAMPLE, CHANNEL_COUNT, SAMPLE_RATE};
+use super::{Sample, BUFFER_SIZE, BYTES_PER_SAMPLE, CHANNEL_COUNT, SAMPLES_PER_SEC, SAMPLE_RATE};
 
 /// Keep track of buffer consumers and remove orphaned ones.
 ///
@@ -108,21 +108,11 @@ pub struct AudioBufferConsumer {
 }
 
 impl AudioBufferConsumer {
-    const LOOK_AHEAD_MS: usize = 10;
+    pub fn wait_for_buffer(&self, samples_to_wait_for: usize) {
+        let seconds_per_sample = 1. / SAMPLES_PER_SEC as f32;
+        let seconds_to_wait = (samples_to_wait_for as f32) * seconds_per_sample;
 
-    pub fn wait_for_buffer(&self) {
-        let samples = self.samples();
-
-        let sample_per_sec = SAMPLE_RATE * CHANNEL_COUNT;
-        let duration_of_samples_ms = samples * sample_per_sec / 1000;
-
-        if duration_of_samples_ms < Self::LOOK_AHEAD_MS {
-            thread::sleep(Duration::from_millis(Self::LOOK_AHEAD_MS as u64));
-        }
-    }
-
-    fn samples(&self) -> usize {
-        self.underlying.len() / 4
+        spin_sleep::sleep(Duration::from_secs_f32(seconds_to_wait));
     }
 
     fn new(underlying: Consumer<u8>) -> Self {
@@ -136,15 +126,16 @@ impl AudioBufferConsumer {
 impl Read for AudioBufferConsumer {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         let requested_len = buf.len();
-        let mut read_len = 0;
+        let mut bytes_read = 0;
 
-        while read_len < requested_len {
-            let slice = &mut buf[read_len..];
-            let bytes_read = self.underlying.read(slice);
+        while bytes_read < requested_len {
+            bytes_read += self.underlying.pop_slice(&mut buf[bytes_read..]);
 
-            match bytes_read {
-                Ok(len) => read_len += len,
-                Err(_) => continue,
+            if bytes_read < requested_len {
+                let remaining = requested_len - bytes_read;
+
+                // Waiting for buffer ensures minimal busy-wait
+                self.wait_for_buffer(remaining);
             }
         }
 
