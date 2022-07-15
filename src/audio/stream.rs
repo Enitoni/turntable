@@ -76,8 +76,11 @@ impl AudioStream {
                     let sample_rate_in_k = SAMPLE_RATE as f32 / 1000.;
 
                     info!(
-                        "Now processing {} sample/s at {:.1} kHz",
-                        samples_per_sec, sample_rate_in_k
+                        "Now processing {} samples per {}ms ({} sample/s) at {:.1} kHz",
+                        samples_to_render,
+                        Self::BUFFER_DURATION.as_millis(),
+                        samples_per_sec,
+                        sample_rate_in_k
                     );
 
                     loop {
