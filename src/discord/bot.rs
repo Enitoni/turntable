@@ -59,12 +59,33 @@ impl Bot {
         framework.run().await.unwrap();
     }
 
+    pub async fn play_audio(&self) {
+        let (handler, result) = self
+            .voice
+            .join(self.home_guild(), self.voice_channel())
+            .await;
+
+        if result.is_ok() {
+            let mut call = handler.lock().await;
+            call.stop();
+
+            let input = self.audio.create_input();
+            let handle = call.play_only_input(input);
+
+            //handle.set_volume(1.0)?;
+        }
+    }
+
     pub async fn handle_event(
         _ctx: &SerenityContext,
         event: &poise::Event<'_>,
         framework: FrameworkContext<'_>,
         bot: &Bot,
     ) -> Result<(), Error> {
+        if let Event::Ready { data_about_bot: _ } = event {
+            bot.play_audio().await;
+        }
+
         if let Event::VoiceStateUpdate { old: _, new } = event {
             // Ensures that Songbird releases resources so buffers are not locked
             // DO NOT REMOVE THIS.

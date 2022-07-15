@@ -57,58 +57,61 @@ impl AudioStream {
         // Ensure that processing starts
         *state.lock().unwrap() = StreamState::Processing;
 
-        thread::spawn({
-            let registry = Arc::clone(&self.registry);
-            let player = Arc::clone(&self.player);
+        thread::Builder::new()
+            .name("audio_stream".to_string())
+            .spawn({
+                let registry = Arc::clone(&self.registry);
+                let player = Arc::clone(&self.player);
 
-            move || {
-                let samples_per_sec = SAMPLE_RATE * CHANNEL_COUNT;
-                let samples_to_render = {
-                    let sps = samples_per_sec as u128;
-                    let duration = Self::BUFFER_DURATION.as_millis();
+                move || {
+                    let samples_per_sec = SAMPLE_RATE * CHANNEL_COUNT;
+                    let samples_to_render = {
+                        let sps = samples_per_sec as u128;
+                        let duration = Self::BUFFER_DURATION.as_millis();
 
-                    (sps * duration / 1000) as usize
-                };
+                        (sps * duration / 1000) as usize
+                    };
 
-                loop {
-                    let now = Instant::now();
-                    {
-                        let state = state.lock().unwrap();
+                    loop {
+                        let now = Instant::now();
+                        {
+                            let state = state.lock().unwrap();
 
-                        if let StreamState::Idle = *state {
-                            // Avoid processing if stream is idle
-                            continue;
+                            if let StreamState::Idle = *state {
+                                // Avoid processing if stream is idle
+                                continue;
+                            }
                         }
+
+                        // Ensure dead buffers are removed
+                        registry.recycle();
+
+                        let mut player = player.lock().unwrap();
+                        let mut samples = vec![0.; samples_to_render];
+
+                        player.read(&mut samples);
+
+                        let samples_as_bytes: Vec<_> = samples
+                            .into_iter()
+                            .flat_map(|sample| sample.to_le_bytes())
+                            .collect();
+
+                        // Push the samples into the ring buffers
+                        registry.write_byte_samples(&samples_as_bytes);
+
+                        let elapsed = now.elapsed();
+                        let elapsed_micros = elapsed.as_micros();
+
+                        let duration_micros = Self::BUFFER_DURATION.as_micros();
+                        let corrected = duration_micros
+                            .checked_sub(elapsed_micros)
+                            .unwrap_or_default();
+
+                        spin_sleep::sleep(Duration::from_micros(corrected as u64));
                     }
-
-                    // Ensure dead buffers are removed
-                    registry.recycle();
-
-                    let mut player = player.lock().unwrap();
-                    let mut samples = vec![0.; samples_to_render];
-
-                    player.read(&mut samples);
-
-                    let samples_as_bytes: Vec<_> = samples
-                        .into_iter()
-                        .flat_map(|sample| sample.to_le_bytes())
-                        .collect();
-
-                    // Push the samples into the ring buffers
-                    registry.write_byte_samples(&samples_as_bytes);
-
-                    let elapsed = now.elapsed();
-                    let elapsed_micros = elapsed.as_micros();
-
-                    let duration_micros = Self::BUFFER_DURATION.as_micros();
-                    let corrected = duration_micros
-                        .checked_sub(elapsed_micros)
-                        .unwrap_or_default();
-
-                    spin_sleep::sleep(Duration::from_micros(corrected as u64));
                 }
-            }
-        });
+            })
+            .unwrap();
     }
 
     /// Creates a new AudioStreamSource to read from the stream

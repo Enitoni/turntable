@@ -1,7 +1,7 @@
 use std::{
     fs::File,
     io::{self, Read, Write},
-    path::Path,
+    path::{Path, PathBuf},
     process::{Command, Stdio},
     thread,
 };
@@ -9,12 +9,12 @@ use std::{
 use super::{Sample, SAMPLE_IN_BYTES};
 
 /// Decode any audio to raw 32-bit floating point.
-pub fn decode_to_raw<T: 'static + Read + Send + Sync>(mut input: T, name: &str) -> File {
+pub fn decode_to_raw<T: 'static + Read + Send + Sync>(mut input: T, name: &str) -> PathBuf {
     let path = format!("./processed/temp-{name}",);
     let path = Path::new(path.as_str());
 
     if path.exists() {
-        return File::open(path).unwrap();
+        return path.to_path_buf();
     }
 
     let mut ffmpeg = Command::new("ffmpeg")
@@ -48,7 +48,7 @@ pub fn decode_to_raw<T: 'static + Read + Send + Sync>(mut input: T, name: &str) 
     drop(file);
 
     ffmpeg.wait().unwrap();
-    File::open(path).unwrap()
+    path.to_path_buf()
 }
 
 /// Converts a slice of bytes into a vec of [Sample].

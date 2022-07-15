@@ -20,6 +20,7 @@ pub enum QueueEvent {
 
 pub enum QueuePosition {
     Next,
+    Add,
 }
 
 impl Queue {
@@ -33,12 +34,15 @@ impl Queue {
 
     pub fn add_track(&self, track: Track, position: QueuePosition) {
         let current_index = self.current_index();
-        let mut tracks = self.tracks.lock().unwrap();
 
         match position {
             QueuePosition::Next => {
                 let at = self.index_at(current_index + 1);
-                tracks.insert(at, track);
+                self.insert_track_at(track, at);
+            }
+            QueuePosition::Add => {
+                let mut tracks = self.tracks.lock().unwrap();
+                tracks.push(track);
             }
         };
 
@@ -55,10 +59,11 @@ impl Queue {
         let current_index = self.current_index();
         let tracks = self.tracks.lock().unwrap();
 
-        (0..amount)
-            .into_iter()
-            .map(|i| self.index_at(current_index + i))
-            .map(|i| tracks.get(i).cloned().expect("Track is in queue"))
+        tracks
+            .iter()
+            .skip(current_index)
+            .take(amount)
+            .cloned()
             .collect()
     }
 
@@ -85,6 +90,16 @@ impl Queue {
         });
     }
 
+    fn insert_track_at(&self, track: Track, index: usize) {
+        let mut tracks = self.tracks.lock().unwrap();
+
+        if tracks.is_empty() {
+            tracks.push(track);
+        } else {
+            tracks.insert(index, track);
+        }
+    }
+
     fn set_index(&self, new_index: usize) {
         let mut current_index = self.index.lock().unwrap();
         let new_index = self.index_at(new_index);
@@ -100,9 +115,7 @@ impl Queue {
     /// Returns the index in a cyclic manner
     fn index_at(&self, index: usize) -> usize {
         let tracks = self.tracks.lock().unwrap();
-        let normalized = index % tracks.len();
-
-        normalized
+        index.checked_rem_euclid(tracks.len()).unwrap_or_default()
     }
 }
 

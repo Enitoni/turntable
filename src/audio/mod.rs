@@ -1,4 +1,5 @@
 use std::{
+    fs::File,
     path::Path,
     sync::{Arc, Mutex},
 };
@@ -19,9 +20,12 @@ pub use encoding::*;
 pub use events::*;
 pub use loading::*;
 pub use playback::*;
+pub use queuing::Queue;
 pub use source::AudioSource;
 pub use stream::*;
 pub use track::Track;
+
+use self::decoding::decode_to_raw;
 
 pub type Sample = f32;
 pub const SAMPLE_IN_BYTES: usize = 4;
@@ -29,18 +33,19 @@ pub const SAMPLE_IN_BYTES: usize = 4;
 pub struct AudioSystem {
     events: AudioEventChannel,
     stream: Arc<AudioStream>,
+    queue: Arc<Queue>,
     player: Arc<Mutex<Player>>,
 }
 
 impl AudioSystem {
     fn new() -> Self {
         let events = AudioEventChannel::new();
-        let player = Arc::new(Mutex::new(Player::new(events.clone())));
+
+        let queue: Arc<_> = Queue::new(events.clone()).into();
+        let player: Arc<_> = Mutex::new(Player::new(events.clone(), queue.clone())).into();
 
         {
-            let mut player_guard = player.lock().unwrap();
-
-            /*let tracks: Vec<_> = [
+            let tracks: Vec<_> = [
                 "first_steps.mp3",
                 "friends.mp3",
                 "need_to_know.flac",
@@ -54,13 +59,17 @@ impl AudioSystem {
             .map(|x| {
                 let path = format!("./assets/{x}");
                 let path = Path::new(path.as_str());
-                Track::from_file(path)
+
+                let path = decode_to_raw(File::open(path).unwrap(), x);
+                let source = source::FileSource::new(path.clone());
+
+                Track::new(source)
             })
             .collect();
 
             for track in tracks {
-                //player_guard.add(track)
-            }*/
+                queue.add_track(track, queuing::QueuePosition::Add)
+            }
         }
 
         let stream = Arc::new(AudioStream::new(player.clone()));
@@ -69,6 +78,7 @@ impl AudioSystem {
             events,
             player,
             stream,
+            queue,
         }
     }
 

@@ -26,7 +26,8 @@ pub struct SourceLoaderBuffer {
 #[derive(Debug, Clone, Copy)]
 pub enum LoaderEvent {
     /// Samples were read from the buffer with an offset.
-    Read(usize),
+    Load(SourceId),
+    Read(SourceId, usize),
     Advance,
 }
 
@@ -46,10 +47,13 @@ impl SourceLoaderBuffer {
 
         let arced = Arc::new(new_buffer);
 
-        thread::spawn({
-            let buffer = Arc::clone(&arced);
-            move || buffer.run()
-        });
+        thread::Builder::new()
+            .name("loader".to_string())
+            .spawn({
+                let buffer = Arc::clone(&arced);
+                move || buffer.run()
+            })
+            .unwrap();
 
         arced
     }
@@ -62,17 +66,21 @@ impl SourceLoaderBuffer {
         let requested_samples = buf.len();
         let samples_read = source.read_samples(offset, buf);
 
+        // Notify that a read just occurred
+        self.events.emit(LoaderEvent::Read(source.id, offset));
+
         if requested_samples == samples_read {
             return (samples_read, offset + samples_read);
         }
 
         // This is the end of the source.
-        if source.is_complete() {
+        if source.is_complete_from(offset) {
             self.advance();
             return (samples_read, 0);
         }
 
         // Otherwise, keep trying
+        self.wait_for_load(source.id);
         self.read_samples(offset + samples_read, &mut buf[samples_read..])
     }
 
@@ -93,8 +101,12 @@ impl SourceLoaderBuffer {
 
     fn handle_loader_event(&self, event: LoaderEvent) {
         match event {
-            LoaderEvent::Read(offset) => self.load_if_necessary(offset),
-            LoaderEvent::Advance => todo!(),
+            LoaderEvent::Read(id, offset) => {
+                if self.current_source().id == id {
+                    self.load_if_necessary(offset);
+                }
+            }
+            _ => {}
         }
     }
 
@@ -107,20 +119,47 @@ impl SourceLoaderBuffer {
         let mut remaining = Self::PRELOAD_AMOUNT;
 
         for source in self.sources() {
-            let load_result = source.load_samples(offset..remaining);
+            let end = offset + remaining;
+
+            let load_result = source.load_samples(offset..end);
 
             // In the next source we start loading from 0.
             offset = 0;
 
-            match load_result {
-                Ok(samples_read) => remaining.checked_sub(samples_read).unwrap_or_default(),
+            let samples_read = match load_result {
+                Ok(samples_read) => samples_read,
                 Err(_err) => {
                     todo!("Handle source loading error")
                 }
             };
 
+            remaining = remaining.checked_sub(samples_read).unwrap_or_default();
+            self.events.emit(LoaderEvent::Load(source.id));
+
             if remaining == 0 {
                 break;
+            }
+        }
+    }
+
+    /// Waits for a source to load, blocking
+    /// the thread until it does so.
+    fn wait_for_load(&self, id: SourceId) {
+        let channel = self.events.clone();
+
+        loop {
+            let event = match channel.wait() {
+                AudioEvent::Loader(e) => e,
+                _ => continue,
+            };
+
+            match event {
+                LoaderEvent::Load(incoming_id) => {
+                    if incoming_id == id {
+                        break;
+                    }
+                }
+                _ => continue,
             }
         }
     }
@@ -246,14 +285,22 @@ impl SourceLoader {
     }
 
     fn load_samples(&self, range: Range<usize>) -> Result<usize, SourceError> {
-        let mut buf = vec![0.; range.len()];
+        let length = self.len();
+
+        let safe_end = range.end.min(length);
+        let safe_range = range.start..safe_end;
+
+        let mut buf = vec![0.; safe_range.len()];
         let mut source = self.source.lock().unwrap();
 
         let samples_read = source.read_samples(range.start, &mut buf)?;
 
         // We lock samples after reading so that it isn't blocked from playing.
         let mut samples = self.samples.lock().unwrap();
-        samples[..range.len()].copy_from_slice(&buf);
+        samples[safe_range.clone()].copy_from_slice(&buf);
+
+        // Submit the range that was loaded
+        self.submit_range(safe_range);
 
         Ok(samples_read)
     }
@@ -262,53 +309,19 @@ impl SourceLoader {
         let remaining = self.remaining_at_offset(offset);
         let requested = buf.len();
 
+        let start = offset;
+        let end = (offset + requested).min(offset + remaining);
+
         if remaining > 0 {
             let mut samples = self.samples.lock().unwrap();
+            let safe_length = (start..end).len();
 
-            let start = offset;
-            let end = start + remaining.min(requested);
+            buf[..safe_length].copy_from_slice(&samples[start..end]);
 
-            buf[..remaining].copy_from_slice(&samples[start..end]);
-
-            (start..end).len()
+            safe_length
         } else {
             0
         }
-    }
-
-    fn read__samples(&self, offset: usize, buf: &mut [Sample]) -> Result<usize, SourceError> {
-        let mut amount_read = 0;
-
-        amount_read += self.get_cached_samples(offset, buf);
-
-        let new_offset = offset + amount_read;
-        let new_buf = &mut buf[amount_read..];
-
-        let mut source = self.source.lock().unwrap();
-        amount_read += source.read_samples(new_offset, new_buf)?;
-
-        Ok(amount_read)
-    }
-
-    fn get_cached_samples(&self, offset: usize, buf: &mut [Sample]) -> usize {
-        let samples = self.samples.lock().unwrap();
-
-        let range = {
-            let ranges = self.sample_ranges.lock().unwrap();
-            let range = ranges.iter().find(|r| r.contains(&offset));
-
-            if let Some(range) = range {
-                offset..range.len().min(buf.len())
-            } else {
-                // There are no cached samples at offset range
-                return 0;
-            }
-        };
-
-        let samples_written = range.len();
-
-        buf.copy_from_slice(&samples[range]);
-        samples_written
     }
 
     /// Submits samples to the cache, returning a copy of them.
@@ -362,13 +375,18 @@ impl SourceLoader {
             .unwrap_or_default()
     }
 
+    fn is_complete_from(&self, offset: usize) -> bool {
+        let remaining = self.remaining_at_offset(offset);
+        remaining == self.len() - offset
+    }
+
     /// Returns true if this SourceLoader's range connects to `other`
     /// without interruptions.
     fn is_continuous_with(&self, other: &Self) -> bool {
         other
             .sample_start()
             .zip(self.sample_end())
-            .map(|(start, end)| start == 0 && end == other.len())
+            .map(|(start, end)| start == 0 && end == self.len())
             .unwrap_or_default()
     }
 
@@ -406,5 +424,11 @@ impl SourceLoader {
     fn has_fatal_error(&self) -> bool {
         let err = self.err.lock().unwrap();
         err.as_ref().map(|e| e.is_fatal()).unwrap_or(false)
+    }
+}
+
+impl From<LoaderEvent> for AudioEvent {
+    fn from(e: LoaderEvent) -> Self {
+        AudioEvent::Loader(e)
     }
 }

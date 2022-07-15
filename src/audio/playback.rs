@@ -16,15 +16,14 @@ pub struct Player {
 }
 
 impl Player {
-    pub fn new(events: AudioEventChannel) -> Self {
-        let queue = Arc::new(Queue::new(events.clone()));
+    pub fn new(events: AudioEventChannel, queue: Arc<Queue>) -> Self {
         let buffer = SourceLoaderBuffer::spawn(events.clone(), queue.clone());
 
         Self {
             queue,
             buffer,
             events,
-            sample_offset: Default::default(),
+            sample_offset: 17834040,
         }
     }
 

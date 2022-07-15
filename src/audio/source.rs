@@ -104,9 +104,10 @@ mod file {
     impl AudioSource for FileSource {
         fn id(&self) -> SourceId {
             let mut hasher = DefaultHasher::default();
-            let fingerprint = self.fingerprint();
 
+            let fingerprint = self.fingerprint();
             fingerprint.hash(&mut hasher);
+
             hasher.finish()
         }
 
@@ -120,7 +121,8 @@ mod file {
         fn read_samples(&mut self, offset: usize, buf: &mut [Sample]) -> Result<usize, Error> {
             let mut file = self.file();
 
-            file.seek(SeekFrom::Start(offset as u64))
+            let new_seek = file
+                .seek(SeekFrom::Start((offset * SAMPLE_IN_BYTES) as u64))
                 .map_err(|e| Error::Read {
                     reason: e.to_string(),
                     retry: false,
@@ -137,6 +139,12 @@ mod file {
             buf[..samples.len()].copy_from_slice(&samples);
 
             Ok(samples.len())
+        }
+    }
+
+    impl From<PathBuf> for FileSource {
+        fn from(buf: PathBuf) -> Self {
+            Self::new(buf)
         }
     }
 }

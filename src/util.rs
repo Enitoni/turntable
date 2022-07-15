@@ -1,4 +1,4 @@
-use std::ops::Range;
+use std::{fmt::Debug, ops::Range};
 
 /// Returns a safe range that will not overflow
 pub fn safe_range(length: usize, range: Range<usize>) -> Range<usize> {
@@ -8,25 +8,58 @@ pub fn safe_range(length: usize, range: Range<usize>) -> Range<usize> {
     start..end
 }
 
-pub fn merge_ranges<T>(ranges: Vec<Range<T>>) -> Vec<Range<T>>
+pub fn ranges_overlap<T>(a: &Range<T>, b: &Range<T>) -> bool
 where
     T: PartialOrd + Ord + Clone,
 {
-    let mut current_range = ranges
-        .get(0)
-        .cloned()
-        .expect("At least one range in the vec");
+    a.contains(&b.start) || b.contains(&a.end)
+}
 
-    let mut result = vec![current_range.clone()];
+pub fn combine_two_ranges<T>(a: &Range<T>, b: &Range<T>) -> Range<T>
+where
+    T: Copy + PartialOrd + Ord,
+{
+    let start = a.start.min(b.start);
+    let end = a.end.max(b.end);
 
-    for range in ranges.into_iter().skip(1) {
-        if current_range.contains(&range.start) {
-            current_range.end = current_range.end.max(range.end);
+    start..end
+}
+
+pub fn merge_ranges<T>(ranges: Vec<Range<T>>) -> Vec<Range<T>>
+where
+    T: PartialOrd + Ord + Clone + Copy + Debug,
+{
+    let mut results = vec![];
+    let mut current = ranges.first().cloned().unwrap();
+
+    for (i, range) in ranges.iter().enumerate() {
+        if ranges_overlap(&current, range) {
+            current = combine_two_ranges(&current, range);
         } else {
-            result.push(current_range);
-            current_range = range;
+            results.push(current);
+            current = range.clone();
+        }
+
+        if i == ranges.len() - 1 {
+            results.push(current.clone());
         }
     }
 
-    result
+    results
+}
+
+#[cfg(test)]
+mod test {
+    use super::merge_ranges;
+
+    #[test]
+    fn merge_ranges_works() {
+        let ranges_to_merge = vec![0..4, 3..7, 7..35, 6..90];
+        let merged = merge_ranges(ranges_to_merge);
+        assert_eq!(merged, vec![0..90]);
+
+        let ranges_to_merge = vec![0..4, 2..3, 7..35, 6..90];
+        let merged = merge_ranges(ranges_to_merge);
+        assert_eq!(merged, vec![0..4, 6..90]);
+    }
 }

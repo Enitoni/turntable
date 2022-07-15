@@ -57,6 +57,6 @@ impl AudioSource for TrackSource {
 
 impl From<FileSource> for TrackSource {
     fn from(source: FileSource) -> Self {
-        TrackSource::File(source.into())
+        TrackSource::File(source)
     }
 }
