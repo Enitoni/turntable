@@ -76,7 +76,9 @@ impl SourceLoaderBuffer {
         // This is the end of the source.
         if source.is_complete_from(offset) {
             self.advance();
-            return (samples_read, 0);
+
+            let (_, new_offset) = self.read_samples(0, &mut buf[samples_read..]);
+            return (new_offset, new_offset);
         }
 
         // Otherwise, keep trying

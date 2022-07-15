@@ -23,7 +23,7 @@ impl Player {
             queue,
             buffer,
             events,
-            sample_offset: 17834040,
+            sample_offset: 0,
         }
     }
 
