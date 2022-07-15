@@ -10,28 +10,33 @@ pub fn init_logger() {
             let now = chrono::Local::now();
 
             let level = match record.level() {
-                log::Level::Error => "ERR!".color(BLACK).on_color(RED).bold(),
-                log::Level::Warn => "WARN".color(BLACK).on_color(ORANGE).bold(),
-                log::Level::Info => "INFO".color(BLACK).on_color(BLUE).bold(),
+                log::Level::Error => "ERR".color(LogColor::Black).on_color(LogColor::Red).bold(),
+                log::Level::Warn => "WRN"
+                    .color(LogColor::Black)
+                    .on_color(LogColor::Orange)
+                    .bold(),
+                log::Level::Info => "INF".color(LogColor::Black).on_color(LogColor::Blue).bold(),
                 log::Level::Debug => {
                     let index = (now.timestamp_subsec_micros() as usize) % DEBUG_WORDS.len();
                     let word = DEBUG_WORDS[index];
 
-                    word.color(BLACK).on_color(TEAL).bold()
+                    word.color(LogColor::Black).on_color(LogColor::Teal).bold()
                 }
-                log::Level::Trace => "LOG".color(DIMMED).bold(),
+                log::Level::Trace => "TRC".bold(),
             };
 
-            let message_color = if target.is_important() {
-                Color::White
+            let message_color = if target.is_important() && record.level() != Level::Trace {
+                LogColor::White.into()
             } else {
-                DIMMED
+                LogColor::White.dimmed()
             };
 
             out.finish(format_args!(
-                "{:^6} {} {:<6} {}",
+                "{:^5} {} {:.<7} {}",
                 level,
-                now.format("%H:%M:%S").to_string().color(DIMMED),
+                now.format("%H:%M:%S")
+                    .to_string()
+                    .color(LogColor::White.dimmed()),
                 target,
                 message.to_string().color(message_color)
             ))
@@ -48,14 +53,16 @@ pub fn init_logger() {
 }
 
 // Programmers are very peaceful creatures.
-const DEBUG_WORDS: [&str; 7] = ["FUCK", "SHIT", "GRR!", "WHY?", "AAAA", "NOPE", "COCK"];
+const DEBUG_WORDS: [&str; 7] = ["FCK", "SHT", "ASS", "WHY", "WTF", "NOO", "AGH"];
 
 // External libraries don't need to log unless it is important
 const ALLOWED_LEVELS: [Level; 2] = [Level::Warn, Level::Error];
 
+#[derive(Clone)]
 enum Target {
     External(String),
     Discord,
+    Server,
     Crate,
     Audio,
     Other,
@@ -76,6 +83,7 @@ impl Target {
             return match child {
                 "audio" => Self::Audio,
                 "discord" => Self::Discord,
+                "http" => Self::Server,
                 _ => Self::Other,
             };
         }
@@ -94,59 +102,77 @@ impl Target {
 
 impl Display for Target {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let color: LogColor = self.clone().into();
+
         let result = match self {
-            Target::External(x) => x.color(Color::White),
-            Target::Discord => "DISCORD".color(BLURPLE),
-            Target::Crate => "LOCAL".color(Color::White),
-            Target::Audio => "AUDIO".color(MAGENTA),
-            Target::Other => "OTHER".color(Color::White),
+            Target::External(x) => x.as_str().clear(),
+            Target::Crate => "LOCAL".clear(),
+            Target::Other => "OTHER".clear(),
+
+            Target::Discord => "DISCORD".color(color),
+            Target::Server => "SERVER".color(color),
+            Target::Audio => "AUDIO".color(color),
         };
 
-        let result = format!("{}:", result);
         Display::fmt(&result, f)
     }
 }
 
-const RED: Color = Color::TrueColor {
-    r: 255,
-    g: 73,
-    b: 13,
-};
+impl From<Target> for LogColor {
+    fn from(target: Target) -> Self {
+        match target {
+            Target::Discord => LogColor::Blurple,
+            Target::Server => LogColor::LightGreen,
+            Target::Audio => LogColor::Magenta,
+            _ => LogColor::White,
+        }
+    }
+}
 
-const ORANGE: Color = Color::TrueColor {
-    r: 252,
-    g: 177,
-    b: 3,
-};
+pub enum LogColor {
+    Red,
+    Teal,
+    Blue,
+    Black,
+    White,
+    Dimmed,
+    Orange,
+    Magenta,
+    Blurple,
+    LightGreen,
+}
 
-const BLACK: Color = Color::TrueColor { r: 0, g: 0, b: 0 };
+impl LogColor {
+    const fn values(&self) -> (u8, u8, u8) {
+        match self {
+            LogColor::Red => (255, 73, 13),
+            LogColor::Teal => (252, 177, 3),
+            LogColor::Blue => (0, 200, 255),
+            LogColor::White => (255, 255, 255),
+            LogColor::Black => (0, 0, 0),
+            LogColor::Dimmed => (70, 70, 70),
+            LogColor::Orange => (252, 177, 3),
+            LogColor::Magenta => (207, 105, 255),
+            LogColor::Blurple => (88, 101, 242),
+            LogColor::LightGreen => (112, 250, 150),
+        }
+    }
 
-const DIMMED: Color = Color::TrueColor {
-    r: 70,
-    g: 70,
-    b: 70,
-};
+    const fn dimmed(&self) -> Color {
+        let (r, g, b) = self.values();
+        let dim_value = 2;
 
-const BLUE: Color = Color::TrueColor {
-    r: 0,
-    g: 200,
-    b: 255,
-};
+        let r = r / dim_value;
+        let g = g / dim_value;
+        let b = b / dim_value;
 
-const TEAL: Color = Color::TrueColor {
-    r: 0,
-    g: 255,
-    b: 200,
-};
+        Color::TrueColor { r, g, b }
+    }
+}
 
-const MAGENTA: Color = Color::TrueColor {
-    r: 210,
-    g: 64,
-    b: 255,
-};
-
-const BLURPLE: Color = Color::TrueColor {
-    r: 88,
-    g: 101,
-    b: 242,
-};
+impl From<LogColor> for Color {
+    fn from(color: LogColor) -> Self {
+        let (r, g, b) = color.values();
+        Color::TrueColor { r, g, b }
+    }
+}
