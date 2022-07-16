@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 tokio = { version = "1.19.2", features = ["full"] }
 fern = { version = "0.6.1", features = ["colored"] }
+youtube_dl = "0.7.0"
 spin_sleep = "1.1.1"
 tiny_http = "0.11.0"
 crossbeam = "0.8.1"

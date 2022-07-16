@@ -8,7 +8,7 @@ use poise::{
 };
 use songbird::{SerenityInit, Songbird};
 
-use super::{util, voice, Context, Error, FrameworkContext};
+use super::{audio, util, voice, Context, Error, FrameworkContext};
 
 pub struct Bot {
     pub audio: Arc<AudioSystem>,
@@ -32,8 +32,9 @@ impl Bot {
         let commands = {
             let mut list = vec![register()];
 
-            list.extend(util::commands().into_iter());
-            list.extend(voice::commands().into_iter());
+            list.extend(util::commands());
+            list.extend(voice::commands());
+            list.extend(audio::commands());
             list
         };
 

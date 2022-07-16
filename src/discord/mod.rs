@@ -1,5 +1,6 @@
 //! The discord part of GCT is implemented in this module.
 
+mod audio;
 mod bot;
 mod compat;
 mod util;

@@ -1,5 +1,5 @@
 use std::{
-    fs::File,
+    fs::{self, File},
     path::Path,
     sync::{Arc, Mutex},
 };
@@ -16,12 +16,13 @@ mod stream;
 mod track;
 
 pub use buffering::*;
+pub use decoding::raw_samples_from_bytes;
 pub use encoding::*;
 pub use events::*;
 pub use loading::*;
 pub use playback::*;
 pub use queuing::Queue;
-pub use source::AudioSource;
+pub use source::{AudioSource, Error as SourceError};
 pub use stream::*;
 pub use track::Track;
 
@@ -45,35 +46,21 @@ impl AudioSystem {
         let player: Arc<_> = Mutex::new(Player::new(events.clone(), queue.clone())).into();
 
         {
-            let tracks: Vec<_> = [
-                "gregor.wav",
-                "yes.wav",
-                "model.mp3",
-                "submersion.wav",
-                "dessert.mp3",
-                "three.wav",
-                "sound-failure.wav",
-                "need_to_know.flac",
-                "caves.mp3",
-                "nicki.mp3",
-                "blue.mp3",
-                "oh yeah.wav",
-                "friends.mp3",
-                "first_steps.mp3",
-                "getintoit.flac",
-                "temple.mp3",
-            ]
-            .into_iter()
-            .map(|x| {
-                let path = format!("./assets/{x}");
-                let path = Path::new(path.as_str());
+            let tracks: Vec<_> = fs::read_dir("./assets/trance")
+                .unwrap()
+                .into_iter()
+                .map(|x| {
+                    let entry = x.unwrap();
 
-                let path = decode_to_raw(File::open(path).unwrap(), x);
-                let source = source::FileSource::new(path.clone());
+                    let path = entry.path();
+                    let name = path.file_name().unwrap().to_str().unwrap();
 
-                Track::new(source)
-            })
-            .collect();
+                    let path = decode_to_raw(File::open(&path).unwrap(), name);
+                    let source = source::FileSource::new(path);
+
+                    Track::new(source)
+                })
+                .collect();
 
             for track in tracks {
                 queue.add_track(track, queuing::QueuePosition::Add)
