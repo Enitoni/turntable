@@ -16,6 +16,7 @@ mod queuing;
 mod source;
 mod stream;
 mod track;
+mod util;
 
 pub use buffering::*;
 pub use decoding::raw_samples_from_bytes;
@@ -28,6 +29,7 @@ pub use queuing::Queue;
 pub use source::{AudioSource, Error as SourceError};
 pub use stream::*;
 pub use track::Track;
+pub use util::pipeline;
 
 use self::decoding::decode_to_raw;
 
