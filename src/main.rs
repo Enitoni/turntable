@@ -3,7 +3,6 @@ use tokio::runtime::Runtime;
 
 mod audio;
 mod discord;
-mod ffmpeg;
 mod http;
 mod logging;
 mod util;

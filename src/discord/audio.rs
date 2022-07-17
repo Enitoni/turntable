@@ -1,10 +1,9 @@
 use super::CommandList;
 use crate::{
+    audio,
     discord::{Context, Error},
     ytdl::get_audio_url,
 };
-
-use youtube_dl::{YoutubeDl, YoutubeDlOutput};
 
 /// Add a track to the queue
 #[poise::command(slash_command)]
@@ -14,10 +13,10 @@ async fn play(
 ) -> Result<(), Error> {
     ctx.defer().await?;
 
-    let url = get_audio_url(&source).await;
+    let input = audio::Input::parse(&source);
 
-    if let Some(url) = url {
-        ctx.say(url).await?;
+    if let Some(input) = input {
+        ctx.say(&input).await?;
     } else {
         ctx.say("No suitable source was found.").await?;
     }
