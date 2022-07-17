@@ -10,6 +10,7 @@ mod encoding;
 mod events;
 mod loading;
 mod playback;
+mod processing;
 mod queuing;
 mod source;
 mod stream;
