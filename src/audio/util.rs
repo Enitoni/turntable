@@ -13,6 +13,11 @@ pub mod pipeline {
     pub trait SampleReader {
         fn read_samples(&mut self, buf: &mut [Sample]) -> SamplesRead;
 
+        /// Returns the expected amount of samples if they are known.
+        fn length(&self) -> Option<usize> {
+            None
+        }
+
         /// Convert this reader into an opaque source stored on the heap.
         fn wrap(self) -> SampleSource
         where
@@ -136,6 +141,10 @@ pub mod pipeline {
     impl SampleReader for SampleSource {
         fn read_samples(&mut self, buf: &mut [Sample]) -> SamplesRead {
             self.reader.read_samples(buf)
+        }
+
+        fn length(&self) -> Option<usize> {
+            self.reader.length()
         }
     }
 
