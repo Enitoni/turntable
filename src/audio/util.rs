@@ -12,6 +12,14 @@ pub mod pipeline {
     /// which describes how many were read and if there are more.
     pub trait SampleReader {
         fn read_samples(&mut self, buf: &mut [Sample]) -> SamplesRead;
+
+        /// Convert this reader into an opaque source stored on the heap.
+        fn wrap(self) -> SampleSource
+        where
+            Self: 'static + Sized,
+        {
+            SampleSource::new(self)
+        }
     }
 
     #[derive(Debug, PartialEq)]
@@ -109,6 +117,25 @@ pub mod pipeline {
                     }
                 },
             }
+        }
+    }
+
+    /// An opaque [SampleReader]
+    pub struct SampleSource {
+        reader: Box<dyn SampleReader>,
+    }
+
+    impl SampleSource {
+        pub fn new<T: 'static + SampleReader>(reader: T) -> Self {
+            Self {
+                reader: Box::new(reader),
+            }
+        }
+    }
+
+    impl SampleReader for SampleSource {
+        fn read_samples(&mut self, buf: &mut [Sample]) -> SamplesRead {
+            self.reader.read_samples(buf)
         }
     }
 
