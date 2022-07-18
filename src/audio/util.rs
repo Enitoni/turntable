@@ -177,3 +177,96 @@ pub mod pipeline {
         }
     }
 }
+
+mod buffering {
+    use crossbeam::atomic::AtomicCell;
+
+    use crate::audio::{Sample, SAMPLES_PER_SEC};
+    use std::sync::RwLock;
+
+    /// A thread-safe buffer of [Sample] that can be read from and written to.
+    pub struct Buffer {
+        samples: RwLock<Vec<Sample>>,
+        current_size: AtomicCell<usize>,
+        max_size: usize,
+    }
+
+    impl Buffer {
+        /// A buffer will try to be memory efficient by not allocating more than a minute of audio at a time.
+        const CHUNK_SIZE: usize = SAMPLES_PER_SEC * 60;
+
+        pub fn new(max_size: usize) -> Self {
+            let amount_to_allocate = Self::CHUNK_SIZE.min(max_size);
+            let samples = Vec::with_capacity(amount_to_allocate);
+
+            Self {
+                samples: RwLock::new(samples),
+                current_size: AtomicCell::default(),
+                max_size,
+            }
+        }
+
+        pub fn read(&self, offset: usize, buf: &mut [Sample]) -> usize {
+            let samples = self.samples.read().unwrap();
+
+            let available = samples.len();
+            let requested = buf.len();
+
+            let range = {
+                let requested_end = offset + requested;
+                let safe_end = requested_end.min(available);
+
+                offset..safe_end
+            };
+
+            let amount_read = range.len();
+            buf[..amount_read].copy_from_slice(&samples[range]);
+
+            amount_read
+        }
+
+        pub fn write(&self, offset: usize, buf: &[Sample]) {
+            let mut samples = self.samples.write().unwrap();
+
+            let amount = buf.len();
+            let capacity = self.max_size;
+
+            let safe_start = offset.min(capacity);
+            let safe_end = (safe_start + amount).min(capacity);
+
+            self.allocate_if_necessary(&mut *samples, safe_end);
+            self.resize_if_necessary(&mut *samples, safe_start);
+
+            let range = safe_start..safe_end;
+            let amount_written = range.len();
+
+            samples[range].copy_from_slice(&buf[..amount_written]);
+            self.current_size.fetch_add(amount_written);
+        }
+
+        pub fn write_at_end(&self, buf: &[Sample]) {
+            self.write(self.current_size.load(), buf);
+        }
+
+        fn allocate_if_necessary(&self, samples: &mut Vec<Sample>, end_offset: usize) {
+            let allocated = samples.capacity();
+
+            let safe_offset = end_offset.min(self.max_size);
+            let overflow = safe_offset.checked_sub(allocated).unwrap_or_default();
+
+            let chunks_to_allocate = overflow / Self::CHUNK_SIZE;
+            let new_allocation = chunks_to_allocate * Self::CHUNK_SIZE;
+
+            samples.reserve_exact(new_allocation)
+        }
+
+        fn resize_if_necessary(&self, samples: &mut Vec<Sample>, start_offset: usize) {
+            let length = samples.len();
+            let overflow = start_offset.checked_sub(length).unwrap_or_default();
+
+            samples.resize(length + overflow, Sample::default());
+        }
+    }
+}
+
+pub use buffering::Buffer;
