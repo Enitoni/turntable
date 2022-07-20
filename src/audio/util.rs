@@ -13,6 +13,13 @@ pub mod pipeline {
     pub trait SampleReader {
         fn read_samples(&mut self, buf: &mut [Sample]) -> SamplesRead;
 
+        fn read_samples_to_vec(&mut self, amount: usize) -> (SamplesRead, Vec<Sample>) {
+            let mut buf = vec![Sample::default(); amount];
+
+            let result = self.read_samples(&mut buf);
+            (result, buf)
+        }
+
         /// Returns the expected amount of samples if they are known.
         fn length(&self) -> Option<usize> {
             None
@@ -282,6 +289,14 @@ mod buffering {
 
         pub fn write_at_end(&self, buf: &[Sample]) {
             self.write(self.current_size.load(), buf);
+        }
+
+        pub fn max_length(&self) -> usize {
+            self.max_size
+        }
+
+        pub fn length(&self) -> usize {
+            self.samples.read().unwrap().len()
         }
 
         fn allocate_if_necessary(&self, samples: &mut Vec<Sample>, end_offset: usize) {
