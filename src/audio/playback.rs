@@ -50,7 +50,6 @@ impl Scheduler {
             }
 
             let offset = self.offset.load();
-
             let available = item.available.load();
             let remaining = available.checked_sub(offset).unwrap_or_default();
 
@@ -59,8 +58,11 @@ impl Scheduler {
             read += amount_to_read;
             result.push((item.loader, offset..(offset + amount_to_read)));
 
-            //dbg!(read, amount);
             self.offset.fetch_add(amount_to_read);
+
+            if read == amount || !item.complete() {
+                break;
+            }
         }
 
         self.total_offset.fetch_add(read);
@@ -94,8 +96,7 @@ impl Scheduler {
             .collect()
     }
 
-    /// Called when the active queue updates
-    pub fn handle_queue_update(&self, new_loaders: Vec<Arc<Loader>>) {
+    pub fn set_loaders(&self, new_loaders: Vec<Arc<Loader>>) {
         let mut queue = self.queue.lock().unwrap();
 
         *queue = new_loaders
@@ -109,15 +110,14 @@ impl Scheduler {
     }
 
     /// Called when a loader has more content
-    pub fn handle_load(&self, id: LoaderId, new_amount: usize) {
+    pub fn notify_load(&self, id: LoaderId, new_amount: usize) {
         {
             let queue = self.queue.lock().unwrap();
 
             queue
                 .iter()
-                .find(|s| s.loader == id)
-                .map(|s| s.available.store(new_amount))
-                .unwrap_or(());
+                .filter(|s| s.loader == id)
+                .for_each(|s| s.available.store(new_amount));
         }
 
         self.total_available.store(self.calculate_total_available());

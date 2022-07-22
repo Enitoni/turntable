@@ -68,7 +68,24 @@ impl AudioSystem {
         let loader = self.pool.add(reader, length as usize);
 
         // This is temporary for now
-        self.scheduler.handle_queue_update(vec![loader])
+        let track = Track::new(loader);
+        self.queue.add_track(track, queuing::QueuePosition::Add);
+        self.notify_queue_update();
+    }
+
+    pub fn next(&self) {
+        self.queue.next();
+        self.notify_queue_update();
+    }
+
+    fn notify_queue_update(&self) {
+        self.scheduler.set_loaders(
+            self.queue
+                .peek_ahead(3)
+                .iter()
+                .map(|t| t.loader.clone())
+                .collect(),
+        );
     }
 }
 
@@ -88,24 +105,22 @@ mod playback_thread {
     use super::AudioSystem;
 
     /// Starts the thread which will process samples in real-time
-    pub fn start(system: &AudioSystem) {
-        let scheduler = system.scheduler.clone();
-        let registry = system.registry.clone();
-        let pool = system.pool.clone();
-
+    pub fn start(sys: &AudioSystem) {
+        let system = sys.clone();
         let read_samples = move |buf: &mut [Sample]| {
-            let advancements = scheduler.advance(buf.len());
+            let advancements = system.scheduler.advance(buf.len());
             let amount_to_advance = advancements.len().checked_sub(1).unwrap_or_default();
 
             for (id, range) in advancements {
-                pool.read(id, range.start, buf);
+                system.pool.read(id, range.start, buf);
             }
 
             for _ in 0..amount_to_advance {
-                todo!()
+                system.next();
             }
         };
 
+        let system = sys.clone();
         let tick = move || {
             let mut samples = vec![0.; STREAM_CHUNK_SIZE];
             read_samples(&mut samples);
@@ -115,7 +130,7 @@ mod playback_thread {
                 .flat_map(|sample| sample.to_le_bytes())
                 .collect();
 
-            registry.write_byte_samples(&samples_as_bytes);
+            system.registry.write_byte_samples(&samples_as_bytes);
         };
 
         thread::Builder::new()
@@ -183,7 +198,7 @@ mod loading_thread {
 
                     for (id, amount) in requests {
                         let new_amount = pool.load(id, amount);
-                        scheduler.handle_load(id, new_amount);
+                        scheduler.notify_load(id, new_amount);
                     }
 
                     thread::sleep(Duration::from_millis(500));
@@ -212,5 +227,7 @@ mod config {
 }
 
 pub use config::*;
+
+use crate::util::model::Identified;
 
 use self::pipeline::IntoSampleReader;
