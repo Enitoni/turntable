@@ -84,7 +84,7 @@ mod playback_thread {
 
         let read_samples = move |buf: &mut [Sample]| {
             let advancements = scheduler.advance(buf.len());
-            let amount_to_advance = advancements.len() - 1;
+            let amount_to_advance = advancements.len().checked_sub(1).unwrap_or_default();
 
             for (id, range) in advancements {
                 pool.read(id, range.start, &mut buf[range]);
@@ -197,7 +197,7 @@ mod config {
 
     pub const STREAM_CHUNK_DURATION: Duration = Duration::from_millis(100);
     pub const STREAM_CHUNK_SIZE: usize =
-        (((SAMPLES_PER_SEC as u128) / STREAM_CHUNK_DURATION.as_millis()) / 1000) as usize;
+        (((SAMPLES_PER_SEC as u128) * STREAM_CHUNK_DURATION.as_millis()) / 1000) as usize;
 }
 
 pub use config::*;
