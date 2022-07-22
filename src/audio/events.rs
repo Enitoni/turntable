@@ -2,12 +2,11 @@ use std::sync::{Arc, Mutex};
 
 use crossbeam::channel::{unbounded, Receiver, Sender};
 
-use super::{queuing::QueueEvent, LoaderEvent};
+use super::queuing::QueueEvent;
 
 #[derive(Debug, Clone)]
 pub enum AudioEvent {
     Queue(QueueEvent),
-    Loader(LoaderEvent),
 }
 
 #[derive(Debug)]
@@ -92,68 +91,5 @@ impl Drop for AudioEventChannel {
 impl Clone for AudioEventChannel {
     fn clone(&self) -> Self {
         AudioEventBroadcast::channel(self.broadcaster.clone())
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use std::{thread, time::Duration};
-
-    use super::{AudioEvent, AudioEventChannel};
-    use crate::audio::LoaderEvent;
-
-    #[test]
-    fn it_consumes_multiple_places() {
-        let events = AudioEventChannel::new();
-
-        thread::spawn({
-            let one = events.clone();
-
-            move || loop {
-                let event = one.wait();
-                dbg!("woo", event);
-            }
-        });
-
-        thread::spawn({
-            let two = events.clone();
-
-            move || loop {
-                let event = two.wait();
-                dbg!("waa", event);
-            }
-        });
-
-        events.emit(AudioEvent::Loader(LoaderEvent::Advance));
-        thread::sleep(Duration::from_secs(2));
-    }
-
-    #[test]
-    fn it_drops_correctly() {
-        let events = AudioEventChannel::new();
-
-        {
-            events.clone();
-            events.clone();
-        }
-        {
-            let a = events.clone();
-            let b = a.clone();
-
-            thread::spawn(move || {
-                let c = b.clone();
-            });
-        }
-        {
-            events.clone();
-            events.clone();
-        }
-        {
-            events.clone();
-        }
-
-        thread::sleep(Duration::from_millis(100));
-        let clones = events.broadcaster.channels.lock().unwrap().len();
-        assert_eq!(clones, 1);
     }
 }

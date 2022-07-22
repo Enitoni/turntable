@@ -7,7 +7,7 @@ mod ffmpeg {
         process::{Child, ChildStdout, Command, Stdio},
     };
 
-    use crate::audio::{BUFFER_SIZE, CHANNEL_COUNT, SAMPLE_RATE};
+    use crate::audio::config::{CHANNEL_COUNT, SAMPLES_PER_SEC, SAMPLE_RATE};
 
     /// What should the ffmpeg process do
     pub enum Operation {
@@ -41,8 +41,7 @@ mod ffmpeg {
     }
 
     impl Process {
-        const BUFFER_SIZE: usize = 1024 * 500;
-        const CHUNK_SIZE: usize = BUFFER_SIZE / 10;
+        const CHUNK_SIZE: usize = SAMPLES_PER_SEC / 5;
 
         fn new(operation: Operation) -> Result<Self> {
             let mut command = Command::new("ffmpeg");
@@ -80,8 +79,10 @@ mod dsp {
 
     use crate::audio::{
         pipeline::{SampleReader, SamplesRead, Transform},
-        Sample, SAMPLES_PER_SEC,
+        Sample,
     };
+
+    use crate::audio::config::SAMPLES_PER_SEC;
 
     /// Trims silence at the beginning and end of audio by using a look-ahead buffer.
     pub struct Trimmer<R> {
@@ -237,9 +238,9 @@ mod dsp {
     mod test {
         use super::DSP;
         use crate::audio::{
+            config::SAMPLES_PER_SEC,
             pipeline::{IntoSampleReader, SamplesRead},
             util::pipeline::SampleReader,
-            SAMPLES_PER_SEC,
         };
 
         #[test]

@@ -28,7 +28,7 @@ pub mod pipeline {
         /// Convert this reader into an opaque source stored on the heap.
         fn wrap(self) -> SampleSource
         where
-            Self: 'static + Sized,
+            Self: 'static + Sized + Send + Sync,
         {
             SampleSource::new(self)
         }
@@ -134,11 +134,11 @@ pub mod pipeline {
 
     /// An opaque [SampleReader]
     pub struct SampleSource {
-        reader: Box<dyn SampleReader>,
+        reader: Box<dyn SampleReader + Send + Sync>,
     }
 
     impl SampleSource {
-        pub fn new<T: 'static + SampleReader>(reader: T) -> Self {
+        pub fn new<T: 'static + SampleReader + Send + Sync>(reader: T) -> Self {
             Self {
                 reader: Box::new(reader),
             }
@@ -224,7 +224,7 @@ pub mod pipeline {
 mod buffering {
     use crossbeam::atomic::AtomicCell;
 
-    use crate::audio::{Sample, SAMPLES_PER_SEC};
+    use crate::audio::{config::SAMPLES_PER_SEC, Sample};
     use std::sync::RwLock;
 
     /// A thread-safe buffer of [Sample] that can be read from and written to.

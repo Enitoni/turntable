@@ -189,39 +189,36 @@ pub mod model {
         }
 
         /// Get a weak reference to an item in the store by id, if it exists
-        pub fn get(&self, id: Id<T>) -> Option<Weak<T>> {
-            self.items_guard().get(&id).map(|i| Arc::downgrade(i))
+        pub fn get(&self, id: Id<T>) -> Option<Arc<T>> {
+            self.items_guard().get(&id).cloned()
         }
 
         /// Get a weak reference to an item in the store by id.
         /// This will panic if the item does not exist in the store.
-        pub fn get_expect(&self, id: Id<T>) -> Weak<T> {
+        pub fn get_expect(&self, id: Id<T>) -> Arc<T> {
             self.get(id)
                 .unwrap_or_else(|| panic!("{} with id {} does not exist", T::NAME, id))
         }
 
         /// Get a vec of optional references to an item.
-        pub fn get_many<I: IntoIterator<Item = Id<T>>>(&self, ids: I) -> Vec<Option<Weak<T>>> {
+        pub fn get_many<I: IntoIterator<Item = Id<T>>>(&self, ids: I) -> Vec<Option<Arc<T>>> {
             let items = self.items_guard();
 
-            ids.into_iter()
-                .map(|id| items.get(&id).map(|i| Arc::downgrade(i)))
-                .collect()
+            ids.into_iter().map(|id| items.get(&id).cloned()).collect()
         }
 
         /// Get a vec of references to an item-
         /// This will panic if any item does not exist in the store.
-        pub fn get_many_expect<I: IntoIterator<Item = Id<T>>>(&self, ids: I) -> Vec<Weak<T>> {
+        pub fn get_many_expect<I: IntoIterator<Item = Id<T>>>(&self, ids: I) -> Vec<Arc<T>> {
             let items = self.items_guard();
 
             ids.into_iter()
                 .map(|id| (id, items.get(&id)))
                 .map(|(id, opt)| {
-                    opt.unwrap_or_else(|| {
+                    opt.cloned().unwrap_or_else(|| {
                         panic!("{} with id {} does not exist in ids", T::NAME, id)
                     })
                 })
-                .map(|i| Arc::downgrade(i))
                 .collect()
         }
 

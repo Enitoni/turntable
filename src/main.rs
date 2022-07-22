@@ -12,7 +12,7 @@ fn main() {
     logging::init_logger();
 
     let audio = Arc::new(audio::AudioSystem::default());
-    audio.run();
+    audio.start();
 
     let runtime = Runtime::new().unwrap();
 

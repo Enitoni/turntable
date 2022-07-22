@@ -11,7 +11,10 @@ use ringbuf::{Consumer, Producer, RingBuffer};
 
 use crate::util::merge_ranges;
 
-use super::{Sample, BUFFER_SIZE, BYTES_PER_SAMPLE, CHANNEL_COUNT, SAMPLES_PER_SEC, SAMPLE_RATE};
+use super::{
+    config::{BYTES_PER_SAMPLE, CHANNEL_COUNT, SAMPLES_PER_SEC, SAMPLE_RATE},
+    Sample,
+};
 
 /// Keep track of buffer consumers and remove orphaned ones.
 ///
@@ -32,7 +35,7 @@ impl BufferRegistry {
     pub fn get_consumer(&self) -> AudioBufferConsumer {
         let mut entries = self.entries.lock().unwrap();
 
-        let buffer = RingBuffer::new(BUFFER_SIZE);
+        let buffer = RingBuffer::new(SAMPLES_PER_SEC);
         let (producer, consumer) = buffer.split();
 
         let consumer = AudioBufferConsumer::new(consumer);
