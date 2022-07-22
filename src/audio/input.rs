@@ -1,8 +1,10 @@
-use std::fmt::Display;
+use super::pipeline::{IntoSampleReader, SampleSource};
+use std::fmt::{Debug, Display};
 
 #[derive(Debug, Clone)]
 pub enum Input {
     YouTube(YouTubeVideo),
+    Url(Url),
 }
 
 impl Input {
@@ -11,17 +13,22 @@ impl Input {
     pub fn fingerprint(&self) -> String {
         match self {
             Input::YouTube(v) => v.fingerprint(),
+            Input::Url(x) => x.fingerprint(),
         }
     }
 
     pub fn duration(&self) -> f32 {
         match self {
             Input::YouTube(v) => v.duration(),
+            Input::Url(_) => 10.0,
         }
     }
 
     pub fn parse(str: &str) -> Option<Self> {
-        let predicates = [|url| YouTubeVideo::from_url(url).map(Self::YouTube)];
+        let predicates = [
+            |url| YouTubeVideo::from_url(url).map(Self::YouTube),
+            |url| Url::from_url(url).map(Self::Url),
+        ];
 
         predicates.into_iter().find_map(|f| f(str))
     }
@@ -30,7 +37,8 @@ impl Input {
 impl Display for Input {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self {
-            Input::YouTube(x) => x.fmt(f),
+            Input::YouTube(x) => std::fmt::Display::fmt(&x, f),
+            Input::Url(x) => std::fmt::Display::fmt(&x, f),
         }
     }
 }
@@ -47,13 +55,51 @@ impl IntoSampleReader for Input {
     fn into_sample_reader(self) -> Self::Output {
         match self {
             Input::YouTube(x) => x.into_sample_reader(),
+            Input::Url(x) => x.into_sample_reader(),
+        }
+    }
+}
+
+pub use url::Url;
+mod url {
+    use std::fmt::Display;
+
+    use crate::audio::{
+        pipeline::{IntoSampleReader, SampleReader, SampleSource},
+        processing::ffmpeg,
+    };
+
+    #[derive(Debug, Clone)]
+    pub struct Url(String);
+
+    impl Url {
+        pub fn from_url(url: &str) -> Option<Self> {
+            Some(Self(url.to_string()))
+        }
+
+        pub fn fingerprint(&self) -> String {
+            self.0.to_owned()
+        }
+    }
+
+    impl IntoSampleReader for Url {
+        type Output = SampleSource;
+
+        fn into_sample_reader(self) -> Self::Output {
+            ffmpeg::Process::new(ffmpeg::Operation::ToRaw(self.0))
+                .unwrap()
+                .wrap()
+        }
+    }
+
+    impl Display for Url {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "{}", self.0)
         }
     }
 }
 
 pub use youtube::YouTubeVideo;
-
-use super::pipeline::{IntoSampleReader, SampleSource};
 mod youtube {
     use std::fmt::Display;
 
