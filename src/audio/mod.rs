@@ -195,7 +195,7 @@ mod config {
     pub const SAMPLES_PER_SEC: usize = SAMPLE_RATE * CHANNEL_COUNT;
     pub const BYTES_PER_SAMPLE: usize = 4 * SAMPLE_IN_BYTES;
 
-    pub const STREAM_CHUNK_DURATION: Duration = Duration::from_millis(100);
+    pub const STREAM_CHUNK_DURATION: Duration = Duration::from_millis(50);
     pub const STREAM_CHUNK_SIZE: usize =
         (((SAMPLES_PER_SEC as u128) * STREAM_CHUNK_DURATION.as_millis()) / 1000) as usize;
 }
