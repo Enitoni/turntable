@@ -165,7 +165,7 @@ mod loading_thread {
         thread::Builder::new()
             .name("audio_loading".to_string())
             .spawn(move || {
-                info!("Now listening for loaders requested by scheduler",);
+                info!("Now listening for load requests",);
 
                 loop {
                     let requests = scheduler.preload();
