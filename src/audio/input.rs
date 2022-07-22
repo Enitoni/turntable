@@ -14,6 +14,12 @@ impl Input {
         }
     }
 
+    pub fn duration(&self) -> f32 {
+        match self {
+            Input::YouTube(v) => v.duration(),
+        }
+    }
+
     pub fn parse(str: &str) -> Option<Self> {
         let predicates = [|url| YouTubeVideo::from_url(url).map(Self::YouTube)];
 
@@ -35,18 +41,36 @@ impl From<&Input> for String {
     }
 }
 
+impl IntoSampleReader for Input {
+    type Output = SampleSource;
+
+    fn into_sample_reader(self) -> Self::Output {
+        match self {
+            Input::YouTube(x) => x.into_sample_reader(),
+        }
+    }
+}
+
 pub use youtube::YouTubeVideo;
+
+use super::pipeline::{IntoSampleReader, SampleSource};
 mod youtube {
     use std::fmt::Display;
 
     use log::error;
     use youtube_dl::{YoutubeDl, YoutubeDlOutput};
 
+    use crate::audio::{
+        pipeline::{IntoSampleReader, SampleReader, SampleSource},
+        processing::ffmpeg,
+    };
+
     /// Parsed from youtube-dl
     #[derive(Debug, Clone)]
     pub struct YouTubeVideo {
         id: String,
         title: String,
+        duration: f32,
         channel: String,
         audio_stream_url: String,
     }
@@ -54,6 +78,10 @@ mod youtube {
     impl YouTubeVideo {
         pub fn fingerprint(&self) -> String {
             self.title.to_owned()
+        }
+
+        pub fn duration(&self) -> f32 {
+            self.duration
         }
 
         pub fn from_url(url: &str) -> Option<Self> {
@@ -115,6 +143,7 @@ mod youtube {
             .and_then(|video| {
                 let id = video.id;
                 let title = video.title;
+                let duration = video.duration.unwrap().as_f64().unwrap() as f32;
                 let channel = video.channel.unwrap_or_else(|| "Unknown".to_string());
 
                 let format_name = video.format.as_ref();
@@ -130,9 +159,20 @@ mod youtube {
                         id,
                         title,
                         channel,
+                        duration,
                         audio_stream_url,
                     })
             })
+    }
+
+    impl IntoSampleReader for YouTubeVideo {
+        type Output = SampleSource;
+
+        fn into_sample_reader(self) -> Self::Output {
+            ffmpeg::Process::new(ffmpeg::Operation::ToRaw(self.audio_stream_url))
+                .unwrap()
+                .wrap()
+        }
     }
 
     #[cfg(test)]

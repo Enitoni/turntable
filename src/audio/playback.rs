@@ -1,12 +1,15 @@
 use super::{Loader, LoaderId, PRELOAD_AMOUNT, PRELOAD_THRESHOLD};
 use crate::util::model::Identified;
 use crossbeam::atomic::AtomicCell;
-use std::{ops::Range, sync::Arc};
+use std::{
+    ops::Range,
+    sync::{Arc, Mutex},
+};
 
 /// Schedules loading and playback for a list of loaders
 pub struct Scheduler {
     /// The loaders in the queue, the first one is the current
-    queue: Vec<ScheduledItem>,
+    queue: Mutex<Vec<ScheduledItem>>,
     /// Current playback offset of the current loader
     offset: AtomicCell<usize>,
     /// Total amount of playback time
@@ -39,24 +42,25 @@ impl Scheduler {
         let mut result = vec![];
         let mut read = 0;
 
-        for item in self.queue.iter() {
-            let offset = self.offset.load();
-            let available = item.available.load();
+        let queue = self.queue.lock().unwrap();
 
-            let amount_to_read = available
-                .checked_sub(offset)
-                .unwrap_or_default()
-                .min(amount - read);
+        for (i, item) in queue.iter().enumerate() {
+            if i > 0 {
+                self.offset.store(0);
+            }
+
+            let offset = self.offset.load();
+
+            let available = item.available.load();
+            let remaining = available.checked_sub(offset).unwrap_or_default();
+
+            let amount_to_read = remaining.min(amount - read);
 
             read += amount_to_read;
             result.push((item.loader, offset..(offset + amount_to_read)));
 
-            if read == amount {
-                self.offset.fetch_add(amount_to_read);
-                break;
-            }
-
-            self.offset.store(0);
+            //dbg!(read, amount);
+            self.offset.fetch_add(amount_to_read);
         }
 
         self.total_offset.fetch_add(read);
@@ -71,7 +75,9 @@ impl Scheduler {
             return vec![];
         }
 
-        self.queue
+        let queue = self.queue.lock().unwrap();
+
+        queue
             .iter()
             .skip_while(|i| i.complete())
             .scan(PRELOAD_AMOUNT, |mut remaining, item| {
@@ -89,8 +95,10 @@ impl Scheduler {
     }
 
     /// Called when the active queue updates
-    pub fn handle_queue_update(&mut self, new_loaders: Vec<Arc<Loader>>) {
-        self.queue = new_loaders
+    pub fn handle_queue_update(&self, new_loaders: Vec<Arc<Loader>>) {
+        let mut queue = self.queue.lock().unwrap();
+
+        *queue = new_loaders
             .into_iter()
             .map(|l| ScheduledItem {
                 loader: l.id(),
@@ -102,22 +110,28 @@ impl Scheduler {
 
     /// Called when a loader has more content
     pub fn handle_load(&self, id: LoaderId, new_amount: usize) {
-        self.queue
-            .iter()
-            .find(|s| s.loader == id)
-            .map(|s| s.available.store(new_amount))
-            .unwrap_or(());
+        {
+            let queue = self.queue.lock().unwrap();
+
+            queue
+                .iter()
+                .find(|s| s.loader == id)
+                .map(|s| s.available.store(new_amount))
+                .unwrap_or(());
+        }
 
         self.total_available.store(self.calculate_total_available());
     }
 
     fn calculate_total_available(&self) -> usize {
-        self.queue
+        let queue = self.queue.lock().unwrap();
+
+        queue
             .iter()
             .enumerate()
             .map(|(i, x)| (i, x.available.load(), x.expected))
             .take_while(|(i, available, expected)| *i == 0 || available == expected)
-            .fold(0, |acc, (_, _, x)| acc + x)
+            .fold(0, |acc, (_, x, _)| acc + x)
     }
 }
 

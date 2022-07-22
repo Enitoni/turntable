@@ -1,5 +1,5 @@
 /// Processing implementations for ffmpeg
-mod ffmpeg {
+pub mod ffmpeg {
     use anyhow::{Context, Result};
 
     use std::{
@@ -7,7 +7,10 @@ mod ffmpeg {
         process::{Child, ChildStdout, Command, Stdio},
     };
 
-    use crate::audio::config::{CHANNEL_COUNT, SAMPLES_PER_SEC, SAMPLE_RATE};
+    use crate::audio::{
+        config::{CHANNEL_COUNT, SAMPLES_PER_SEC, SAMPLE_RATE},
+        SAMPLE_IN_BYTES,
+    };
 
     /// What should the ffmpeg process do
     pub enum Operation {
@@ -27,6 +30,7 @@ mod ffmpeg {
                 .args(["-i", input])
                 .args(["-c:a", "pcm_f32le"])
                 .args(["-f", "f32le"])
+                .args(["-fflags", "+discardcorrupt"])
                 .args(["-ar", &SAMPLE_RATE.to_string()])
                 .args(["-ac", &CHANNEL_COUNT.to_string()])
                 .args(["pipe:"])
@@ -35,15 +39,15 @@ mod ffmpeg {
     }
 
     /// An ffmpeg process
-    struct Process {
+    pub struct Process {
         child: Child,
         stdout: ChildStdout,
     }
 
     impl Process {
-        const CHUNK_SIZE: usize = SAMPLES_PER_SEC / 5;
+        const CHUNK_SIZE: usize = SAMPLE_IN_BYTES * SAMPLE_RATE;
 
-        fn new(operation: Operation) -> Result<Self> {
+        pub fn new(operation: Operation) -> Result<Self> {
             let mut command = Command::new("ffmpeg");
             operation.apply(&mut command);
 
@@ -56,7 +60,7 @@ mod ffmpeg {
 
             let decoder = Self {
                 child: process,
-                stdout: stdout.into(),
+                stdout,
             };
 
             Ok(decoder)
@@ -65,8 +69,24 @@ mod ffmpeg {
 
     impl Read for Process {
         fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-            let len = buf.len();
-            self.stdout.read(&mut buf[..(Self::CHUNK_SIZE.min(len))])
+            let mut read = 0;
+
+            while read != buf.len() {
+                let result = self.stdout.read(&mut buf[read..])?;
+                read += result;
+
+                if result == 0 {
+                    break;
+                }
+            }
+
+            Ok(read)
+        }
+    }
+
+    impl Drop for Process {
+        fn drop(&mut self) {
+            self.child.kill().unwrap();
         }
     }
 }

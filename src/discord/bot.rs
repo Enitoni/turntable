@@ -90,7 +90,7 @@ impl Bot {
                 data_about_bot.user.name, data_about_bot.user.discriminator
             );
 
-            bot.play_audio().await;
+            //bot.play_audio().await;
         }
 
         if let Event::VoiceStateUpdate { old: _, new } = event {

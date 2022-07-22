@@ -113,9 +113,9 @@ pub mod pipeline {
                         .collect();
 
                     let samples_read = samples.len();
-                    buf.copy_from_slice(&samples);
+                    buf[..samples_read].copy_from_slice(&samples);
 
-                    if samples_read < buf.len() {
+                    if read == 0 {
                         SamplesRead::Empty(samples_read)
                     } else {
                         SamplesRead::More(samples_read)
@@ -278,7 +278,7 @@ mod buffering {
             let safe_end = (safe_start + amount).min(capacity);
 
             self.allocate_if_necessary(&mut *samples, safe_end);
-            self.resize_if_necessary(&mut *samples, safe_start);
+            self.resize_if_necessary(&mut *samples, safe_end);
 
             let range = safe_start..safe_end;
             let amount_written = range.len();
@@ -311,9 +311,9 @@ mod buffering {
             samples.reserve_exact(new_allocation)
         }
 
-        fn resize_if_necessary(&self, samples: &mut Vec<Sample>, start_offset: usize) {
+        fn resize_if_necessary(&self, samples: &mut Vec<Sample>, end_offset: usize) {
             let length = samples.len();
-            let overflow = start_offset.checked_sub(length).unwrap_or_default();
+            let overflow = end_offset.checked_sub(length).unwrap_or_default();
 
             samples.resize(length + overflow, Sample::default());
         }

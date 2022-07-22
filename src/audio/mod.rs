@@ -59,6 +59,17 @@ impl AudioSystem {
         playback_thread::start(self);
         loading_thread::start(self);
     }
+
+    pub fn add(&self, input: Input) {
+        let duration = input.duration();
+        let reader = input.into_sample_reader();
+
+        let length = (SAMPLES_PER_SEC as f32) * duration;
+        let loader = self.pool.add(reader, length as usize);
+
+        // This is temporary for now
+        self.scheduler.handle_queue_update(vec![loader])
+    }
 }
 
 impl Default for AudioSystem {
@@ -87,7 +98,7 @@ mod playback_thread {
             let amount_to_advance = advancements.len().checked_sub(1).unwrap_or_default();
 
             for (id, range) in advancements {
-                pool.read(id, range.start, &mut buf[range]);
+                pool.read(id, range.start, buf);
             }
 
             for _ in 0..amount_to_advance {
@@ -201,3 +212,5 @@ mod config {
 }
 
 pub use config::*;
+
+use self::pipeline::IntoSampleReader;

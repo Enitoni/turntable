@@ -6,7 +6,7 @@ use crate::{
     },
     util::model::{Id, Identified, Store},
 };
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 pub type LoaderId = Id<Loader>;
 
@@ -27,14 +27,6 @@ impl Identified for Loader {
 }
 
 impl Loader {
-    pub fn new<R: 'static + SampleReader + Send + Sync>(reader: R, length: usize) -> Self {
-        Self {
-            id: LoaderId::new(),
-            buffer: Buffer::new(length),
-            source: Mutex::new(reader.wrap()),
-        }
-    }
-
     pub fn load(&self, amount: usize) -> SamplesRead {
         let mut source = self.source.lock().unwrap();
 
@@ -67,6 +59,21 @@ impl Pool {
         Self {
             store: Store::new(),
         }
+    }
+
+    pub fn add<R: 'static + SampleReader + Send + Sync>(
+        &self,
+        reader: R,
+        length: usize,
+    ) -> Arc<Loader> {
+        let loader = Loader {
+            id: LoaderId::new(),
+            buffer: Buffer::new(length),
+            source: Mutex::new(reader.wrap()),
+        };
+
+        let id = self.store.insert(loader);
+        self.store.get_expect(id)
     }
 
     pub fn load(&self, id: LoaderId, amount: usize) -> usize {

@@ -82,7 +82,6 @@ pub mod model {
     static COUNTER: AtomicU64 = AtomicU64::new(0);
 
     /// A unique id to identify a type.
-    #[derive(Debug)]
     pub struct Id<T>(u64, PhantomData<T>);
 
     impl<T> Id<T> {
@@ -91,6 +90,12 @@ pub mod model {
             T: Identified,
         {
             Self(COUNTER.fetch_add(1, Ordering::Relaxed), PhantomData)
+        }
+    }
+
+    impl<T> std::fmt::Debug for Id<T> {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "{}", self.0)
         }
     }
 

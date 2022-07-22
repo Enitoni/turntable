@@ -1,3 +1,4 @@
+use audio::Input;
 use std::{sync::Arc, thread, time::Duration};
 use tokio::runtime::Runtime;
 
@@ -15,6 +16,9 @@ fn main() {
     audio.start();
 
     let runtime = Runtime::new().unwrap();
+
+    let input = Input::parse("https://www.youtube.com/watch?v=xsgnpOnV58k").unwrap();
+    audio.add(input);
 
     thread::spawn({
         let http_audio = Arc::clone(&audio);
