@@ -122,7 +122,7 @@ impl Pool {
 }
 
 /// How many samples to load after hitting the threshold.
-pub const PRELOAD_AMOUNT: usize = SAMPLES_PER_SEC * 60;
+pub const PRELOAD_AMOUNT: usize = SAMPLES_PER_SEC * 30;
 
 /// The threshold at which loading more samples happens
-pub const PRELOAD_THRESHOLD: usize = SAMPLES_PER_SEC * 20;
+pub const PRELOAD_THRESHOLD: usize = SAMPLES_PER_SEC * 120;
