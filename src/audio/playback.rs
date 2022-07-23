@@ -39,33 +39,40 @@ impl Scheduler {
     /// If this returns more than 1 item, it signifies that one or more
     /// loaders have been played all the way through.
     pub fn advance(&self, amount: usize) -> Vec<(LoaderId, Range<usize>)> {
-        let mut result = vec![];
-        let mut read = 0;
-
         let queue = self.queue.lock().unwrap();
 
-        for (i, item) in queue.iter().enumerate() {
-            if i > 0 {
-                self.offset.store(0);
-            }
+        let result: Vec<_> = queue
+            .iter()
+            .scan((amount, self.offset.load()), |(remaining, offset), item| {
+                if *remaining == 0 {
+                    return None;
+                }
 
-            let offset = self.offset.load();
-            let available = item.available.load();
-            let remaining = available.checked_sub(offset).unwrap_or_default();
+                let available = item.available.load();
+                let amount_ahead = available.checked_sub(*offset).unwrap_or_default();
 
-            let amount_to_read = remaining.min(amount - read);
+                // Don't read more than requested
+                let amount_to_read = amount_ahead.min(*remaining);
+                let read_range = *offset..(*offset + amount_to_read);
 
-            read += amount_to_read;
-            result.push((item.loader.id(), offset..(offset + amount_to_read)));
+                *remaining -= amount_to_read;
+                let result = (item.loader.id(), read_range);
 
-            self.offset.fetch_add(amount_to_read);
+                // This item is not finished loading, so stop here
+                if !item.complete() {
+                    *remaining = 0;
+                }
 
-            if read == amount || !item.complete() {
-                break;
-            }
-        }
+                self.offset.store(*offset + amount_to_read);
+                *offset = 0;
 
-        self.total_offset.fetch_add(read);
+                Some(result)
+            })
+            .collect();
+
+        let total_read = result.iter().map(|(_, r)| r.len()).sum();
+        self.total_offset.fetch_add(total_read);
+
         result
     }
 

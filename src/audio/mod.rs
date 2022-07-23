@@ -65,7 +65,7 @@ impl AudioSystem {
         let reader = input.into_sample_reader();
 
         let length = (SAMPLES_PER_SEC as f32) * duration;
-        let loader = self.pool.add(reader, length.floor() as usize);
+        let loader = self.pool.add(reader, length.round() as usize);
 
         // This is temporary for now
         let track = Track::new(loader);
@@ -109,14 +109,13 @@ mod playback_thread {
         let system = sys.clone();
         let read_samples = move |buf: &mut [Sample]| {
             let advancements = system.scheduler.advance(buf.len());
-            let amount_to_advance = advancements.len().checked_sub(1).unwrap_or_default();
+            let mut amount_read = 0;
 
-            for (id, range) in advancements {
-                system.pool.read(id, range.start, buf);
+            for (id, range) in advancements.iter() {
+                amount_read += system.pool.read(*id, range.start, &mut buf[amount_read..]);
             }
 
-            for _ in 0..amount_to_advance {
-                dbg!("advanced!");
+            for (id, _) in advancements.iter().skip(1) {
                 system.next();
             }
         };
@@ -222,7 +221,7 @@ mod config {
     pub const SAMPLES_PER_SEC: usize = SAMPLE_RATE * CHANNEL_COUNT;
     pub const BYTES_PER_SAMPLE: usize = 4 * SAMPLE_IN_BYTES;
 
-    pub const STREAM_CHUNK_DURATION: Duration = Duration::from_millis(50);
+    pub const STREAM_CHUNK_DURATION: Duration = Duration::from_millis(100);
     pub const STREAM_CHUNK_SIZE: usize =
         (((SAMPLES_PER_SEC as u128) * STREAM_CHUNK_DURATION.as_millis()) / 1000) as usize;
 }

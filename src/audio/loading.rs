@@ -45,8 +45,6 @@ impl Loader {
         let (result, buf) = source.read_samples_to_vec(amount);
         self.buffer.write_at_end(&buf[..result.amount()]);
 
-        dbg!(&result);
-
         // The data might have ended earlier than expected,
         // so we change the size to ensure correctness.
         if let SamplesRead::Empty(_) = result {
