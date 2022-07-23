@@ -20,7 +20,7 @@ impl Input {
     pub fn duration(&self) -> f32 {
         match self {
             Input::YouTube(v) => v.duration(),
-            Input::Url(_) => 10.0,
+            Input::Url(x) => x.duration(),
         }
     }
 
@@ -70,15 +70,29 @@ mod url {
     };
 
     #[derive(Debug, Clone)]
-    pub struct Url(String);
+    pub struct Url {
+        url: String,
+        duration: f32,
+    }
 
     impl Url {
         pub fn from_url(url: &str) -> Option<Self> {
-            Some(Self(url.to_string()))
+            let probe = ffmpeg::probe(url);
+
+            let me = Self {
+                duration: probe.duration,
+                url: url.to_string(),
+            };
+
+            Some(me)
+        }
+
+        pub fn duration(&self) -> f32 {
+            self.duration
         }
 
         pub fn fingerprint(&self) -> String {
-            self.0.to_owned()
+            self.url.to_owned()
         }
     }
 
@@ -86,7 +100,7 @@ mod url {
         type Output = SampleSource;
 
         fn into_sample_reader(self) -> Self::Output {
-            ffmpeg::Process::new(ffmpeg::Operation::ToRaw(self.0))
+            ffmpeg::Process::new(ffmpeg::Operation::ToRaw(self.url))
                 .unwrap()
                 .wrap()
         }
@@ -94,7 +108,7 @@ mod url {
 
     impl Display for Url {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            write!(f, "{}", self.0)
+            write!(f, "{}", self.url)
         }
     }
 }

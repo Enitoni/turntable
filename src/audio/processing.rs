@@ -34,6 +34,7 @@ pub mod ffmpeg {
                 .args(["-ar", &SAMPLE_RATE.to_string()])
                 .args(["-ac", &CHANNEL_COUNT.to_string()])
                 .args(["pipe:"])
+                .stderr(Stdio::null())
                 .stdout(Stdio::piped());
         }
     }
@@ -88,6 +89,30 @@ pub mod ffmpeg {
         fn drop(&mut self) {
             self.child.kill().unwrap();
         }
+    }
+
+    pub struct Probe {
+        pub duration: f32,
+    }
+
+    pub fn probe(input: &str) -> Probe {
+        let output = Command::new("ffprobe")
+            .args([input])
+            .args(["-print_format", "json"])
+            .args(["-show_format"])
+            .output()
+            .unwrap();
+
+        let raw = String::from_utf8(output.stdout).unwrap();
+        let parsed = json::parse(&raw).unwrap();
+
+        let format = &parsed["format"];
+        let duration = format["duration"]
+            .as_str()
+            .and_then(|s| s.parse::<f32>().ok())
+            .unwrap();
+
+        Probe { duration }
     }
 }
 
