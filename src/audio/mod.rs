@@ -65,7 +65,7 @@ impl AudioSystem {
         let reader = input.into_sample_reader();
 
         let length = (SAMPLES_PER_SEC as f32) * duration;
-        let loader = self.pool.add(reader, length as usize);
+        let loader = self.pool.add(reader, length.floor() as usize);
 
         // This is temporary for now
         let track = Track::new(loader);
@@ -116,6 +116,7 @@ mod playback_thread {
             }
 
             for _ in 0..amount_to_advance {
+                dbg!("advanced!");
                 system.next();
             }
         };

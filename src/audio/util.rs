@@ -115,7 +115,7 @@ pub mod pipeline {
                     let samples_read = samples.len();
                     buf[..samples_read].copy_from_slice(&samples);
 
-                    if read == 0 {
+                    if read < internal_buf.len() {
                         SamplesRead::Empty(samples_read)
                     } else {
                         SamplesRead::More(samples_read)

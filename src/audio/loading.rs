@@ -1,4 +1,5 @@
 use colored::Colorize;
+use crossbeam::atomic::AtomicCell;
 use log::trace;
 
 use super::{Sample, SAMPLES_PER_SEC};
@@ -20,6 +21,7 @@ pub struct Loader {
     id: LoaderId,
     buffer: Buffer,
     source: Mutex<SampleSource>,
+    length: AtomicCell<usize>,
 }
 
 impl Identified for Loader {
@@ -43,6 +45,21 @@ impl Loader {
         let (result, buf) = source.read_samples_to_vec(amount);
         self.buffer.write_at_end(&buf[..result.amount()]);
 
+        dbg!(&result);
+
+        // The data might have ended earlier than expected,
+        // so we change the size to ensure correctness.
+        if let SamplesRead::Empty(_) = result {
+            self.length.store(self.buffer.length());
+
+            trace!(
+                "{}: {}",
+                self.id,
+                format!("Ended earlier than expected at {} samples", self.expected())
+                    .color(LogColor::Orange),
+            );
+        }
+
         trace!(
             "{}: {}",
             self.id,
@@ -62,7 +79,7 @@ impl Loader {
     }
 
     pub fn expected(&self) -> usize {
-        self.buffer.max_length()
+        self.length.load()
     }
 }
 
@@ -87,6 +104,7 @@ impl Pool {
             id: LoaderId::new(),
             buffer: Buffer::new(length),
             source: Mutex::new(reader.wrap()),
+            length: length.into(),
         };
 
         let id = self.store.insert(loader);

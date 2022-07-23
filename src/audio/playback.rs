@@ -19,9 +19,9 @@ pub struct Scheduler {
 }
 
 struct ScheduledItem {
-    loader: LoaderId,
+    loader: Arc<Loader>,
     // TODO: This data is duplicated, perhaps find a way to deal with that
-    expected: usize,
+    expected: AtomicCell<usize>,
     available: AtomicCell<usize>,
 }
 
@@ -56,7 +56,7 @@ impl Scheduler {
             let amount_to_read = remaining.min(amount - read);
 
             read += amount_to_read;
-            result.push((item.loader, offset..(offset + amount_to_read)));
+            result.push((item.loader.id(), offset..(offset + amount_to_read)));
 
             self.offset.fetch_add(amount_to_read);
 
@@ -70,6 +70,7 @@ impl Scheduler {
     }
 
     /// Returns the a vec containing loaders to load data for
+    /// If there is no need to load, it returns no items
     pub fn preload(&self) -> Vec<(LoaderId, usize)> {
         let available = self.total_available.load() - self.offset.load();
 
@@ -82,13 +83,13 @@ impl Scheduler {
         queue
             .iter()
             .skip_while(|i| i.complete())
-            .scan(PRELOAD_AMOUNT, |mut remaining, item| {
-                let unloaded = item.expected - item.available.load();
+            .scan(PRELOAD_AMOUNT, |remaining, item| {
+                let unloaded = item.expected.load() - item.available.load();
                 let amount_to_load = unloaded.min(*remaining);
 
                 if *remaining > 0 {
                     *remaining -= amount_to_load;
-                    Some((item.loader, amount_to_load))
+                    Some((item.loader.id(), amount_to_load))
                 } else {
                     None
                 }
@@ -97,46 +98,63 @@ impl Scheduler {
     }
 
     pub fn set_loaders(&self, new_loaders: Vec<Arc<Loader>>) {
-        let mut queue = self.queue.lock().unwrap();
+        {
+            let mut queue = self.queue.lock().unwrap();
+            *queue = new_loaders.into_iter().map(ScheduledItem::new).collect();
+        }
 
-        *queue = new_loaders
-            .into_iter()
-            .map(|l| ScheduledItem {
-                loader: l.id(),
-                expected: l.expected(),
-                available: l.available().into(),
-            })
-            .collect();
+        self.calculate_total_available()
     }
 
     /// Called when a loader has more content
     pub fn notify_load(&self, id: LoaderId, new_amount: usize) {
         {
             let queue = self.queue.lock().unwrap();
-
-            queue
-                .iter()
-                .filter(|s| s.loader == id)
-                .for_each(|s| s.available.store(new_amount));
+            queue.iter().for_each(|i| i.update());
         }
 
-        self.total_available.store(self.calculate_total_available());
+        self.calculate_total_available()
     }
 
-    fn calculate_total_available(&self) -> usize {
+    fn calculate_total_available(&self) {
         let queue = self.queue.lock().unwrap();
 
-        queue
+        let result = queue
             .iter()
-            .enumerate()
-            .map(|(i, x)| (i, x.available.load(), x.expected))
-            .take_while(|(i, available, expected)| *i == 0 || available == expected)
-            .fold(0, |acc, (_, x, _)| acc + x)
+            .scan(true, |previous_was_complete, item| {
+                if !*previous_was_complete {
+                    return None;
+                }
+
+                let available = item.available.load();
+                *previous_was_complete = item.complete();
+
+                Some(available)
+            })
+            .sum();
+
+        self.total_available.store(result);
     }
 }
 
 impl ScheduledItem {
+    fn new(loader: Arc<Loader>) -> Self {
+        let me = Self {
+            loader,
+            expected: 0.into(),
+            available: 0.into(),
+        };
+
+        me.update();
+        me
+    }
+
     fn complete(&self) -> bool {
-        self.available.load() == self.expected
+        self.available.load() == self.expected.load()
+    }
+
+    fn update(&self) {
+        self.available.store(self.loader.available());
+        self.expected.store(self.loader.expected());
     }
 }
