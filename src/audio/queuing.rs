@@ -61,7 +61,6 @@ impl Queue {
 
         tracks
             .iter()
-            .cycle()
             .skip(current_index)
             .take(amount)
             .cloned()

@@ -13,10 +13,12 @@ async fn play(
 ) -> Result<(), Error> {
     ctx.defer().await?;
 
+    let bot = ctx.data();
     let input = audio::Input::parse(&source);
 
     if let Some(input) = input {
         ctx.say(&input).await?;
+        bot.audio.add(input);
     } else {
         ctx.say("No suitable source was found.").await?;
     }
