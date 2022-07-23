@@ -1,9 +1,13 @@
+use colored::Colorize;
+use log::trace;
+
 use super::{Sample, SAMPLES_PER_SEC};
 use crate::{
     audio::{
         pipeline::{SampleReader, SampleSource, SamplesRead},
         util::Buffer,
     },
+    logging::LogColor,
     util::model::{Id, Identified, Store},
 };
 use std::sync::{Arc, Mutex};
@@ -30,8 +34,21 @@ impl Loader {
     pub fn load(&self, amount: usize) -> SamplesRead {
         let mut source = self.source.lock().unwrap();
 
+        trace!(
+            "{}: {}",
+            self.id,
+            format!("Loading {} samples", amount).color(LogColor::White),
+        );
+
         let (result, buf) = source.read_samples_to_vec(amount);
         self.buffer.write_at_end(&buf[..result.amount()]);
+
+        trace!(
+            "{}: {}",
+            self.id,
+            format!("Received {}/{} samples", self.available(), self.expected())
+                .color(LogColor::Success),
+        );
 
         result
     }
