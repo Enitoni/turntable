@@ -3,7 +3,6 @@ use std::{sync::Arc, thread, time::Duration};
 use tokio::runtime::Runtime;
 
 mod audio;
-mod discord;
 mod http;
 mod logging;
 mod util;
@@ -24,10 +23,6 @@ fn main() {
         let http_audio = Arc::clone(&audio);
 
         move || http::run(http_audio)
-    });
-
-    runtime.handle().spawn(async move {
-        discord::Bot::run(audio).await;
     });
 
     // Run forever

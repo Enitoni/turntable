@@ -1,5 +1,5 @@
 [package]
-name = "gct"
+name = "vinyl"
 version = "0.0.1"
 edition = "2021"
 
@@ -21,24 +21,3 @@ json = "0.12.4"
 log = "0.4.17"
 chrono = "0.4"
 ron = "0.7"
-
-[dependencies.symphonia]
-git = "https://github.com/FelixMcFelix/Symphonia"
-features = ["mp3", "ogg", "wav", "pcm"]
-branch = "songbird-fixes"
-default-features = false
-
-[dependencies.poise]
-git = "https://github.com/GnomedDev/poise"
-branch = "personal"
-
-[dependencies.songbird]
-git = "https://github.com/GnomedDev/songbird"
-branch = "symphonia-personal"
-
-[patch."https://github.com/serenity-rs/serenity"]
-serenity = { git = "https://github.com/GnomedDev/serenity", branch = "personal" }
-
-[patch.crates-io."serenity"]
-git = "https://github.com/GnomedDev/serenity"
-branch = "personal"
