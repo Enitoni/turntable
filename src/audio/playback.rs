@@ -1,10 +1,14 @@
-use super::{Loader, LoaderId, PRELOAD_AMOUNT, PRELOAD_THRESHOLD};
-use crate::util::model::Identified;
+use crate::ingest::{Sink, SinkId};
 use crossbeam::atomic::AtomicCell;
-use std::{
-    ops::Range,
-    sync::{Arc, Mutex},
-};
+use std::{ops::Range, sync::Mutex};
+
+use super::SAMPLES_PER_SEC;
+
+/// How many samples to load after hitting the threshold.
+pub const PRELOAD_AMOUNT: usize = SAMPLES_PER_SEC * 30;
+
+/// The threshold at which loading more samples happens
+pub const PRELOAD_THRESHOLD: usize = SAMPLES_PER_SEC * 120;
 
 /// Schedules loading and playback for a list of loaders
 pub struct Scheduler {
@@ -19,10 +23,7 @@ pub struct Scheduler {
 }
 
 struct ScheduledItem {
-    loader: Arc<Loader>,
-    // TODO: This data is duplicated, perhaps find a way to deal with that
-    expected: AtomicCell<usize>,
-    available: AtomicCell<usize>,
+    sink: Sink,
 }
 
 impl Scheduler {
@@ -38,7 +39,7 @@ impl Scheduler {
     /// Returns a list of advancements describing loaders to read from,
     /// If this returns more than 1 item, it signifies that one or more
     /// loaders have been played all the way through.
-    pub fn advance(&self, amount: usize) -> Vec<(LoaderId, Range<usize>)> {
+    pub fn advance(&self, amount: usize) -> Vec<(SinkId, Range<usize>)> {
         let queue = self.queue.lock().unwrap();
 
         let result: Vec<_> = queue
@@ -48,7 +49,7 @@ impl Scheduler {
                     return None;
                 }
 
-                let available = item.available.load();
+                let available = item.sink.available();
                 let amount_ahead = available.checked_sub(*offset).unwrap_or_default();
 
                 // Don't read more than requested
@@ -56,7 +57,7 @@ impl Scheduler {
                 let read_range = *offset..(*offset + amount_to_read);
 
                 *remaining -= amount_to_read;
-                let result = (item.loader.id(), read_range);
+                let result = (item.sink.id(), read_range);
 
                 // This item is not finished loading, so stop here
                 if !item.complete() {
@@ -78,8 +79,11 @@ impl Scheduler {
 
     /// Returns the a vec containing loaders to load data for
     /// If there is no need to load, it returns no items
-    pub fn preload(&self) -> Vec<(LoaderId, usize)> {
-        let available = self.total_available.load() - self.offset.load();
+    pub fn preload(&self) -> Vec<(SinkId, usize)> {
+        let available = self
+            .total_available
+            .load()
+            .saturating_sub(self.offset.load());
 
         if available > PRELOAD_THRESHOLD {
             return vec![];
@@ -91,12 +95,12 @@ impl Scheduler {
             .iter()
             .skip_while(|i| i.complete())
             .scan(PRELOAD_AMOUNT, |remaining, item| {
-                let unloaded = item.expected.load() - item.available.load();
+                let unloaded = item.sink.remaining();
                 let amount_to_load = unloaded.min(*remaining);
 
                 if *remaining > 0 {
                     *remaining -= amount_to_load;
-                    Some((item.loader.id(), amount_to_load))
+                    Some((item.sink.id(), amount_to_load))
                 } else {
                     None
                 }
@@ -104,22 +108,17 @@ impl Scheduler {
             .collect()
     }
 
-    pub fn set_loaders(&self, new_loaders: Vec<Arc<Loader>>) {
+    pub fn set_sinks(&self, new_sinks: Vec<Sink>) {
         {
             let mut queue = self.queue.lock().unwrap();
-            *queue = new_loaders.into_iter().map(ScheduledItem::new).collect();
+            *queue = new_sinks.into_iter().map(ScheduledItem::new).collect();
         }
 
         self.calculate_total_available()
     }
 
     /// Called when a loader has more content
-    pub fn notify_load(&self, id: LoaderId, new_amount: usize) {
-        {
-            let queue = self.queue.lock().unwrap();
-            queue.iter().for_each(|i| i.update());
-        }
-
+    pub fn notify_load(&self) {
         self.calculate_total_available()
     }
 
@@ -133,7 +132,7 @@ impl Scheduler {
                     return None;
                 }
 
-                let available = item.available.load();
+                let available = item.sink.available();
                 *previous_was_complete = item.complete();
 
                 Some(available)
@@ -145,23 +144,11 @@ impl Scheduler {
 }
 
 impl ScheduledItem {
-    fn new(loader: Arc<Loader>) -> Self {
-        let me = Self {
-            loader,
-            expected: 0.into(),
-            available: 0.into(),
-        };
-
-        me.update();
-        me
+    fn new(sink: Sink) -> Self {
+        Self { sink }
     }
 
     fn complete(&self) -> bool {
-        self.available.load() == self.expected.load()
-    }
-
-    fn update(&self) {
-        self.available.store(self.loader.available());
-        self.expected.store(self.loader.expected());
+        self.sink.is_complete()
     }
 }

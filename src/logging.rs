@@ -1,7 +1,7 @@
 use std::fmt::{Debug, Display};
 
 use colored::{Color, Colorize};
-use log::{Level, LevelFilter};
+use log::Level;
 
 pub fn init_logger() {
     fern::Dispatch::new()
@@ -58,7 +58,7 @@ const DEBUG_WORDS: [&str; 7] = ["FCK", "SHT", "ASS", "WHY", "WTF", "NOO", "AGH"]
 // External libraries don't need to log unless it is important
 const ALLOWED_LEVELS: [Level; 2] = [Level::Warn, Level::Error];
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 enum Target {
     External(String),
     Discord,

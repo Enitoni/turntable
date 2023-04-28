@@ -1,121 +1,3 @@
-/// Processing implementations for ffmpeg
-pub mod ffmpeg {
-    use anyhow::{Context, Result};
-
-    use std::{
-        io::Read,
-        process::{Child, ChildStdout, Command, Stdio},
-    };
-
-    use crate::audio::{
-        config::{CHANNEL_COUNT, SAMPLES_PER_SEC, SAMPLE_RATE},
-        SAMPLE_IN_BYTES,
-    };
-
-    /// What should the ffmpeg process do
-    pub enum Operation {
-        /// Convert to [Sample]
-        ToRaw(String),
-    }
-
-    impl Operation {
-        fn apply(&self, command: &mut Command) {
-            match self {
-                Operation::ToRaw(input) => self.convert_to_raw(input, command),
-            }
-        }
-
-        fn convert_to_raw(&self, input: &str, command: &mut Command) {
-            command
-                .args(["-i", input])
-                .args(["-c:a", "pcm_f32le"])
-                .args(["-f", "f32le"])
-                .args(["-fflags", "+discardcorrupt"])
-                .args(["-ar", &SAMPLE_RATE.to_string()])
-                .args(["-ac", &CHANNEL_COUNT.to_string()])
-                .args(["pipe:"])
-                .stderr(Stdio::null())
-                .stdout(Stdio::piped());
-        }
-    }
-
-    /// An ffmpeg process
-    pub struct Process {
-        child: Child,
-        stdout: ChildStdout,
-    }
-
-    impl Process {
-        const CHUNK_SIZE: usize = SAMPLE_IN_BYTES * SAMPLE_RATE;
-
-        pub fn new(operation: Operation) -> Result<Self> {
-            let mut command = Command::new("ffmpeg");
-            operation.apply(&mut command);
-
-            let mut process = command.spawn()?;
-
-            let stdout = process
-                .stdout
-                .take()
-                .context("Could not get stdout from process")?;
-
-            let decoder = Self {
-                child: process,
-                stdout,
-            };
-
-            Ok(decoder)
-        }
-    }
-
-    impl Read for Process {
-        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-            let mut read = 0;
-
-            while read != buf.len() {
-                let result = self.stdout.read(&mut buf[read..])?;
-                read += result;
-
-                if result == 0 {
-                    break;
-                }
-            }
-
-            Ok(read)
-        }
-    }
-
-    impl Drop for Process {
-        fn drop(&mut self) {
-            self.child.kill().unwrap();
-        }
-    }
-
-    pub struct Probe {
-        pub duration: f32,
-    }
-
-    pub fn probe(input: &str) -> Probe {
-        let output = Command::new("ffprobe")
-            .args([input])
-            .args(["-print_format", "json"])
-            .args(["-show_format"])
-            .output()
-            .unwrap();
-
-        let raw = String::from_utf8(output.stdout).unwrap();
-        let parsed = json::parse(&raw).unwrap();
-
-        let format = &parsed["format"];
-        let duration = format["duration"]
-            .as_str()
-            .and_then(|s| s.parse::<f32>().ok())
-            .unwrap();
-
-        Probe { duration }
-    }
-}
-
 /// Various filters and effects for audio
 mod dsp {
     use std::ops::Range;
@@ -269,7 +151,7 @@ mod dsp {
     }
 
     /// Convenience methods for [SampleReader]
-    pub trait DSP: SampleReader + Sized {
+    pub trait Dsp: SampleReader + Sized {
         /// Adds a transform that removes silent parts at the start and end
         /// of the audio stream using a look-ahead.
         fn trim_silence(self) -> Trimmer<Self> {
@@ -277,11 +159,11 @@ mod dsp {
         }
     }
 
-    impl<T: SampleReader> DSP for T {}
+    impl<T: SampleReader> Dsp for T {}
 
     #[cfg(test)]
     mod test {
-        use super::DSP;
+        use super::Dsp;
         use crate::audio::{
             config::SAMPLES_PER_SEC,
             pipeline::{IntoSampleReader, SamplesRead},

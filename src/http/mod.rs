@@ -5,11 +5,15 @@ use tiny_http::{Header, Response, Server, StatusCode};
 
 use crate::audio::{AudioSystem, WaveStream};
 
+pub mod stream;
+
+const DEFAULT_PORT: u16 = 9050;
+
 pub fn run(audio: Arc<AudioSystem>) {
-    let port: u16 = env::var("GCT_HTTP_PORT")
-        .expect("GCT_HTTP_PORT was not provided")
+    let port: u16 = env::var("VINYL_HTTP_PORT")
+        .unwrap_or(DEFAULT_PORT.to_string())
         .parse()
-        .expect("GCT_HTTP_PORT must be a number");
+        .expect("VINYL_HTTP_PORT must be a number");
 
     let addr = format!("127.0.0.1:{}", port);
     let server = Server::http(addr).unwrap();

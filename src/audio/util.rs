@@ -223,6 +223,7 @@ pub mod pipeline {
 
 mod buffering {
     use crossbeam::atomic::AtomicCell;
+    use std::fmt::Debug;
 
     use crate::audio::{config::SAMPLES_PER_SEC, Sample};
     use std::sync::RwLock;
@@ -316,6 +317,12 @@ mod buffering {
             let overflow = end_offset.checked_sub(length).unwrap_or_default();
 
             samples.resize(length + overflow, Sample::default());
+        }
+    }
+
+    impl Debug for Buffer {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "{} Samples", self.current_size.load())
         }
     }
 }
