@@ -49,6 +49,8 @@ pub fn probe(path: &str) -> Option<Probe> {
         .and_then(|v| v.get("format").cloned())
         .and_then(|f| f.as_object().cloned());
 
+    child.wait().unwrap();
+
     match format {
         Some(format) => {
             let duration: f32 = format
