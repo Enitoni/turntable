@@ -49,17 +49,6 @@ impl AudioSystem {
         self.registry.get_consumer()
     }
 
-    pub fn start(&self) {
-        info!("Starting audio system");
-
-        ingest::spawn_loading_thread(self.ingestion.clone());
-        ingest::spawn_processing_thread(self.ingestion.clone());
-        ingest::spawn_load_write_thread(self.ingestion.clone());
-
-        spawn_scheduler_load_check_thread(self);
-        spawn_playback_thread(self);
-    }
-
     pub fn add(&self, input: Input) {
         let sink = self.ingestion.add(input.loader());
 
@@ -101,7 +90,16 @@ impl Default for AudioSystem {
     }
 }
 
-pub fn spawn_scheduler_load_check_thread(system: &AudioSystem) {
+pub fn spawn_audio_thread(system: Arc<AudioSystem>) {
+    ingest::spawn_loading_thread(system.ingestion.clone());
+    ingest::spawn_processing_thread(system.ingestion.clone());
+    ingest::spawn_load_write_thread(system.ingestion.clone());
+
+    spawn_scheduler_load_check_thread(system.clone());
+    spawn_playback_thread(system);
+}
+
+pub fn spawn_scheduler_load_check_thread(system: Arc<AudioSystem>) {
     let scheduler = system.scheduler.clone();
     let ingestion = system.ingestion.clone();
 
@@ -126,7 +124,7 @@ pub fn spawn_scheduler_load_check_thread(system: &AudioSystem) {
         .unwrap();
 }
 
-pub fn spawn_playback_thread(system: &AudioSystem) {
+pub fn spawn_playback_thread(system: Arc<AudioSystem>) {
     let ingestion = system.ingestion.clone();
     let scheduler = system.scheduler.clone();
     let read_samples_system = system.clone();
