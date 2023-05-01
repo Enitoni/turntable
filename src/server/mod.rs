@@ -6,33 +6,24 @@ use std::{
 
 use warp::Filter;
 
-use self::ws::WebSocketManager;
-mod ws;
+use crate::VinylContext;
+pub mod ws;
 
 pub const DEFAULT_PORT: u16 = 9050;
 
-#[derive(Debug, Clone)]
-pub(self) struct ServerContext {
-    ws: Arc<WebSocketManager>,
-}
-
-async fn start_server_inner(context: ServerContext) {
-    context.ws.run().await;
+async fn start_server_inner(context: VinylContext) {
+    context.websockets.run().await;
 
     let root = warp::path("v1").and(ws::routes(context));
 
     warp::serve(root).run(([127, 0, 0, 1], DEFAULT_PORT)).await
 }
 
-pub fn start_server() -> JoinHandle<()> {
+pub fn run_server(context: VinylContext) -> JoinHandle<()> {
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
         .unwrap();
-
-    let context = ServerContext {
-        ws: WebSocketManager::new(),
-    };
 
     thread::spawn(move || rt.block_on(start_server_inner(context)))
 }

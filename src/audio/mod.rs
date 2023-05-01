@@ -33,7 +33,7 @@ pub struct AudioSystem {
 }
 
 impl AudioSystem {
-    fn new() -> Self {
+    pub fn new() -> Arc<Self> {
         let queue = Queue::new();
         let ingestion = Ingestion::new();
 
@@ -43,6 +43,7 @@ impl AudioSystem {
             ingestion: ingestion.into(),
             queue: queue.into(),
         }
+        .into()
     }
 
     pub fn stream(&self) -> AudioBufferConsumer {
@@ -81,12 +82,6 @@ impl AudioSystem {
             .collect();
 
         self.scheduler.set_sinks(new_sinks);
-    }
-}
-
-impl Default for AudioSystem {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

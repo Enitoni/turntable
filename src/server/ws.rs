@@ -17,7 +17,9 @@ use warp::{
     Filter, Rejection, Reply,
 };
 
-use super::{with_state, ServerContext};
+use crate::VinylContext;
+
+use super::with_state;
 
 type Incoming = SplitStream<WebSocket>;
 type Outgoing = SplitSink<WebSocket, Message>;
@@ -36,7 +38,7 @@ struct Connection {
 }
 
 impl WebSocketManager {
-    pub(super) fn new() -> Arc<Self> {
+    pub fn new() -> Arc<Self> {
         Arc::new_cyclic(|me| Self {
             me: me.clone(),
             connections: Default::default(),
@@ -100,7 +102,7 @@ struct SocketAddrRequired;
 impl Reject for SocketAddrRequired {}
 
 pub(super) fn routes(
-    context: ServerContext,
+    context: VinylContext,
 ) -> impl Filter<Extract = (impl Reply,), Error = Rejection> + Clone {
     warp::path("gateway")
         .and(warp::addr::remote())
@@ -109,7 +111,9 @@ pub(super) fn routes(
         )
         .and(warp::ws())
         .and(with_state(context))
-        .map(|addr: SocketAddr, ws: Ws, context: ServerContext| {
-            ws.on_upgrade(move |ws| async move { context.ws.register_connection(addr, ws).await })
+        .map(|addr: SocketAddr, ws: Ws, context: VinylContext| {
+            ws.on_upgrade(move |ws| async move {
+                context.websockets.register_connection(addr, ws).await
+            })
         })
 }
