@@ -1,5 +1,12 @@
+use futures::Stream;
+
 use super::AudioBufferConsumer;
-use std::io::Read;
+use std::{
+    convert::Infallible,
+    io::Read,
+    pin::Pin,
+    task::{Context, Poll},
+};
 
 /// Implements streaming a .wav file
 pub struct WaveStream {
@@ -69,5 +76,17 @@ impl Read for WaveStream {
 
         bytes_written += self.underlying.read(&mut buf[bytes_written..])?;
         Ok(bytes_written)
+    }
+}
+
+impl Stream for WaveStream {
+    type Item = Result<Vec<u8>, Infallible>;
+
+    fn poll_next(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let mut buf = vec![0; 2048];
+
+        self.read(&mut buf).ok();
+
+        Poll::Ready(Some(Ok(buf)))
     }
 }

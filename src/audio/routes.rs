@@ -1,9 +1,23 @@
+use hyper::Response;
 use tokio::task::spawn_blocking;
 use warp::{Filter, Rejection, Reply};
 
 use crate::{server::with_state, VinylContext};
 
-use super::Input;
+use super::{Input, WaveStream};
+
+fn get_stream(context: VinylContext) -> impl Reply {
+    let stream = context.audio.stream();
+    let stream = WaveStream::new(stream);
+
+    let body = hyper::Body::wrap_stream(stream);
+
+    Response::builder()
+        .status(200)
+        .header("Content-Type", WaveStream::MIME)
+        .body(body)
+        .unwrap()
+}
 
 async fn add_input(context: VinylContext, query: String) -> impl Reply {
     match Input::parse(&query) {
@@ -31,9 +45,14 @@ pub fn routes(
 ) -> impl Filter<Extract = (impl Reply,), Error = Rejection> + Clone {
     let input = warp::path("input")
         .and(warp::post())
-        .and(with_state(context))
+        .and(with_state(context.clone()))
         .and(warp::body::json())
         .then(add_input);
 
-    warp::path("audio").and(input)
+    let stream = warp::path("stream")
+        .and(warp::get())
+        .and(with_state(context))
+        .map(get_stream);
+
+    warp::path("audio").and(input).or(stream)
 }
