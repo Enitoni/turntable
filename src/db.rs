@@ -15,10 +15,10 @@ pub enum Error {
     Internal(#[from] surrealdb::Error),
 
     #[error("The {0} already exists")]
-    Conflict(String),
+    Conflict(&'static str),
 
     #[error("The {0} does not exist")]
-    NotFound(String),
+    NotFound(&'static str),
 
     #[error("Unknown database error")]
     Unknown,
