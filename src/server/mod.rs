@@ -6,7 +6,7 @@ use std::{
 
 use warp::Filter;
 
-use crate::VinylContext;
+use crate::{audio, VinylContext};
 pub mod ws;
 
 pub const DEFAULT_PORT: u16 = 9050;
@@ -14,7 +14,7 @@ pub const DEFAULT_PORT: u16 = 9050;
 async fn start_server_inner(context: VinylContext) {
     context.websockets.run().await;
 
-    let root = warp::path("v1").and(ws::routes(context));
+    let root = warp::path("v1").and(ws::routes(context.clone()).or(audio::routes(context)));
 
     warp::serve(root).run(([127, 0, 0, 1], DEFAULT_PORT)).await
 }
@@ -28,7 +28,7 @@ pub fn run_server(context: VinylContext) -> JoinHandle<()> {
     thread::spawn(move || rt.block_on(start_server_inner(context)))
 }
 
-pub(self) fn with_state<T>(state: T) -> impl Filter<Extract = (T,), Error = Infallible> + Clone
+pub fn with_state<T>(state: T) -> impl Filter<Extract = (T,), Error = Infallible> + Clone
 where
     T: Clone + Send,
 {
