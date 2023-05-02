@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use audio::AudioSystem;
 use server::ws::WebSocketManager;
+use tokio::runtime::{self, Runtime};
 
 mod audio;
 mod http;
@@ -14,6 +15,8 @@ pub struct Vinyl {
     // This is temporary for now, since Rooms will have their own audio system
     audio: Arc<AudioSystem>,
     websockets: Arc<WebSocketManager>,
+
+    runtime: Runtime,
 }
 
 #[derive(Clone)]
@@ -24,15 +27,24 @@ pub struct VinylContext {
 
 impl Vinyl {
     fn new() -> Self {
+        let main_runtime = runtime::Builder::new_multi_thread()
+            .enable_all()
+            .thread_name("vinyl-async")
+            .build()
+            .expect("async runtime built");
+
         Self {
             audio: AudioSystem::new(),
             websockets: WebSocketManager::new(),
+            runtime: main_runtime,
         }
     }
 
     fn run(&self) {
         audio::spawn_audio_thread(self.audio.clone());
-        server::run_server(self.context()).join().unwrap();
+
+        self.runtime
+            .block_on(async move { server::run_server(self.context()).await })
     }
 
     fn context(&self) -> VinylContext {
