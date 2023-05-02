@@ -2600,6 +2600,7 @@ dependencies = [
  "serde_json",
  "spin_sleep",
  "surrealdb",
+ "thiserror",
  "tiny_http",
  "tokio",
  "warp",
