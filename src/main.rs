@@ -11,6 +11,7 @@ use tokio::runtime::{self, Runtime};
 use crate::logging::LogColor;
 
 mod audio;
+mod auth;
 mod db;
 mod http;
 mod ingest;

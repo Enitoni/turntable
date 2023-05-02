@@ -2596,6 +2596,7 @@ dependencies = [
  "reqwest",
  "ringbuf",
  "ron",
+ "scrypt",
  "serde",
  "serde_json",
  "spin_sleep",
