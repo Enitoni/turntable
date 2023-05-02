@@ -1,16 +1,17 @@
+use tokio::task::spawn_blocking;
 use warp::{Filter, Rejection, Reply};
 
 use crate::{server::with_state, VinylContext};
 
 use super::Input;
 
-fn add_input(context: VinylContext, query: String) -> impl Reply {
+async fn add_input(context: VinylContext, query: String) -> impl Reply {
     match Input::parse(&query) {
         Some(input) => {
             let name = input.to_string();
             let response = format!("Added {} to the queue", name);
 
-            context.audio.add(input);
+            let _ = spawn_blocking(move || context.audio.add(input)).await;
 
             warp::reply::with_status(warp::reply::json(&response), warp::http::StatusCode::OK)
         }
@@ -32,7 +33,7 @@ pub fn routes(
         .and(warp::post())
         .and(with_state(context))
         .and(warp::body::json())
-        .map(add_input);
+        .then(add_input);
 
     warp::path("audio").and(input)
 }
