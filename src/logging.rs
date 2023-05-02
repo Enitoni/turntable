@@ -32,7 +32,7 @@ pub fn init_logger() {
             };
 
             out.finish(format_args!(
-                "{:^5} {} {:.<7} {}",
+                "{:^5} {} {:<7} {}",
                 level,
                 now.format("%H:%M:%S")
                     .to_string()
@@ -106,9 +106,8 @@ impl Display for Target {
 
         let result = match self {
             Target::External(x) => x.as_str().clear(),
-            Target::Crate => "LOCAL".clear(),
             Target::Other => "OTHER".clear(),
-
+            Target::Crate => "VINYL".color(color),
             Target::Discord => "DISCORD".color(color),
             Target::Server => "SERVER".color(color),
             Target::Audio => "AUDIO".color(color),
@@ -124,6 +123,7 @@ impl From<Target> for LogColor {
             Target::Discord => LogColor::Blurple,
             Target::Server => LogColor::LightGreen,
             Target::Audio => LogColor::Magenta,
+            Target::Crate => LogColor::Orange,
             _ => LogColor::White,
         }
     }
