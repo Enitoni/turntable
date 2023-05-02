@@ -1,6 +1,8 @@
+use serde::Deserialize;
 use surrealdb::{
     engine::remote::ws::{Client, Ws},
     opt::auth::Root,
+    sql::Thing,
     Surreal,
 };
 use thiserror::Error as ThisError;
@@ -34,4 +36,10 @@ pub async fn connect() -> Result<Database, surrealdb::Error> {
     db.use_ns("vinyl").use_db("main").await?;
 
     Ok(db)
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Record {
+    #[allow(dead_code)]
+    id: Thing,
 }
