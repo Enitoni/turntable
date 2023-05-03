@@ -1,6 +1,5 @@
 use std::{
     collections::HashMap,
-    convert::Infallible,
     net::SocketAddr,
     sync::{Arc, Weak},
 };
@@ -10,16 +9,8 @@ use futures::{
     stream::{SplitSink, SplitStream},
     StreamExt,
 };
+use log::trace;
 use tokio::{spawn, sync::Mutex};
-use warp::{
-    reject::Reject,
-    ws::{Message, WebSocket, Ws},
-    Filter, Rejection, Reply,
-};
-
-use crate::VinylContext;
-
-use super::with_state;
 
 type Incoming = SplitStream<WebSocket>;
 type Outgoing = SplitSink<WebSocket, Message>;
@@ -60,10 +51,12 @@ impl WebSocketManager {
         }
         .into();
 
+        trace!(target: "vinyl::server", "WebSocket connected: {}", addr);
         self.connections.lock().await.insert(addr, new_connection);
     }
 
     async fn unregister_connection(&self, addr: SocketAddr) {
+        trace!(target: "vinyl::server", "WebSocket disconnected: {}", addr);
         self.connections.lock().await.remove(&addr);
     }
 }
@@ -84,36 +77,35 @@ async fn check_connections(manager: Arc<WebSocketManager>) {
 
         for (addr, message) in messages {
             match message {
-                Ok(message) => {
-                    if message.is_close() {
-                        manager.unregister_connection(addr).await
-                    }
-                }
+                Ok(Message::Close(_)) => manager.unregister_connection(addr).await,
                 Err(err) => {
                     dbg!(err);
                 }
+                _ => {}
             }
         }
     }
 }
 
-#[derive(Debug)]
-struct SocketAddrRequired;
-impl Reject for SocketAddrRequired {}
+use axum::{
+    extract::{
+        ws::{Message, WebSocket},
+        ConnectInfo, State, WebSocketUpgrade,
+    },
+    response::Response,
+    routing::get,
+};
 
-pub(super) fn routes(
-    context: VinylContext,
-) -> impl Filter<Extract = (impl Reply,), Error = Rejection> + Clone {
-    warp::path("gateway")
-        .and(warp::addr::remote())
-        .and_then(
-            |addr: Option<_>| async move { addr.ok_or(warp::reject::custom(SocketAddrRequired)) },
-        )
-        .and(warp::ws())
-        .and(with_state(context))
-        .map(|addr: SocketAddr, ws: Ws, context: VinylContext| {
-            ws.on_upgrade(move |ws| async move {
-                context.websockets.register_connection(addr, ws).await
-            })
-        })
+use super::{Context, Router};
+
+pub(super) fn router() -> Router {
+    Router::new().route("/", get(handler))
+}
+
+async fn handler(
+    State(context): Context,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    ws: WebSocketUpgrade,
+) -> Response {
+    ws.on_upgrade(move |ws| async move { context.websockets.register_connection(addr, ws).await })
 }

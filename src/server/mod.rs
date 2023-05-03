@@ -1,10 +1,5 @@
-use std::{
-    convert::Infallible,
-    sync::Arc,
-    thread::{self, JoinHandle},
-};
-
-use warp::Filter;
+use axum::{extract::State, Router as AxumRouter};
+use std::net::SocketAddr;
 
 use crate::{audio, VinylContext};
 pub mod ws;
@@ -14,14 +9,21 @@ pub const DEFAULT_PORT: u16 = 9050;
 pub async fn run_server(context: VinylContext) {
     context.websockets.run().await;
 
-    let root = warp::path("v1").and(ws::routes(context.clone()).or(audio::routes(context)));
+    let addr = ([127, 0, 0, 1], DEFAULT_PORT).into();
 
-    warp::serve(root).run(([127, 0, 0, 1], DEFAULT_PORT)).await
+    let version_one_router = AxumRouter::new()
+        .nest("/gateway", ws::router())
+        .nest("/audio", audio::router());
+
+    let router = AxumRouter::new()
+        .nest("/v1", version_one_router)
+        .with_state(context);
+
+    axum::Server::bind(&addr)
+        .serve(router.into_make_service_with_connect_info::<SocketAddr>())
+        .await
+        .unwrap();
 }
 
-pub fn with_state<T>(state: T) -> impl Filter<Extract = (T,), Error = Infallible> + Clone
-where
-    T: Clone + Send,
-{
-    warp::any().map(move || state.clone())
-}
+pub type Router = AxumRouter<VinylContext>;
+pub type Context = State<VinylContext>;

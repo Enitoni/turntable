@@ -11,7 +11,7 @@ mod encoding;
 mod playback;
 mod processing;
 mod queuing;
-mod routes;
+mod router;
 mod source;
 mod track;
 pub mod util;
@@ -22,7 +22,7 @@ pub use encoding::*;
 pub use ingest::Input;
 pub use playback::*;
 pub use queuing::Queue;
-pub use routes::routes;
+pub use router::router;
 pub use track::Track;
 pub use util::pipeline;
 
