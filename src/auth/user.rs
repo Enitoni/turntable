@@ -20,7 +20,7 @@ pub struct User {
 }
 
 impl User {
-    pub async fn new(db: &Database, username: String, password: String) -> Result<Self> {
+    pub async fn create(db: &Database, username: String, password: String) -> Result<Self> {
         let salt = SaltString::generate(&mut OsRng);
 
         let hashed_password = Scrypt
