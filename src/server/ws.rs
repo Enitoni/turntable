@@ -2,6 +2,7 @@ use std::{
     collections::HashMap,
     net::SocketAddr,
     sync::{Arc, Weak},
+    time::Duration,
 };
 
 use futures::{
@@ -10,7 +11,7 @@ use futures::{
     StreamExt,
 };
 use log::trace;
-use tokio::{spawn, sync::Mutex};
+use tokio::{spawn, sync::Mutex, time::sleep};
 
 type Incoming = SplitStream<WebSocket>;
 type Outgoing = SplitSink<WebSocket, Message>;
@@ -84,6 +85,8 @@ async fn check_connections(manager: Arc<WebSocketManager>) {
                 _ => {}
             }
         }
+
+        sleep(Duration::from_millis(100)).await
     }
 }
 
