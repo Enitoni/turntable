@@ -17,6 +17,7 @@ async fn get_stream(State(context): Context) -> Response<hyper::Body> {
     Response::builder()
         .status(200)
         .header("Content-Type", WaveStream::MIME)
+        .header("Content-Disposition", "inline; filename=\"stream.wav\"")
         .body(body)
         .unwrap()
 }
