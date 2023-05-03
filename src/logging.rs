@@ -83,7 +83,7 @@ impl Target {
             return match child {
                 "audio" => Self::Audio,
                 "discord" => Self::Discord,
-                "http" => Self::Server,
+                "server" => Self::Server,
                 _ => Self::Other,
             };
         }
