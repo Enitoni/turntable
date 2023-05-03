@@ -17,9 +17,12 @@ pub struct InternalSink {
     id: SinkId,
     samples: Buffer,
     expected_length: SinkLength,
-    status: AtomicCell<SinkStatus>,
 
+    status: AtomicCell<SinkStatus>,
     wait: Wait,
+
+    /// This is true when the sink should be cleared and deleted
+    pub(super) consumed: AtomicCell<bool>,
 }
 
 /// A length in [Sample]
@@ -54,6 +57,7 @@ impl InternalSink {
             status: SinkStatus::Partial(0).into(),
             id: ID_COUNTER.fetch_add(1),
             expected_length: length,
+            consumed: false.into(),
             wait: Wait::default(),
         }
     }
@@ -105,6 +109,18 @@ impl InternalSink {
             self.status.load(),
             SinkStatus::Completed(_) | SinkStatus::Error
         )
+    }
+
+    pub fn consume(&self) {
+        self.consumed.store(true)
+    }
+
+    pub(super) fn clear(&self) {
+        if !self.consumed.load() {
+            panic!("Attempt to clear sink before consumption")
+        }
+
+        self.samples.clear();
     }
 
     pub fn wait_for_write(&self) {

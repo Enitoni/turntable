@@ -71,7 +71,9 @@ impl AudioSystem {
     }
 
     pub fn next(&self) {
+        self.queue.current_track().sink.consume();
         self.queue.next();
+
         self.notify_queue_update();
     }
 
@@ -91,6 +93,7 @@ pub fn spawn_audio_thread(system: Arc<AudioSystem>) {
     ingest::spawn_loading_thread(system.ingestion.clone());
     ingest::spawn_processing_thread(system.ingestion.clone());
     ingest::spawn_load_write_thread(system.ingestion.clone());
+    ingest::spawn_cleanup_thread(system.ingestion.clone());
 
     spawn_scheduler_load_check_thread(system.clone());
     spawn_playback_thread(system);
@@ -139,8 +142,6 @@ pub fn spawn_playback_thread(system: Arc<AudioSystem>) {
             read_samples_system.next();
         }
     };
-
-    let system = system.clone();
 
     let tick = move || {
         let mut samples = vec![0.; STREAM_CHUNK_SIZE];

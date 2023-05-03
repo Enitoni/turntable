@@ -300,6 +300,13 @@ mod buffering {
             self.samples.read().unwrap().len()
         }
 
+        pub fn clear(&self) {
+            let mut samples = self.samples.write().unwrap();
+
+            samples.clear();
+            samples.shrink_to(0);
+        }
+
         fn allocate_if_necessary(&self, samples: &mut Vec<Sample>, end_offset: usize) {
             let allocated = samples.capacity();
 

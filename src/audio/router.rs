@@ -3,6 +3,7 @@ use axum::{
     routing::{get, post},
 };
 use hyper::{Response, StatusCode};
+use log::trace;
 use tokio::task::spawn_blocking;
 
 use super::{Input, WaveStream};
@@ -31,6 +32,7 @@ async fn add_input(
             let name = input.to_string();
             let response = format!("Added {} to the queue", name);
 
+            trace!(target: "vinyl::server", "Added {} to the queue", name);
             let _ = spawn_blocking(move || context.audio.add(input)).await;
 
             Ok(response)

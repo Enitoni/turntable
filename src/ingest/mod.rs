@@ -284,3 +284,37 @@ pub fn spawn_load_write_thread(ingestion: Arc<Ingestion>) {
         .spawn(run)
         .unwrap();
 }
+
+pub fn spawn_cleanup_thread(ingestion: Arc<Ingestion>) {
+    let run = move || loop {
+        thread::sleep(Duration::from_secs(60 * 5));
+
+        let mut samples_cleared = 0;
+        let consumed_sinks: Vec<_> = ingestion
+            .sinks
+            .iter()
+            .filter(|x| x.consumed.load())
+            .map(|entry| entry.id())
+            .collect();
+
+        if consumed_sinks.is_empty() {
+            continue;
+        }
+
+        trace!(target: "vinyl::audio", "Cleaning up {} sinks...", consumed_sinks.len());
+
+        for id in consumed_sinks {
+            let (_, sink) = ingestion.sinks.remove(&id).expect("get sink for cleanup");
+
+            samples_cleared += sink.available();
+            sink.clear();
+        }
+
+        trace!(target: "vinyl::audio", "Cleared {} samples.", samples_cleared);
+    };
+
+    thread::Builder::new()
+        .name("ingest_sink_cleanup".to_string())
+        .spawn(run)
+        .unwrap();
+}
