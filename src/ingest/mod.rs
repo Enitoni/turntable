@@ -205,8 +205,6 @@ pub fn spawn_loading_thread(ingestion: Arc<Ingestion>) {
                 }
                 _ => {}
             }
-
-            thread::sleep(Duration::from_millis(500));
         }
     };
 
@@ -235,12 +233,14 @@ pub fn spawn_processing_thread(ingestion: Arc<Ingestion>) {
                 let new_samples = raw_samples_from_bytes(&buf[..bytes_read]);
 
                 sender.send(WriteMessage { data: new_samples }).unwrap();
+            } else {
+                thread::sleep(Duration::from_millis(100))
             }
         }
     };
 
     thread::Builder::new()
-        .name("audio_loading".to_string())
+        .name("ingest_byte_processing".to_string())
         .spawn(run)
         .unwrap();
 }
@@ -254,7 +254,7 @@ pub fn spawn_load_write_thread(ingestion: Arc<Ingestion>) {
         loop {
             if let Some(sink) = ingestion.current_sink() {
                 // We wait for the ffmpeg thread to block before proceeding
-                if let Ok(message) = receiver.recv_timeout(Duration::from_millis(1000)) {
+                if let Ok(message) = receiver.recv_timeout(Duration::from_millis(50)) {
                     data.extend_from_slice(&message.data);
 
                     // Keep checking before writing
@@ -275,12 +275,14 @@ pub fn spawn_load_write_thread(ingestion: Arc<Ingestion>) {
                 );
 
                 data.clear();
+            } else {
+                thread::sleep(Duration::from_millis(100))
             }
         }
     };
 
     thread::Builder::new()
-        .name("audio_loading".to_string())
+        .name("ingest_sink_write".to_string())
         .spawn(run)
         .unwrap();
 }
