@@ -1,11 +1,10 @@
 use axum::{
-    debug_handler,
     extract::State,
     routing::{get, post},
     Json,
 };
 use hyper::StatusCode;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::{

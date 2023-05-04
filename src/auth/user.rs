@@ -1,7 +1,4 @@
-use crate::{
-    db::{Database, Error},
-    util::ApiError,
-};
+use crate::{db::Database, util::ApiError};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use surrealdb::sql::Thing;
