@@ -1,6 +1,7 @@
 use crate::db::{Database, Error};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use surrealdb::sql::Thing;
 
 use scrypt::{
@@ -29,12 +30,12 @@ impl User {
 
         let user: User = db
             .create("user")
-            .content(User {
-                id: None,
-                username: username.clone(),
-                password: hashed_password,
-                display_name: username,
-            })
+            .content(json!( {
+                "id": username,
+                "username": username.clone(),
+                "password": hashed_password,
+                "display_name": username,
+            }))
             .await?;
 
         Ok(user)
