@@ -9,14 +9,14 @@ use scrypt::{
 };
 
 /// A user that can access Vinyl, create rooms, and so on, given they have permissions.
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct User {
-    id: Option<Thing>,
+    pub id: Option<Thing>,
 
-    username: String,
-    password: String,
+    pub username: String,
+    pub password: String,
 
-    display_name: String,
+    pub display_name: String,
 }
 
 impl User {
