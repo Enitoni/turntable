@@ -10,6 +10,9 @@ pub enum ApiError {
     #[error("{0} already exists")]
     Conflict(&'static str),
 
+    #[error("Invalid credentials")]
+    Unauthorized,
+
     #[error(transparent)]
     Database(#[from] surrealdb::Error),
 
@@ -26,8 +29,6 @@ use surrealdb::Error as SurrealErr;
 
 impl ApiError {
     pub fn from_db(err: SurrealErr) -> Self {
-        dbg!(&err);
-
         match err {
             SurrealErr::Db(x) => match x {
                 DbErr::RecordExists { thing: _ } => Self::Conflict("Resource"),
@@ -58,6 +59,7 @@ impl IntoResponse for ApiError {
         let status = match &self {
             ApiError::NotFound(_) => StatusCode::NOT_FOUND,
             ApiError::Conflict(_) => StatusCode::CONFLICT,
+            ApiError::Unauthorized => StatusCode::UNAUTHORIZED,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         };
 
