@@ -4,11 +4,11 @@ use std::{ops::Range, sync::Mutex};
 
 use super::SAMPLES_PER_SEC;
 
-/// How many samples to load after hitting the threshold.
-pub const PRELOAD_AMOUNT: usize = SAMPLES_PER_SEC * 30;
+/// How many bytes to load after hitting the threshold.
+pub const PRELOAD_AMOUNT: usize = 512 * 1000;
 
 /// The threshold at which loading more samples happens
-pub const PRELOAD_THRESHOLD: usize = SAMPLES_PER_SEC * 120;
+pub const PRELOAD_THRESHOLD: usize = SAMPLES_PER_SEC * 20;
 
 /// Schedules loading and playback for a list of loaders
 pub struct Scheduler {
