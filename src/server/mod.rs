@@ -1,5 +1,5 @@
 use axum::{extract::State, Router as AxumRouter};
-use std::net::SocketAddr;
+use std::{env, net::SocketAddr};
 use tower_http::cors::{Any, CorsLayer};
 
 use crate::{audio, auth, VinylContext};
@@ -12,7 +12,11 @@ pub type Context = State<VinylContext>;
 pub async fn run_server(context: VinylContext) {
     context.websockets.run().await;
 
-    let addr = ([127, 0, 0, 1], DEFAULT_PORT).into();
+    let port = env::var("VINYL_SERVER_PORT")
+        .map(|x| x.parse::<u16>().expect("Port must be a number"))
+        .unwrap_or(DEFAULT_PORT);
+
+    let addr = ([127, 0, 0, 1], port).into();
 
     let cors = CorsLayer::new()
         .allow_origin(Any)
