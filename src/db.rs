@@ -2,7 +2,7 @@ use serde::Deserialize;
 use surrealdb::{
     engine::remote::ws::{Client, Ws},
     opt::auth::Root,
-    sql::Thing,
+    sql::{Id, Thing},
     Surreal,
 };
 use thiserror::Error as ThisError;
@@ -42,4 +42,14 @@ pub async fn connect() -> Result<Database, surrealdb::Error> {
 pub struct Record {
     #[allow(dead_code)]
     id: Thing,
+}
+
+impl Record {
+    pub fn id(&self) -> Id {
+        self.id.id.clone()
+    }
+
+    pub fn table(&self) -> String {
+        self.id.tb.clone()
+    }
 }
