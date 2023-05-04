@@ -2588,6 +2588,7 @@ dependencies = [
  "hyper",
  "log",
  "parking_lot",
+ "rand",
  "reqwest",
  "ringbuf",
  "ron",
