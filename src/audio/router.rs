@@ -7,7 +7,10 @@ use log::trace;
 use tokio::task::spawn_blocking;
 
 use super::{Input, WaveStream};
-use crate::server::{Context, Router};
+use crate::{
+    ingest::InputError,
+    server::{Context, Router},
+};
 
 async fn get_stream(State(context): Context) -> Response<hyper::Body> {
     let stream = context.audio.stream();
@@ -23,22 +26,18 @@ async fn get_stream(State(context): Context) -> Response<hyper::Body> {
         .unwrap()
 }
 
-async fn add_input(
-    State(context): Context,
-    query: String,
-) -> Result<String, (StatusCode, &'static str)> {
-    match Input::parse(&query) {
-        Some(input) => {
-            let name = input.to_string();
-            let response = format!("Added {} to the queue", name);
+async fn add_input(State(context): Context, query: String) -> Result<String, InputError> {
+    let input = spawn_blocking(move || Input::parse(&query))
+        .await
+        .map_err(|x| InputError::Other(Box::new(x)))??;
 
-            trace!(target: "vinyl::server", "Added {} to the queue", name);
-            let _ = spawn_blocking(move || context.audio.add(input)).await;
+    let name = input.to_string();
+    let response = format!("Added {} to the queue", name);
 
-            Ok(response)
-        }
-        None => Err((StatusCode::BAD_REQUEST, "Invalid input")),
-    }
+    trace!(target: "vinyl::server", "Added {} to the queue", name);
+    let _ = spawn_blocking(move || context.audio.add(input)).await;
+
+    Ok(response)
 }
 
 pub fn router() -> Router {

@@ -1,7 +1,10 @@
+use axum::response::IntoResponse;
+use hyper::StatusCode;
 use thiserror::Error;
 
 #[derive(Debug, Clone)]
 pub enum Input {
+    WaveDistrict(wavedistrict::Track),
     YouTube(YouTubeVideo),
     Url(Url),
 }
@@ -24,7 +27,7 @@ pub enum InputError {
     Invalid,
 
     #[error(transparent)]
-    Other(Box<dyn std::error::Error>),
+    Other(Box<dyn std::error::Error + Send>),
 
     #[error("An unknown error occurred")]
     Unknown,
@@ -35,23 +38,32 @@ impl Input {
     /// if this is already in cache
     pub fn fingerprint(&self) -> String {
         match self {
+            Input::WaveDistrict(t) => t.fingerprint(),
             Input::YouTube(v) => v.fingerprint(),
             Input::Url(x) => x.fingerprint(),
         }
     }
 
-    pub fn parse(str: &str) -> Option<Self> {
+    pub fn parse(str: &str) -> Result<Self, InputError> {
         let predicates = [
             |url| YouTubeVideo::from_url(url).map(Self::YouTube),
-            |url| Self::Url(Url::from_url(url)).into(),
+            |url| wavedistrict::Track::from_url(url).map(Self::WaveDistrict),
         ];
 
-        predicates.into_iter().find_map(|f| f(str))
+        predicates
+            .into_iter()
+            .map(|f| f(str))
+            .find_map(|r| match r {
+                Err(InputError::NoMatch) => None,
+                x => Some(x),
+            })
+            .unwrap_or(Err(InputError::NoMatch))
     }
 
-    pub fn loader(&self) -> Box<dyn Loader> {
+    pub fn loader(&self) -> Result<Box<dyn Loader>, InputError> {
         match self {
-            Input::YouTube(video) => Box::new(video.loader()),
+            Input::YouTube(video) => video.loader(),
+            Input::WaveDistrict(track) => track.loader(),
             Input::Url(_) => todo!(),
         }
     }
@@ -60,8 +72,9 @@ impl Input {
 impl Display for Input {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self {
-            Input::YouTube(x) => std::fmt::Display::fmt(&x, f),
-            Input::Url(x) => std::fmt::Display::fmt(&x, f),
+            Input::WaveDistrict(x) => x.fmt(f),
+            Input::YouTube(x) => x.fmt(f),
+            Input::Url(x) => x.fmt(f),
         }
     }
 }
@@ -69,6 +82,20 @@ impl Display for Input {
 impl From<&Input> for String {
     fn from(x: &Input) -> Self {
         x.to_string()
+    }
+}
+
+impl IntoResponse for InputError {
+    fn into_response(self) -> axum::response::Response {
+        let status = match self {
+            InputError::NotFound => StatusCode::NOT_FOUND,
+            InputError::NoMatch => StatusCode::BAD_REQUEST,
+            InputError::UnsupportedType => StatusCode::BAD_REQUEST,
+            InputError::Invalid => StatusCode::BAD_REQUEST,
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
+        };
+
+        (status, self.to_string()).into_response()
     }
 }
 
@@ -126,6 +153,8 @@ mod youtube {
         },
     };
 
+    use super::InputError;
+
     /// Parsed from youtube-dl
     #[derive(Debug, Clone)]
     pub struct YouTubeVideo {
@@ -167,16 +196,21 @@ mod youtube {
             self.duration
         }
 
-        pub fn from_url(url: &str) -> Option<Self> {
+        pub fn from_url(url: &str) -> Result<Self, InputError> {
             if !Self::is_valid_url(url) {
-                return None;
+                return Err(InputError::NoMatch);
             }
 
-            parse_from_url(url)
+            parse_from_url(url).ok_or(InputError::NotFound)
         }
 
-        pub fn loader(&self) -> YouTubeVideoLoader {
-            YouTubeVideoLoader::new(self.clone())
+        pub fn loader(&self) -> Result<Box<dyn Loader>, InputError> {
+            let stream = ByteRangeStream::try_new(self.audio_stream_url.clone())
+                .ok_or(InputError::Unknown)?
+                .into();
+
+            let video = self.clone().into();
+            Ok(Box::new(YouTubeVideoLoader { video, stream }))
         }
 
         /// Returns true if this is a valid YouTube video url
@@ -200,17 +234,6 @@ mod youtube {
                     domain == "youtube.com" && path.starts_with("watch?v=") || domain == "youtu.be"
                 })
                 .unwrap_or_default()
-        }
-    }
-
-    impl YouTubeVideoLoader {
-        pub fn new(video: YouTubeVideo) -> Self {
-            let stream = ByteRangeStream::try_new(video.audio_stream_url.clone())
-                .expect("HANDLE THIS IN THE FUTURE")
-                .into();
-
-            let video = video.into();
-            Self { video, stream }
         }
     }
 
@@ -352,7 +375,7 @@ mod wavedistrict {
 
     #[derive(Debug, Clone, Deserialize)]
     pub struct Track {
-        id: String,
+        id: u32,
         title: String,
         audio: Media,
     }
@@ -384,21 +407,26 @@ mod wavedistrict {
                     Some(StatusCode::NOT_FOUND) => InputError::NotFound,
                     _ => InputError::NetworkFailed,
                 })
-                .and_then(|r| r.json().map_err(|x| InputError::Other(x.into())))?;
+                .and_then(|r| r.json().map_err(|x| InputError::Other(Box::new(x))))?;
 
             Ok(track)
         }
 
-        pub fn loader(&self) -> Result<TrackLoader, InputError> {
-            let audio_url = self.audio.best_source_url().ok_or(InputError::Invalid)?;
+        pub fn fingerprint(&self) -> String {
+            self.audio
+                .best_source_url()
+                .unwrap_or_else(|| format!("wd:{}", self.id))
+        }
 
+        pub fn loader(&self) -> Result<Box<dyn Loader>, InputError> {
+            let audio_url = self.audio.best_source_url().ok_or(InputError::Invalid)?;
             let stream = ByteRangeStream::try_new(audio_url.clone()).ok_or(InputError::Unknown)?;
 
-            Ok(TrackLoader {
+            Ok(Box::new(TrackLoader {
                 track: self.clone(),
                 stream: stream.into(),
                 stream_url: audio_url,
-            })
+            }))
         }
     }
 
@@ -407,7 +435,7 @@ mod wavedistrict {
             let best_source = self
                 .sources
                 .iter()
-                .max_by(|a, b| b.quality_rating.cmp(&a.quality_rating));
+                .max_by(|a, b| a.quality_rating.cmp(&b.quality_rating));
 
             best_source.map(|source| {
                 format!(

@@ -53,9 +53,8 @@ impl AudioSystem {
     }
 
     pub fn add(&self, input: Input) {
-        let sink = self.ingestion.add(input.loader());
-
         // This is temporary for now
+        let sink = self.ingestion.add(input.loader().unwrap());
         let track = Track::new(sink);
         self.queue.add_track(track, queuing::QueuePosition::Add);
 
