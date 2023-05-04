@@ -1,17 +1,17 @@
 use anyhow::Result;
 use axum::{
     async_trait,
-    extract::{FromRef, FromRequestParts},
+    extract::{FromRef, FromRequestParts, Query},
+    RequestPartsExt,
 };
 use hyper::{header, http::request::Parts, StatusCode};
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use surrealdb::sql::Thing;
 use tokio::task::spawn_blocking;
 
 use crate::{
-    db::{Database, Error, Record},
+    db::{Database, Record},
     util::ApiError,
     VinylContext,
 };
@@ -69,6 +69,11 @@ impl Session {
     }
 }
 
+#[derive(Deserialize)]
+struct TokenQuery {
+    token: String,
+}
+
 #[async_trait]
 impl<S> FromRequestParts<S> for Session
 where
@@ -80,10 +85,17 @@ where
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         let context = VinylContext::from_ref(state);
 
+        let in_query = parts
+            .extract::<Query<TokenQuery>>()
+            .await
+            .ok()
+            .map(|x| format!("Bearer {}", x.token));
+
         let token = parts
             .headers
             .get(header::AUTHORIZATION)
             .and_then(|x| x.to_str().ok())
+            .or(in_query.as_deref())
             .ok_or((StatusCode::UNAUTHORIZED, "Missing authorization"))?;
 
         let parts: Vec<_> = token.split_ascii_whitespace().collect();
