@@ -1,5 +1,6 @@
 use axum::{extract::State, Router as AxumRouter};
 use std::net::SocketAddr;
+use tower_http::cors::{Any, CorsLayer};
 
 use crate::{audio, auth, VinylContext};
 pub mod ws;
@@ -13,6 +14,11 @@ pub async fn run_server(context: VinylContext) {
 
     let addr = ([127, 0, 0, 1], DEFAULT_PORT).into();
 
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods(Any)
+        .allow_headers(Any);
+
     let version_one_router = AxumRouter::new()
         .nest("/auth", auth::router())
         .nest("/gateway", ws::router())
@@ -20,7 +26,8 @@ pub async fn run_server(context: VinylContext) {
 
     let router = AxumRouter::new()
         .nest("/v1", version_one_router)
-        .with_state(context);
+        .with_state(context)
+        .layer(cors);
 
     axum::Server::bind(&addr)
         .serve(router.into_make_service_with_connect_info::<SocketAddr>())
