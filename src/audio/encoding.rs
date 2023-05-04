@@ -1,4 +1,5 @@
 use futures::Stream;
+use std::fmt::Debug;
 
 use super::AudioBufferConsumer;
 use std::{
@@ -57,6 +58,12 @@ impl WaveStream {
             underlying,
             did_write_header: false,
         }
+    }
+}
+
+impl Debug for WaveStream {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "WaveStream")
     }
 }
 

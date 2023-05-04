@@ -8,7 +8,7 @@ use server::ws::WebSocketManager;
 use thiserror::Error;
 use tokio::runtime::{self, Runtime};
 
-use crate::logging::LogColor;
+use crate::{logging::LogColor, rooms::RoomManager};
 
 mod audio;
 mod auth;
@@ -16,6 +16,7 @@ mod db;
 mod http;
 mod ingest;
 mod logging;
+mod rooms;
 mod server;
 mod util;
 
@@ -24,6 +25,7 @@ pub struct Vinyl {
     // This is temporary for now, since Rooms will have their own audio system
     audio: Arc<AudioSystem>,
     websockets: Arc<WebSocketManager>,
+    rooms: Arc<RoomManager>,
 
     runtime: Runtime,
 }
@@ -32,6 +34,7 @@ pub struct Vinyl {
 pub struct VinylContext {
     pub db: Arc<Database>,
     pub audio: Arc<AudioSystem>,
+    pub rooms: Arc<RoomManager>,
     pub websockets: Arc<WebSocketManager>,
 }
 
@@ -54,9 +57,16 @@ impl Vinyl {
             .map_err(|e| VinylError::Fatal(e.to_string()))?;
 
         info!("Connecting to database...");
+
         let database = main_runtime.block_on(db::connect())?;
+        let rooms = RoomManager::new();
+
+        main_runtime
+            .block_on(rooms.init(&database))
+            .map_err(|e| VinylError::Fatal(e.to_string()))?;
 
         Ok(Self {
+            rooms,
             db: database.into(),
             audio: AudioSystem::new(),
             websockets: WebSocketManager::new(),
@@ -75,6 +85,7 @@ impl Vinyl {
         VinylContext {
             db: self.db.clone(),
             audio: self.audio.clone(),
+            rooms: self.rooms.clone(),
             websockets: self.websockets.clone(),
         }
     }

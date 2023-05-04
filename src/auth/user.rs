@@ -11,7 +11,7 @@ use scrypt::{
 /// A user that can access Vinyl, create rooms, and so on, given they have permissions.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct User {
-    pub id: Option<Thing>,
+    pub id: Thing,
     pub username: String,
 
     #[serde(skip_serializing)]

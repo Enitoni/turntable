@@ -26,7 +26,7 @@ pub struct Session {
 
 impl Session {
     pub async fn create(db: &Database, user: &User) -> Result<Self, ApiError> {
-        let user = user.id.clone().ok_or(ApiError::Unknown)?;
+        let user = user.id.clone();
 
         let token: String = spawn_blocking(|| {
             let mut rng = thread_rng();
