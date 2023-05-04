@@ -1,5 +1,7 @@
-use crate::db::{Database, Error};
-use anyhow::Result;
+use crate::{
+    db::{Database, Error},
+    util::ApiError,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use surrealdb::sql::Thing;
@@ -13,19 +15,24 @@ use scrypt::{
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct User {
     pub id: Option<Thing>,
-
     pub username: String,
-    pub password: String,
 
+    #[serde(skip_serializing)]
+    pub password: String,
     pub display_name: String,
 }
 
 impl User {
-    pub async fn create(db: &Database, username: String, password: String) -> Result<Self> {
+    pub async fn create(
+        db: &Database,
+        username: String,
+        password: String,
+    ) -> Result<Self, ApiError> {
         let salt = SaltString::generate(&mut OsRng);
 
         let hashed_password = Scrypt
-            .hash_password(password.as_bytes(), &salt)?
+            .hash_password(password.as_bytes(), &salt)
+            .map_err(|e| ApiError::Other(e.into()))?
             .to_string();
 
         let user: User = db
@@ -36,17 +43,18 @@ impl User {
                 "password": hashed_password,
                 "display_name": username,
             }))
-            .await?;
+            .await
+            .map_err(ApiError::from_db)?;
 
         Ok(user)
     }
 
-    pub async fn get(db: &Database, username: String) -> Result<Self> {
+    pub async fn get(db: &Database, username: &str) -> Result<Self, ApiError> {
         db.query("SELECT * FROM user WHERE username = $username")
             .bind(("username", username))
             .await?
             .take::<Option<Self>>(0)?
-            .ok_or(Error::NotFound("user").into())
+            .ok_or(ApiError::NotFound("user"))
     }
 
     pub fn validate_password(&self, incoming: &str) -> bool {

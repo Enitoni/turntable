@@ -4,13 +4,15 @@ use axum::{
     extract::{FromRef, FromRequestParts},
 };
 use hyper::{header, http::request::Parts, StatusCode};
-use rand::{thread_rng, Rng};
+use rand::{distributions::Alphanumeric, thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use surrealdb::sql::Thing;
+use tokio::task::spawn_blocking;
 
 use crate::{
-    db::{Database, Error},
+    db::{Database, Error, Record},
+    util::ApiError,
     VinylContext,
 };
 
@@ -23,34 +25,47 @@ pub struct Session {
 }
 
 impl Session {
-    pub async fn create(db: &Database, user: &User) -> Result<Self> {
-        let mut rng = thread_rng();
+    pub async fn create(db: &Database, user: &User) -> Result<Self, ApiError> {
+        let user = user.id.clone().ok_or(ApiError::Unknown)?;
 
-        let user = user.id.clone().ok_or(Error::Unknown)?;
+        let token: String = spawn_blocking(|| {
+            let mut rng = thread_rng();
 
-        let token: String = std::iter::repeat(())
-            .map(|_| rng.gen::<u8>())
-            .map(char::from)
-            .take(32)
-            .collect();
+            std::iter::repeat(())
+                .map(|_| rng.sample(Alphanumeric) as char)
+                .take(32)
+                .collect()
+        })
+        .await
+        .map_err(|e| ApiError::Other(e.into()))?;
 
-        let session: Self = db
+        #[derive(Serialize)]
+        struct NewSession {
+            id: String,
+            user: Thing,
+        }
+
+        let session: Record = db
             .create("session")
-            .content(json!({
-                "id": token,
-                "user": user,
-            }))
+            .content(NewSession { id: token, user })
             .await?;
+
+        let session = Self::get(db, &session.id().to_string()).await?;
 
         Ok(session)
     }
 
-    pub async fn get(db: &Database, token: &str) -> Result<Self> {
-        db.query("SELECT * FROM session:$token")
-            .bind(("token", token))
+    pub async fn get(db: &Database, token: &str) -> Result<Self, ApiError> {
+        db.query("SELECT *, user.* FROM type::thing($tb, $id)")
+            .bind(("tb", "session"))
+            .bind(("id", token))
             .await?
             .take::<Option<Self>>(0)?
-            .ok_or(Error::NotFound("session").into())
+            .ok_or(ApiError::NotFound("session"))
+    }
+
+    pub fn token(&self) -> String {
+        self.id.id.to_string()
     }
 }
 
