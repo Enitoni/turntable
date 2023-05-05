@@ -1,8 +1,11 @@
 use axum::{extract::State, Router as AxumRouter};
-use std::{env, net::SocketAddr};
+use std::{
+    env,
+    net::{Ipv6Addr, SocketAddr},
+};
 use tower_http::cors::{Any, CorsLayer};
 
-use crate::{audio, auth, VinylContext};
+use crate::{audio, auth, rooms, VinylContext};
 pub mod ws;
 
 pub const DEFAULT_PORT: u16 = 9050;
@@ -16,7 +19,7 @@ pub async fn run_server(context: VinylContext) {
         .map(|x| x.parse::<u16>().expect("Port must be a number"))
         .unwrap_or(DEFAULT_PORT);
 
-    let addr = ([127, 0, 0, 1], port).into();
+    let addr = (Ipv6Addr::UNSPECIFIED, port).into();
 
     let cors = CorsLayer::new()
         .allow_origin(Any)
@@ -26,6 +29,7 @@ pub async fn run_server(context: VinylContext) {
     let version_one_router = AxumRouter::new()
         .nest("/auth", auth::router())
         .nest("/gateway", ws::router())
+        .nest("/rooms", rooms::router())
         .nest("/audio", audio::router());
 
     let router = AxumRouter::new()

@@ -1,4 +1,10 @@
-use std::sync::{Arc, Weak};
+use std::{
+    convert::Infallible,
+    io::Read,
+    pin::Pin,
+    sync::{Arc, Weak},
+    task::{Context, Poll},
+};
 
 use crate::{
     audio::WaveStream,
@@ -7,7 +13,8 @@ use crate::{
     util::ApiError,
 };
 use crossbeam::atomic::AtomicCell;
-use parking_lot::Mutex;
+use futures_util::Stream;
+use parking_lot::{Mutex, RwLock};
 use serde::{Deserialize, Serialize};
 use surrealdb::sql::Thing;
 
@@ -26,7 +33,7 @@ pub struct RawRoom {
     connections: Vec<User>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct Room {
     #[serde(skip)]
     manager: Weak<RoomManager>,
@@ -36,13 +43,13 @@ pub struct Room {
     pub owner: User,
 
     #[serde(skip_deserializing)]
-    connections: Mutex<Vec<Connection>>,
+    connections: Arc<RwLock<Vec<(ConnectionId, User)>>>,
 }
 
 static ID_COUNTER: AtomicCell<u64> = AtomicCell::new(1);
 
 /// Describes a connection to the stream of this room
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Serialize)]
 pub struct Connection {
     #[serde(skip)]
     id: ConnectionId,
@@ -54,7 +61,7 @@ pub struct Connection {
     room_id: RoomId,
 
     #[serde(skip)]
-    stream: Arc<WaveStream>,
+    stream: WaveStream,
 
     user: User,
 }
@@ -78,27 +85,27 @@ impl Room {
     ) -> Result<Self, ApiError> {
         #[derive(Serialize)]
         struct NewRoom {
-            id: String,
             name: String,
             owner: Thing,
         }
 
-        let raw: RawRoom = db
+        let raw: Record = db
             .create("room")
             .content(NewRoom {
                 owner: user.id.clone(),
-                id: name.clone(),
                 name,
             })
             .await
             .map_err(ApiError::from_db)?;
+
+        let raw: RawRoom = Self::get(db, raw.id().to_string()).await?;
 
         Ok(Self::from_raw(raw, manager))
     }
 
     pub async fn all(db: &Database, manager: Weak<RoomManager>) -> Result<Vec<Self>, ApiError> {
         let raw_rooms: Vec<RawRoom> = db
-            .query("SELECT * FROM room")
+            .query("SELECT *, owner.* FROM room")
             .await?
             .take(0)
             .map_err(ApiError::Database)?;
@@ -111,22 +118,47 @@ impl Room {
         Ok(results)
     }
 
+    pub async fn get(db: &Database, id: String) -> Result<RawRoom, ApiError> {
+        db.query("SELECT *, owner.* FROM type::thing($tb, $id)")
+            .bind(("tb", "room"))
+            .bind(("id", id))
+            .await?
+            .take::<Option<RawRoom>>(0)?
+            .ok_or(ApiError::NotFound("Room"))
+    }
+
     pub fn connect(&self, stream: WaveStream, user: User) -> Connection {
         let connection = Connection {
             id: ID_COUNTER.fetch_add(1),
             manager: self.manager.clone(),
             room_id: self.id.clone(),
-            stream: stream.into(),
+            stream,
             user,
         };
 
-        self.connections.lock().push(connection.clone());
+        self.connections
+            .write()
+            .push((connection.id, connection.user.clone()));
 
         connection
     }
 
     pub fn disconnect(&self, id: ConnectionId) {
-        self.connections.lock().retain(|c| c.id != id)
+        self.connections.write().retain(|(c, _)| *c != id);
+    }
+
+    pub fn into_raw(self) -> RawRoom {
+        RawRoom {
+            id: self.id,
+            name: self.name,
+            owner: self.owner,
+            connections: self
+                .connections
+                .read()
+                .iter()
+                .map(|(_, u)| u.clone())
+                .collect(),
+        }
     }
 }
 
@@ -136,5 +168,17 @@ impl Drop for Connection {
             .upgrade()
             .expect("upgrade weak")
             .notify_disconnect(&self.room_id, self.id)
+    }
+}
+
+impl Stream for Connection {
+    type Item = Result<Vec<u8>, Infallible>;
+
+    fn poll_next(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let mut buf = vec![0; 2048];
+
+        self.stream.read(&mut buf).ok();
+
+        Poll::Ready(Some(Ok(buf)))
     }
 }
