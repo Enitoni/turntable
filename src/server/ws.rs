@@ -92,7 +92,7 @@ impl WebSocketManager {
                 .await
                 .send(Message::Text(message.clone()))
                 .await
-                .expect("send message");
+                .ok();
         }
     }
 }
