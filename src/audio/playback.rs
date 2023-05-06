@@ -2,7 +2,7 @@ use crate::ingest::{Sink, SinkId};
 use crossbeam::atomic::AtomicCell;
 use std::{ops::Range, sync::Mutex};
 
-use super::SAMPLES_PER_SEC;
+use super::{SAMPLES_PER_SEC, SAMPLE_RATE};
 
 /// How many bytes to load after hitting the threshold.
 pub const PRELOAD_AMOUNT: usize = 512 * 1000;
@@ -140,6 +140,10 @@ impl Scheduler {
             .sum();
 
         self.total_available.store(result);
+    }
+
+    pub fn current_seconds(&self) -> f32 {
+        self.offset.load() as f32 / (SAMPLE_RATE * 2) as f32
     }
 }
 

@@ -67,6 +67,14 @@ impl Input {
             Input::Url(_) => todo!(),
         }
     }
+
+    pub fn duration(&self) -> f32 {
+        match self {
+            Input::WaveDistrict(x) => x.duration(),
+            Input::YouTube(x) => x.duration(),
+            Input::Url(_) => todo!(),
+        }
+    }
 }
 
 impl Display for Input {
@@ -371,6 +379,12 @@ mod wavedistrict {
     struct Media {
         key: String,
         sources: Vec<Source>,
+        metadata: AudioMetadata,
+    }
+
+    #[derive(Debug, Clone, Deserialize)]
+    struct AudioMetadata {
+        duration: f32,
     }
 
     #[derive(Debug, Clone, Deserialize)]
@@ -427,6 +441,10 @@ mod wavedistrict {
                 stream: stream.into(),
                 stream_url: audio_url,
             }))
+        }
+
+        pub fn duration(&self) -> f32 {
+            self.audio.metadata.duration
         }
     }
 

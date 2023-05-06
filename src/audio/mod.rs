@@ -4,6 +4,7 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
+use surrealdb::sql::Thing;
 
 mod buffering;
 mod decoding;
@@ -28,6 +29,7 @@ pub use util::pipeline;
 
 #[derive(Clone)]
 pub struct AudioSystem {
+    events: Events,
     ingestion: Arc<Ingestion>,
     queue: Arc<Queue>,
     registry: Arc<buffering::BufferRegistry>,
@@ -35,11 +37,12 @@ pub struct AudioSystem {
 }
 
 impl AudioSystem {
-    pub fn new() -> Arc<Self> {
+    pub fn new(events: Events) -> Arc<Self> {
         let queue = Queue::new();
         let ingestion = Ingestion::new();
 
         Self {
+            events,
             registry: buffering::BufferRegistry::new().into(),
             scheduler: playback::Scheduler::new().into(),
             ingestion: ingestion.into(),
@@ -52,11 +55,20 @@ impl AudioSystem {
         self.registry.get_consumer()
     }
 
-    pub fn add(&self, input: Input) {
+    pub fn add(&self, user_id: UserId, input: Input) {
         // This is temporary for now
         let sink = self.ingestion.add(input.loader().unwrap());
-        let track = Track::new(sink);
-        self.queue.add_track(track, queuing::QueuePosition::Add);
+        let track = Track::new(input.duration(), input.to_string(), sink);
+        self.queue
+            .add_track(track.clone(), queuing::QueuePosition::Add);
+
+        self.events.emit(
+            Event::QueueAdd {
+                user: user_id,
+                track,
+            },
+            Recipients::All,
+        );
 
         let new_sinks: Vec<_> = self
             .queue
@@ -72,6 +84,14 @@ impl AudioSystem {
     pub fn next(&self) {
         self.queue.current_track().sink.consume();
         self.queue.next();
+
+        self.events.emit(
+            Event::TrackUpdate {
+                room: Thing::from(("undefined", "undefined")),
+                track: self.queue.current_track(),
+            },
+            Recipients::All,
+        );
 
         self.notify_queue_update();
     }
@@ -140,6 +160,14 @@ pub fn spawn_playback_thread(system: Arc<AudioSystem>) {
         for (_, _) in advancements.iter().skip(1) {
             read_samples_system.next();
         }
+
+        read_samples_system.events.emit(
+            Event::PlayerTime {
+                seconds: scheduler.current_seconds(),
+                timestamp: "".to_string(),
+            },
+            Recipients::All,
+        )
     };
 
     let tick = move || {
@@ -215,4 +243,9 @@ mod config {
 
 pub use config::*;
 
-use crate::ingest::{self, Ingestion};
+use crate::{
+    auth::UserId,
+    events::{Event, Events},
+    ingest::{self, Ingestion},
+    server::ws::Recipients,
+};

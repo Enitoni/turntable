@@ -63,6 +63,8 @@ impl Vinyl {
         info!("Connecting to database...");
 
         let events = Events::default();
+
+        let audio = AudioSystem::new(events.clone());
         let rooms = RoomManager::new(events.clone());
 
         let database = main_runtime.block_on(db::connect())?;
@@ -73,9 +75,9 @@ impl Vinyl {
 
         Ok(Self {
             rooms,
+            audio,
             events,
             db: database.into(),
-            audio: AudioSystem::new(),
             websockets: WebSocketManager::new(),
             runtime: main_runtime,
         })

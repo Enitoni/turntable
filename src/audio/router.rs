@@ -5,11 +5,16 @@ use tokio::task::spawn_blocking;
 
 use super::Input;
 use crate::{
+    auth::Session,
     ingest::InputError,
     server::{Context, Router},
 };
 
-async fn add_input(State(context): Context, query: String) -> Result<String, InputError> {
+async fn add_input(
+    session: Session,
+    State(context): Context,
+    query: String,
+) -> Result<String, InputError> {
     let input = spawn_blocking(move || Input::parse(&query))
         .await
         .map_err(|x| InputError::Other(Box::new(x)))??;
@@ -18,7 +23,7 @@ async fn add_input(State(context): Context, query: String) -> Result<String, Inp
     let response = format!("Added {} to the queue", name);
 
     trace!(target: "vinyl::server", "Added {} to the queue", name);
-    let _ = spawn_blocking(move || context.audio.add(input)).await;
+    let _ = spawn_blocking(move || context.audio.add(session.user.id, input)).await;
 
     Ok(response)
 }

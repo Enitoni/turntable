@@ -3,6 +3,7 @@ use serde::Serialize;
 use tokio::task::spawn_blocking;
 
 use crate::{
+    audio::Track,
     auth::{User, UserId},
     rooms::RoomId,
     server::ws::Recipients,
@@ -14,16 +15,29 @@ use crate::{
 #[serde(rename_all = "kebab-case")]
 pub enum Event {
     /// A new user connected the room stream
-    UserEnteredRoom { user: User, room: RoomId },
+    UserEnteredRoom {
+        user: User,
+        room: RoomId,
+    },
     /// A user disconnected from the room stream
-    UserLeftRoom { user: UserId, room: RoomId },
+    UserLeftRoom {
+        user: UserId,
+        room: RoomId,
+    },
     /// The current track in a room changed
     TrackUpdate {
         room: RoomId,
-        // TODO: Add track here
+        track: Track,
+    },
+    QueueAdd {
+        user: UserId,
+        track: Track,
     },
     /// Scheduler read a sink and set a new offset
-    PlayerTime { seconds: f32, timestamp: String },
+    PlayerTime {
+        seconds: f32,
+        timestamp: String,
+    },
 }
 
 type Message = (Event, Recipients);
