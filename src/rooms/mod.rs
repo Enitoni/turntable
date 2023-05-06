@@ -8,24 +8,26 @@ mod router;
 pub use room::*;
 pub use router::router;
 
-use crate::{auth::User, db::Database, util::ApiError};
+use crate::{auth::User, db::Database, events::Events, util::ApiError};
 
 #[derive(Debug)]
 pub struct RoomManager {
+    events: Events,
     me: Weak<RoomManager>,
     rooms: DashMap<RoomId, Room>,
 }
 
 impl RoomManager {
-    pub fn new() -> Arc<Self> {
+    pub fn new(events: Events) -> Arc<Self> {
         Arc::new_cyclic(|me| Self {
+            events,
             me: me.clone(),
             rooms: Default::default(),
         })
     }
 
     pub async fn init(&self, db: &Database) -> Result<(), ApiError> {
-        let rooms = Room::all(db, self.me.clone()).await?;
+        let rooms = Room::all(db, self.events.clone(), self.me.clone()).await?;
 
         for room in rooms {
             self.rooms.insert(room.id.clone(), room);
@@ -40,7 +42,7 @@ impl RoomManager {
         user: &User,
         name: String,
     ) -> Result<Room, ApiError> {
-        let room = Room::create(db, self.me.clone(), user, name).await?;
+        let room = Room::create(db, self.events.clone(), self.me.clone(), user, name).await?;
         self.rooms.insert(room.id.clone(), room.clone());
 
         Ok(room)

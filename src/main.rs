@@ -3,6 +3,7 @@ use std::sync::Arc;
 use audio::AudioSystem;
 use colored::Colorize;
 use db::Database;
+use events::Events;
 use log::{error, info};
 use server::ws::WebSocketManager;
 use thiserror::Error;
@@ -13,6 +14,7 @@ use crate::{logging::LogColor, rooms::RoomManager};
 mod audio;
 mod auth;
 mod db;
+mod events;
 mod http;
 mod ingest;
 mod logging;
@@ -27,11 +29,13 @@ pub struct Vinyl {
     websockets: Arc<WebSocketManager>,
     rooms: Arc<RoomManager>,
 
+    events: Events,
     runtime: Runtime,
 }
 
 #[derive(Clone)]
 pub struct VinylContext {
+    pub events: Events,
     pub db: Arc<Database>,
     pub audio: Arc<AudioSystem>,
     pub rooms: Arc<RoomManager>,
@@ -58,8 +62,10 @@ impl Vinyl {
 
         info!("Connecting to database...");
 
+        let events = Events::default();
+        let rooms = RoomManager::new(events.clone());
+
         let database = main_runtime.block_on(db::connect())?;
-        let rooms = RoomManager::new();
 
         main_runtime
             .block_on(rooms.init(&database))
@@ -67,6 +73,7 @@ impl Vinyl {
 
         Ok(Self {
             rooms,
+            events,
             db: database.into(),
             audio: AudioSystem::new(),
             websockets: WebSocketManager::new(),
@@ -77,8 +84,10 @@ impl Vinyl {
     fn run(&self) {
         audio::spawn_audio_thread(self.audio.clone());
 
-        self.runtime
-            .block_on(async move { server::run_server(self.context()).await });
+        self.runtime.block_on(async move {
+            tokio::spawn(events::check_events(self.context()));
+            server::run_server(self.context()).await
+        });
     }
 
     fn context(&self) -> VinylContext {
@@ -86,6 +95,7 @@ impl Vinyl {
             db: self.db.clone(),
             audio: self.audio.clone(),
             rooms: self.rooms.clone(),
+            events: self.events.clone(),
             websockets: self.websockets.clone(),
         }
     }

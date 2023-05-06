@@ -8,10 +8,12 @@ use scrypt::{
     Scrypt,
 };
 
+pub type UserId = Thing;
+
 /// A user that can access Vinyl, create rooms, and so on, given they have permissions.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct User {
-    pub id: Thing,
+    pub id: UserId,
     pub username: String,
 
     #[serde(skip_serializing)]

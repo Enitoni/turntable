@@ -8,13 +8,13 @@ use std::{
 use futures::{
     future::join_all,
     stream::{SplitSink, SplitStream},
-    StreamExt,
+    SinkExt, StreamExt,
 };
 use log::trace;
 use tokio::{spawn, sync::Mutex, time::sleep};
 
-type Incoming = SplitStream<WebSocket>;
-type Outgoing = SplitSink<WebSocket, Message>;
+type Incoming = SplitStream<Ws>;
+type Outgoing = SplitSink<Ws, Message>;
 
 #[derive(Debug)]
 pub struct WebSocketManager {
@@ -27,6 +27,13 @@ struct Connection {
     addr: SocketAddr,
     incoming: Mutex<Incoming>,
     outgoing: Mutex<Outgoing>,
+    user: User,
+}
+
+pub enum Recipients {
+    All,
+    Superuser,
+    Some(Vec<UserId>),
 }
 
 impl WebSocketManager {
@@ -43,22 +50,50 @@ impl WebSocketManager {
         ));
     }
 
-    async fn register_connection(&self, addr: SocketAddr, ws: WebSocket) {
+    async fn register_connection(&self, user: User, addr: SocketAddr, ws: Ws) {
         let (outgoing, incoming) = ws.split();
+
+        trace!(target: "vinyl::server", "WebSocket connected: {}", &user.display_name);
+
         let new_connection = Connection {
             incoming: incoming.into(),
             outgoing: outgoing.into(),
+            user,
             addr,
         }
         .into();
 
-        trace!(target: "vinyl::server", "WebSocket connected: {}", addr);
         self.connections.lock().await.insert(addr, new_connection);
     }
 
     async fn unregister_connection(&self, addr: SocketAddr) {
         trace!(target: "vinyl::server", "WebSocket disconnected: {}", addr);
         self.connections.lock().await.remove(&addr);
+    }
+
+    pub async fn broadcast(&self, message: String, recipients: Recipients) {
+        let connections: Vec<_> = self
+            .connections
+            .lock()
+            .await
+            .values()
+            .filter(|x| match &recipients {
+                Recipients::All => true,
+                Recipients::Superuser => todo!(),
+                Recipients::Some(targets) => targets.contains(&x.user.id),
+            })
+            .map(Arc::clone)
+            .collect();
+
+        for connection in connections {
+            connection
+                .outgoing
+                .lock()
+                .await
+                .send(Message::Text(message.clone()))
+                .await
+                .expect("send message");
+        }
     }
 }
 
@@ -92,12 +127,14 @@ async fn check_connections(manager: Arc<WebSocketManager>) {
 
 use axum::{
     extract::{
-        ws::{Message, WebSocket},
+        ws::{Message, WebSocket as Ws},
         ConnectInfo, State, WebSocketUpgrade,
     },
     response::Response,
     routing::get,
 };
+
+use crate::auth::{Session, User, UserId};
 
 use super::{Context, Router};
 
@@ -106,9 +143,15 @@ pub(super) fn router() -> Router {
 }
 
 async fn handler(
+    session: Session,
     State(context): Context,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     ws: WebSocketUpgrade,
 ) -> Response {
-    ws.on_upgrade(move |ws| async move { context.websockets.register_connection(addr, ws).await })
+    ws.on_upgrade(move |ws| async move {
+        context
+            .websockets
+            .register_connection(session.user, addr, ws)
+            .await
+    })
 }

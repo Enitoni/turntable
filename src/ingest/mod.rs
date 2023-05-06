@@ -1,5 +1,5 @@
 use std::{
-    io::{Read, Stdin, Write},
+    io::{Read, Write},
     process::{Child, ChildStdin, ChildStdout},
     sync::Arc,
     thread,
@@ -16,14 +16,11 @@ use log::trace;
 use parking_lot::Mutex;
 
 use crate::{
-    audio::{raw_samples_from_bytes, Sample, SAMPLES_PER_SEC, SAMPLE_IN_BYTES},
+    audio::{raw_samples_from_bytes, Sample, SAMPLES_PER_SEC},
     logging::LogColor,
 };
 
-use self::{
-    ffmpeg::spawn,
-    loading::{LoadResult, Loader},
-};
+use self::loading::{LoadResult, Loader};
 
 mod ffmpeg;
 mod input;

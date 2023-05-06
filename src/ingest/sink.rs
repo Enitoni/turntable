@@ -1,5 +1,5 @@
 use crate::{
-    audio::{util::Buffer, Sample, SAMPLES_PER_SEC},
+    audio::{util::Buffer, Sample},
     util::sync::Wait,
 };
 use crossbeam::atomic::AtomicCell;

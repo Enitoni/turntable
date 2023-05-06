@@ -8,13 +8,15 @@ use std::{
 
 use crate::{
     audio::WaveStream,
-    auth::User,
+    auth::{User, UserId},
     db::{Database, Record},
+    events::{Event, Events},
+    server::ws::Recipients,
     util::ApiError,
 };
 use crossbeam::atomic::AtomicCell;
 use futures_util::Stream;
-use parking_lot::{Mutex, RwLock};
+use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use surrealdb::sql::Thing;
 
@@ -37,6 +39,9 @@ pub struct RawRoom {
 pub struct Room {
     #[serde(skip)]
     manager: Weak<RoomManager>,
+
+    #[serde(skip)]
+    events: Events,
 
     pub id: RoomId,
     pub name: String,
@@ -67,8 +72,9 @@ pub struct Connection {
 }
 
 impl Room {
-    fn from_raw(raw: RawRoom, manager: Weak<RoomManager>) -> Self {
+    fn from_raw(raw: RawRoom, events: Events, manager: Weak<RoomManager>) -> Self {
         Self {
+            events,
             manager,
             id: raw.id,
             name: raw.name,
@@ -79,6 +85,7 @@ impl Room {
 
     pub async fn create(
         db: &Database,
+        events: Events,
         manager: Weak<RoomManager>,
         user: &User,
         name: String,
@@ -100,10 +107,14 @@ impl Room {
 
         let raw: RawRoom = Self::get(db, raw.id().to_string()).await?;
 
-        Ok(Self::from_raw(raw, manager))
+        Ok(Self::from_raw(raw, events, manager))
     }
 
-    pub async fn all(db: &Database, manager: Weak<RoomManager>) -> Result<Vec<Self>, ApiError> {
+    pub async fn all(
+        db: &Database,
+        events: Events,
+        manager: Weak<RoomManager>,
+    ) -> Result<Vec<Self>, ApiError> {
         let raw_rooms: Vec<RawRoom> = db
             .query("SELECT *, owner.* FROM room")
             .await?
@@ -112,7 +123,7 @@ impl Room {
 
         let results: Vec<_> = raw_rooms
             .into_iter()
-            .map(|r| Self::from_raw(r, manager.clone()))
+            .map(|r| Self::from_raw(r, events.clone(), manager.clone()))
             .collect();
 
         Ok(results)
@@ -132,18 +143,41 @@ impl Room {
             id: ID_COUNTER.fetch_add(1),
             manager: self.manager.clone(),
             room_id: self.id.clone(),
+            user: user.clone(),
             stream,
-            user,
         };
 
         self.connections
             .write()
             .push((connection.id, connection.user.clone()));
 
+        self.events.emit(
+            Event::UserEnteredRoom {
+                user,
+                room: self.id.clone(),
+            },
+            Recipients::Some(self.user_ids()),
+        );
+
         connection
     }
 
     pub fn disconnect(&self, id: ConnectionId) {
+        let user = self
+            .connections
+            .read()
+            .iter()
+            .find_map(|(c, u)| (c == &id).then(|| u.id.clone()))
+            .expect("user exists in connections");
+
+        self.events.emit(
+            Event::UserLeftRoom {
+                room: self.id.clone(),
+                user,
+            },
+            Recipients::Some(self.user_ids()),
+        );
+
         self.connections.write().retain(|(c, _)| *c != id);
     }
 
@@ -159,6 +193,14 @@ impl Room {
                 .map(|(_, u)| u.clone())
                 .collect(),
         }
+    }
+
+    fn user_ids(&self) -> Vec<UserId> {
+        self.connections
+            .read()
+            .iter()
+            .map(|(_, u)| u.id.clone())
+            .collect()
     }
 }
 
