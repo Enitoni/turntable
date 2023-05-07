@@ -249,3 +249,209 @@ use crate::{
     ingest::{self, Ingestion},
     server::ws::Recipients,
 };
+
+mod new {
+
+    use std::sync::Weak;
+    use std::{fmt::Debug, sync::Arc};
+
+    use crossbeam::atomic::AtomicCell;
+    use parking_lot::{Mutex, RwLock};
+    use ringbuf::{Consumer, Producer, RingBuffer};
+
+    use crate::ingest::{Sink, SinkId};
+    use crate::util::ID_COUNTER;
+
+    use super::{Sample, SAMPLES_PER_SEC};
+
+    /// Handles playback for a list of sinks.
+    #[derive(Debug)]
+    pub struct Player {
+        timeline: Timeline,
+        stream: Arc<Stream>,
+    }
+
+    impl Player {
+        /// Set the sinks to play.
+        ///
+        /// **Note that the first sink is the one currently being played.**
+        pub fn set_sinks(&self, sinks: Vec<Sink>) {
+            todo!()
+        }
+
+        /// Get a new consumer of the underlying stream.
+        pub fn consumer(&self) -> StreamConsumer {
+            self.stream.consumer()
+        }
+
+        /// Advance the playback by reading from sinks and pushing samples into a ringbuffer.
+        /// Returns information about the advancement.
+        pub fn process(&self) -> ProcessMetadata {
+            todo!()
+        }
+    }
+
+    impl Default for Player {
+        fn default() -> Self {
+            Self {
+                timeline: Timeline::default(),
+                stream: Stream::new(),
+            }
+        }
+    }
+
+    /// Describes the result of processing a chunk.
+    #[derive(Debug, Clone)]
+    pub struct ProcessMetadata {
+        /// Offset of the sink currently playing.
+        pub new_sink_offset: usize,
+
+        /// Difference in this offset to the last one.
+        /// This will be 0 if the player has reached the end, is waiting for sinks to be loaded, or is paused.
+        pub difference: usize,
+
+        /// List of sinks that need more samples
+        ///
+        /// When the player gets close to the end of available data
+        /// this Vec will contain the id of one or more sinks that need to be loaded to.
+        pub needs_loading: Vec<SinkId>,
+
+        /// The amount of sinks that were fully played.
+        ///
+        /// This is 1 or more when the player has finished playing a track, otherwise it is usually 0.
+        ///
+        /// **Note that finished can also mean the sink was skipped due to an error.**
+        pub consumed_sinks: usize,
+    }
+
+    /// A list of consecutive sinks that keeps track of offset and amount loaded.
+    ///
+    /// This is responsible for advancing the playback.
+    #[derive(Debug, Default)]
+    pub struct Timeline {
+        /// A sequence of sinks. The first one is the currently playing one.
+        sinks: Mutex<Vec<Sink>>,
+        /// Offset of the current sink.
+        offset: AtomicCell<usize>,
+        /// The total amount of samples that have been advanced.
+        total_offset: AtomicCell<usize>,
+        /// Amount of contiguous available samples.
+        total_available: AtomicCell<usize>,
+    }
+
+    impl Timeline {
+        pub fn set_sinks(&self, sinks: Vec<Sink>) {
+            *self.sinks.lock() = sinks
+        }
+
+        /// Advance the timeline and return a list of advancements
+        /// describing sinks to read from or load to.
+        pub fn advance(&self) -> Vec<Advancement> {
+            todo!()
+        }
+    }
+
+    #[derive(Debug)]
+    pub enum Advancement {
+        /// Read from a sink at a specific offset.
+        Read {
+            sink: Sink,
+            start_offset: usize,
+            end_offset: usize,
+        },
+        /// Request loading into a sink.
+        Load { sink: SinkId, amount: usize },
+    }
+
+    type StreamConsumerId = u64;
+
+    /// Represents a stream of audio that can be consumed from multiple places.
+    pub struct Stream {
+        me: Weak<Stream>,
+        entries: Mutex<Vec<(StreamConsumerId, Producer<Sample>)>>,
+
+        /// Preloaded samples a consumer will be filled with
+        preloaded: RwLock<[Sample; SAMPLES_PER_SEC]>,
+    }
+
+    impl Stream {
+        pub fn new() -> Arc<Self> {
+            Arc::new_cyclic(|me| Stream {
+                me: me.clone(),
+                entries: Default::default(),
+                preloaded: RwLock::new([0f32; SAMPLES_PER_SEC]),
+            })
+        }
+
+        /// Create a new consumer preloaded with samples
+        pub fn consumer(&self) -> StreamConsumer {
+            let buffer = RingBuffer::new(SAMPLES_PER_SEC);
+
+            let (mut producer, consumer) = buffer.split();
+
+            let preloaded = self.preloaded.read();
+            producer.push_slice(&*preloaded);
+
+            let stream_consumer = StreamConsumer {
+                id: ID_COUNTER.fetch_add(1),
+                stream: self.me.clone(),
+                underlying: consumer,
+            };
+
+            self.entries.lock().push((stream_consumer.id, producer));
+            stream_consumer
+        }
+
+        /// Write samples to all consumers and the preload
+        pub fn write(&self, buf: &[Sample]) {
+            let mut entries = self.entries.lock();
+
+            for (_, producer) in entries.iter_mut() {
+                producer.push_slice(buf);
+            }
+
+            let mut preloaded = self.preloaded.write();
+            let slice = &mut preloaded[..buf.len()];
+            slice.copy_from_slice(buf);
+        }
+
+        fn remove(&self, id: StreamConsumerId) {
+            self.entries.lock().retain(|(i, _)| i != &id);
+        }
+    }
+
+    impl Debug for Stream {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "(Stream)")
+        }
+    }
+
+    /// A consumer of a [Stream]
+    pub struct StreamConsumer {
+        id: StreamConsumerId,
+        stream: Weak<Stream>,
+        underlying: Consumer<Sample>,
+    }
+
+    impl StreamConsumer {
+        /// Read from the consumer, returning how many samples were read
+        pub fn read(&mut self, buf: &mut [Sample]) -> usize {
+            self.underlying.pop_slice(buf)
+        }
+    }
+
+    impl Drop for StreamConsumer {
+        fn drop(&mut self) {
+            self.stream
+                .upgrade()
+                .expect("stream is upgraded, because it will always exist")
+                .remove(self.id)
+        }
+    }
+
+    impl Debug for StreamConsumer {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "(StreamConsumer)")
+        }
+    }
+}
