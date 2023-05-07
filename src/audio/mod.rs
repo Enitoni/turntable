@@ -415,6 +415,9 @@ mod new {
             slice.copy_from_slice(buf);
         }
 
+        /// Remove an entry after the consumer has been dropped
+        ///
+        /// **This should not ever be called manually.**
         fn remove(&self, id: StreamConsumerId) {
             self.entries.lock().retain(|(i, _)| i != &id);
         }
