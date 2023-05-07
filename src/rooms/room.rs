@@ -12,9 +12,8 @@ use crate::{
     db::{Database, Record},
     events::{Event, Events},
     server::ws::Recipients,
-    util::ApiError,
+    util::{ApiError, ID_COUNTER},
 };
-use crossbeam::atomic::AtomicCell;
 use futures_util::Stream;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
@@ -50,8 +49,6 @@ pub struct Room {
     #[serde(skip_deserializing)]
     connections: Arc<RwLock<Vec<(ConnectionId, User)>>>,
 }
-
-static ID_COUNTER: AtomicCell<u64> = AtomicCell::new(1);
 
 /// Describes a connection to the stream of this room
 #[derive(Debug, Serialize)]

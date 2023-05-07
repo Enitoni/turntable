@@ -1,11 +1,9 @@
 use crate::{
     audio::{util::Buffer, Sample},
-    util::sync::Wait,
+    util::{sync::Wait, ID_COUNTER},
 };
 use crossbeam::atomic::AtomicCell;
 use std::{fmt::Display, sync::Arc};
-
-static ID_COUNTER: AtomicCell<u64> = AtomicCell::new(1);
 
 pub type SinkId = u64;
 pub type Sink = Arc<InternalSink>;

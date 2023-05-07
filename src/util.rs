@@ -1,4 +1,5 @@
 use axum::response::IntoResponse;
+use crossbeam::atomic::AtomicCell;
 use hyper::StatusCode;
 use thiserror::Error;
 
@@ -26,6 +27,8 @@ pub enum ApiError {
 use surrealdb::error::Api as ApiErr;
 use surrealdb::error::Db as DbErr;
 use surrealdb::Error as SurrealErr;
+
+pub static ID_COUNTER: AtomicCell<u64> = AtomicCell::new(1);
 
 impl ApiError {
     pub fn from_db(err: SurrealErr) -> Self {
