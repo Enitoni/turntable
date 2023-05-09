@@ -1,228 +1,18 @@
-use log::{info, warn};
-use std::{
-    sync::Arc,
-    thread,
-    time::{Duration, Instant},
-};
-use surrealdb::sql::Thing;
-
-mod buffering;
 mod decoding;
 mod encoding;
-mod playback;
 mod processing;
 mod queuing;
-mod router;
 mod source;
 mod track;
 pub mod util;
 
-pub use buffering::*;
+use crate::ingest;
 pub use decoding::raw_samples_from_bytes;
 pub use encoding::*;
 pub use ingest::Input;
-pub use playback::*;
-pub use queuing::Queue;
-pub use router::router;
+pub use queuing::*;
 pub use track::Track;
 pub use util::pipeline;
-
-#[derive(Clone)]
-pub struct AudioSystem {
-    events: Events,
-    ingestion: Arc<Ingestion>,
-    queue: Arc<Queue>,
-    registry: Arc<buffering::BufferRegistry>,
-    scheduler: Arc<playback::Scheduler>,
-}
-
-impl AudioSystem {
-    pub fn new(events: Events) -> Arc<Self> {
-        let queue = Queue::new();
-        let ingestion = Ingestion::new();
-
-        Self {
-            events,
-            registry: buffering::BufferRegistry::new().into(),
-            scheduler: playback::Scheduler::new().into(),
-            ingestion: ingestion.into(),
-            queue: queue.into(),
-        }
-        .into()
-    }
-
-    pub fn stream(&self) -> AudioBufferConsumer {
-        self.registry.get_consumer()
-    }
-
-    pub fn add(&self, user_id: UserId, input: Input) {
-        // This is temporary for now
-        let sink = self.ingestion.add(input.loader().unwrap());
-        let track = Track::new(input.duration(), input.to_string(), sink);
-        self.queue
-            .add_track(track.clone(), queuing::QueuePosition::Add);
-
-        self.events.emit(
-            Event::QueueAdd {
-                user: user_id,
-                track,
-            },
-            Recipients::All,
-        );
-
-        let new_sinks: Vec<_> = self
-            .queue
-            .peek_ahead(5)
-            .into_iter()
-            .map(|t| t.sink)
-            .collect();
-
-        self.scheduler.set_sinks(new_sinks);
-        self.notify_queue_update();
-    }
-
-    pub fn next(&self) {
-        self.queue.current_track().sink.consume();
-        self.queue.next();
-
-        self.events.emit(
-            Event::TrackUpdate {
-                room: Thing::from(("undefined", "undefined")),
-                track: self.queue.current_track(),
-            },
-            Recipients::All,
-        );
-
-        self.notify_queue_update();
-    }
-
-    fn notify_queue_update(&self) {
-        let new_sinks: Vec<_> = self
-            .queue
-            .peek_ahead(5)
-            .into_iter()
-            .map(|t| t.sink)
-            .collect();
-
-        self.scheduler.set_sinks(new_sinks);
-    }
-}
-
-pub fn spawn_audio_thread(system: Arc<AudioSystem>) {
-    ingest::spawn_loading_thread(system.ingestion.clone());
-    ingest::spawn_processing_thread(system.ingestion.clone());
-    ingest::spawn_load_write_thread(system.ingestion.clone());
-    ingest::spawn_cleanup_thread(system.ingestion.clone());
-
-    spawn_scheduler_load_check_thread(system.clone());
-    spawn_playback_thread(system);
-}
-
-pub fn spawn_scheduler_load_check_thread(system: Arc<AudioSystem>) {
-    let scheduler = system.scheduler.clone();
-    let ingestion = system.ingestion.clone();
-
-    let run = move || {
-        info!("Now listening for load requests",);
-
-        loop {
-            let requests = scheduler.preload().first().cloned();
-
-            if let Some((id, amount)) = requests {
-                ingestion.request(id, amount);
-                scheduler.notify_load();
-            }
-
-            thread::sleep(Duration::from_millis(500));
-        }
-    };
-
-    thread::Builder::new()
-        .name("audio_loading".to_string())
-        .spawn(run)
-        .unwrap();
-}
-
-pub fn spawn_playback_thread(system: Arc<AudioSystem>) {
-    let ingestion = system.ingestion.clone();
-    let scheduler = system.scheduler.clone();
-    let read_samples_system = system.clone();
-
-    let read_samples = move |buf: &mut [Sample]| {
-        let advancements = scheduler.advance(buf.len());
-        let mut amount_read = 0;
-
-        for (id, range) in advancements.iter() {
-            let sink = ingestion.get(*id);
-            amount_read += sink.read(range.start, &mut buf[amount_read..]);
-        }
-
-        for (_, _) in advancements.iter().skip(1) {
-            read_samples_system.next();
-        }
-
-        read_samples_system.events.emit(
-            Event::PlayerTime {
-                seconds: scheduler.current_seconds(),
-                timestamp: "".to_string(),
-            },
-            Recipients::All,
-        )
-    };
-
-    let tick = move || {
-        let mut samples = vec![0.; STREAM_CHUNK_SIZE];
-        read_samples(&mut samples);
-
-        let samples_as_bytes: Vec<_> = samples
-            .into_iter()
-            .flat_map(|sample| sample.to_le_bytes())
-            .collect();
-
-        system.registry.write_byte_samples(&samples_as_bytes);
-    };
-
-    thread::Builder::new()
-        .name("audio_stream".to_string())
-        .spawn(move || {
-            info!(
-                "Now processing {} samples per {}ms ({} sample/s) at {:.1} kHz",
-                STREAM_CHUNK_SIZE,
-                STREAM_CHUNK_DURATION.as_millis(),
-                SAMPLES_PER_SEC,
-                SAMPLE_RATE as f32 / 1000.
-            );
-
-            loop {
-                let now = Instant::now();
-                tick();
-
-                wait_for_next(now);
-            }
-        })
-        .unwrap();
-}
-
-fn wait_for_next(now: Instant) {
-    let elapsed = now.elapsed();
-    let elapsed_micros = elapsed.as_micros();
-    let elapsed_millis = elapsed_micros / 1000;
-
-    let duration_micros = STREAM_CHUNK_DURATION.as_micros();
-
-    if elapsed_millis > SAMPLES_PER_SEC as u128 / 10000 {
-        warn!(
-            "Stream took too long ({}ms) to process samples!",
-            elapsed_millis
-        )
-    }
-
-    let corrected = duration_micros
-        .checked_sub(elapsed_micros)
-        .unwrap_or_default();
-
-    spin_sleep::sleep(Duration::from_micros(corrected as u64));
-}
 
 mod config {
     use std::time::Duration;
@@ -239,30 +29,28 @@ mod config {
     pub const STREAM_CHUNK_DURATION: Duration = Duration::from_millis(100);
     pub const STREAM_CHUNK_SIZE: usize =
         (((SAMPLES_PER_SEC as u128) * STREAM_CHUNK_DURATION.as_millis()) / 1000) as usize;
+
+    pub const PRELOAD_AMOUNT: usize = 512 * 1000;
+    pub const PRELOAD_THRESHOLD: usize = SAMPLES_PER_SEC * 20;
 }
 
 pub use config::*;
 
-use crate::{
-    auth::UserId,
-    events::{Event, Events},
-    ingest::{self, Ingestion},
-    server::ws::Recipients,
-};
-
-mod new {
+pub mod new {
 
     use std::sync::Weak;
+    use std::time::Duration;
     use std::{fmt::Debug, sync::Arc};
 
     use crossbeam::atomic::AtomicCell;
     use parking_lot::{Mutex, RwLock};
     use ringbuf::{Consumer, Producer, RingBuffer};
 
+    use crate::audio::PRELOAD_THRESHOLD;
     use crate::ingest::{Sink, SinkId};
     use crate::util::ID_COUNTER;
 
-    use super::{Sample, SAMPLES_PER_SEC};
+    use super::{Sample, SAMPLES_PER_SEC, STREAM_CHUNK_SIZE};
 
     /// Handles playback for a list of sinks.
     #[derive(Debug)]
@@ -276,7 +64,7 @@ mod new {
         ///
         /// **Note that the first sink is the one currently being played.**
         pub fn set_sinks(&self, sinks: Vec<Sink>) {
-            todo!()
+            self.timeline.set_sinks(sinks);
         }
 
         /// Get a new consumer of the underlying stream.
@@ -284,10 +72,38 @@ mod new {
             self.stream.consumer()
         }
 
+        /// Return the sink to preload, if any
+        pub fn preload(&self) -> Option<SinkId> {
+            self.timeline.preload()
+        }
+
         /// Advance the playback by reading from sinks and pushing samples into a ringbuffer.
         /// Returns information about the advancement.
         pub fn process(&self) -> ProcessMetadata {
-            todo!()
+            let mut samples = vec![0.; STREAM_CHUNK_SIZE];
+
+            let current_offset = self.timeline.offset.load();
+            let advancements = self.timeline.advance(samples.len());
+
+            let mut amount_read = 0;
+            let consumed_sinks = advancements.len().saturating_sub(1);
+
+            for advancement in advancements {
+                amount_read += advancement
+                    .sink
+                    .read(advancement.start_offset, &mut samples[amount_read..]);
+            }
+
+            self.stream.write(&samples);
+
+            let new_sink_offset = self.timeline.offset.load();
+            let difference = new_sink_offset.saturating_sub(current_offset);
+
+            ProcessMetadata {
+                new_sink_offset,
+                consumed_sinks,
+                difference,
+            }
         }
     }
 
@@ -310,12 +126,6 @@ mod new {
         /// This will be 0 if the player has reached the end, is waiting for sinks to be loaded, or is paused.
         pub difference: usize,
 
-        /// List of sinks that need more samples
-        ///
-        /// When the player gets close to the end of available data
-        /// this Vec will contain the id of one or more sinks that need to be loaded to.
-        pub needs_loading: Vec<SinkId>,
-
         /// The amount of sinks that were fully played.
         ///
         /// This is 1 or more when the player has finished playing a track, otherwise it is usually 0.
@@ -335,8 +145,6 @@ mod new {
         offset: AtomicCell<usize>,
         /// The total amount of samples that have been advanced.
         total_offset: AtomicCell<usize>,
-        /// Amount of contiguous available samples.
-        total_available: AtomicCell<usize>,
     }
 
     impl Timeline {
@@ -344,23 +152,83 @@ mod new {
             *self.sinks.lock() = sinks
         }
 
-        /// Advance the timeline and return a list of advancements
-        /// describing sinks to read from or load to.
-        pub fn advance(&self) -> Vec<Advancement> {
-            todo!()
+        /// Optionally returns a sink to preload if necessary
+        pub fn preload(&self) -> Option<SinkId> {
+            let sinks: Vec<_> = self.sinks.lock().iter().cloned().collect();
+
+            let total_available: usize = sinks
+                .iter()
+                .scan(true, |previous_was_complete, item| {
+                    if !*previous_was_complete {
+                        return None;
+                    }
+
+                    let available = item.available();
+                    *previous_was_complete = item.is_complete();
+
+                    Some(available)
+                })
+                .sum();
+
+            let available = total_available.saturating_sub(self.offset.load());
+
+            if available > PRELOAD_THRESHOLD {
+                return None;
+            }
+
+            sinks
+                .into_iter()
+                .filter(|s| !s.is_complete())
+                .take(1)
+                .find_map(|s| (!s.is_pending()).then(|| s.id()))
+        }
+
+        /// Advance the timeline and return a list of advancements describing sinks to read from.
+        pub fn advance(&self, amount: usize) -> Vec<Advancement> {
+            let mut result = vec![];
+
+            let sinks: Vec<_> = self.sinks.lock().iter().cloned().collect();
+
+            let mut remaining = amount;
+            let mut offset = self.offset.load();
+
+            for sink in sinks {
+                if remaining == 0 {
+                    break;
+                }
+
+                let available = sink.available();
+                let amount_ahead = available.saturating_sub(offset);
+                let amount_to_read = amount_ahead.min(remaining);
+                let new_offset = offset + amount_to_read;
+
+                remaining -= amount_to_read;
+                result.push(Advancement {
+                    sink: sink.clone(),
+                    start_offset: offset,
+                    end_offset: new_offset,
+                });
+
+                self.total_offset.fetch_add(amount_to_read);
+                self.offset.store(new_offset);
+
+                offset = 0;
+
+                if !sink.is_complete() {
+                    break;
+                }
+            }
+
+            result
         }
     }
 
     #[derive(Debug)]
-    pub enum Advancement {
-        /// Read from a sink at a specific offset.
-        Read {
-            sink: Sink,
-            start_offset: usize,
-            end_offset: usize,
-        },
-        /// Request loading into a sink.
-        Load { sink: SinkId, amount: usize },
+    /// Read from a sink at a specific offset.
+    pub struct Advancement {
+        sink: Sink,
+        start_offset: usize,
+        end_offset: usize,
     }
 
     type StreamConsumerId = u64;
@@ -438,8 +306,24 @@ mod new {
 
     impl StreamConsumer {
         /// Read from the consumer, returning how many samples were read
+        ///
+        /// **Note: This will block if the ringbuffer is empty, until it is not**
         pub fn read(&mut self, buf: &mut [Sample]) -> usize {
-            self.underlying.pop_slice(buf)
+            let requested_samples = buf.len();
+            let mut samples_read = 0;
+
+            while samples_read < requested_samples {
+                samples_read += self.underlying.pop_slice(&mut buf[samples_read..]);
+
+                if samples_read < requested_samples {
+                    let remaining = requested_samples - samples_read;
+
+                    // Waiting for buffer ensures minimal busy-wait
+                    wait_for_buffer(remaining);
+                }
+            }
+
+            requested_samples
         }
     }
 
@@ -456,5 +340,12 @@ mod new {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             write!(f, "(StreamConsumer)")
         }
+    }
+
+    fn wait_for_buffer(samples_to_wait_for: usize) {
+        let seconds_per_sample = 1. / SAMPLES_PER_SEC as f32;
+        let seconds_to_wait = (samples_to_wait_for as f32) * seconds_per_sample;
+
+        spin_sleep::sleep(Duration::from_secs_f32(seconds_to_wait));
     }
 }

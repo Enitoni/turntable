@@ -19,6 +19,9 @@ pub struct InternalSink {
     status: AtomicCell<SinkStatus>,
     wait: Wait,
 
+    /// This is true when the sink is pending (being loaded into)
+    pub(super) pending: AtomicCell<bool>,
+
     /// This is true when the sink should be cleared and deleted
     pub(super) consumed: AtomicCell<bool>,
 }
@@ -56,6 +59,7 @@ impl InternalSink {
             id: ID_COUNTER.fetch_add(1),
             expected_length: length,
             consumed: false.into(),
+            pending: false.into(),
             wait: Wait::default(),
         }
     }
@@ -65,7 +69,7 @@ impl InternalSink {
         self.status
             .store(SinkStatus::Partial(self.samples.length()));
 
-        self.wait.notify();
+        self.pending.store(false);
     }
 
     pub fn read(&self, offset: usize, buf: &mut [Sample]) -> usize {
@@ -107,6 +111,10 @@ impl InternalSink {
             self.status.load(),
             SinkStatus::Completed(_) | SinkStatus::Error
         )
+    }
+
+    pub fn is_pending(&self) -> bool {
+        self.pending.load()
     }
 
     pub fn consume(&self) {

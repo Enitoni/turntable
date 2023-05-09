@@ -137,12 +137,11 @@ impl Ingestion {
         self.ensure_correct_sink(id);
 
         let sink = self.sinks.get(&id).expect("sink exists");
+        sink.pending.store(true);
 
         self.loading_sender
             .send(LoadingMessage::Load(amount))
             .unwrap();
-
-        sink.wait_for_write()
     }
 
     pub fn current_sink(&self) -> Option<Sink> {
@@ -316,4 +315,11 @@ pub fn spawn_cleanup_thread(ingestion: Arc<Ingestion>) {
         .name("ingest_sink_cleanup".to_string())
         .spawn(run)
         .unwrap();
+}
+
+pub fn run_ingestion(ingestion: Arc<Ingestion>) {
+    spawn_loading_thread(ingestion.clone());
+    spawn_processing_thread(ingestion.clone());
+    spawn_load_write_thread(ingestion.clone());
+    spawn_cleanup_thread(ingestion);
 }

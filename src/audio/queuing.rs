@@ -2,6 +2,7 @@ use std::sync::Mutex;
 
 use super::Track;
 
+#[derive(Debug)]
 pub struct Queue {
     tracks: Mutex<Vec<Track>>,
     index: Mutex<usize>,

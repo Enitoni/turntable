@@ -35,8 +35,8 @@ pub enum Event {
     },
     /// Scheduler read a sink and set a new offset
     PlayerTime {
+        room: RoomId,
         seconds: f32,
-        timestamp: String,
     },
 }
 

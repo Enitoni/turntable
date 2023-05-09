@@ -5,7 +5,7 @@ use std::{
 };
 use tower_http::cors::{Any, CorsLayer};
 
-use crate::{audio, auth, rooms, VinylContext};
+use crate::{auth, rooms, VinylContext};
 pub mod ws;
 
 pub const DEFAULT_PORT: u16 = 9050;
@@ -29,8 +29,7 @@ pub async fn run_server(context: VinylContext) {
     let version_one_router = AxumRouter::new()
         .nest("/auth", auth::router())
         .nest("/gateway", ws::router())
-        .nest("/rooms", rooms::router())
-        .nest("/audio", audio::router());
+        .nest("/rooms", rooms::router());
 
     let router = AxumRouter::new()
         .nest("/v1", version_one_router)

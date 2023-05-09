@@ -1,11 +1,11 @@
 use std::fmt::Debug;
 
-use super::AudioBufferConsumer;
+use super::{new::StreamConsumer, SAMPLE_IN_BYTES};
 use std::io::Read;
 
 /// Implements streaming a .wav file
 pub struct WaveStream {
-    underlying: AudioBufferConsumer,
+    underlying: StreamConsumer,
     did_write_header: bool,
 }
 
@@ -47,7 +47,7 @@ impl WaveStream {
 
     pub const MIME: &'static str = "audio/wav";
 
-    pub fn new(underlying: AudioBufferConsumer) -> Self {
+    pub fn new(underlying: StreamConsumer) -> Self {
         Self {
             underlying,
             did_write_header: false,
@@ -75,7 +75,19 @@ impl Read for WaveStream {
             self.did_write_header = true;
         }
 
-        bytes_written += self.underlying.read(&mut buf[bytes_written..])?;
+        let body_buf = &mut buf[bytes_written..];
+
+        let mut samples = vec![0f32; body_buf.len() / SAMPLE_IN_BYTES];
+        let amount_of_samples = self.underlying.read(&mut samples);
+
+        let samples_in_bytes: Vec<_> = samples[..amount_of_samples]
+            .iter()
+            .flat_map(|s| s.to_le_bytes())
+            .collect();
+
+        body_buf[..samples_in_bytes.len()].copy_from_slice(&samples_in_bytes);
+        bytes_written += samples_in_bytes.len();
+
         Ok(bytes_written)
     }
 }

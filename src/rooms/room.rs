@@ -1,92 +1,54 @@
-use std::{
-    convert::Infallible,
-    io::Read,
-    pin::Pin,
-    sync::{Arc, Weak},
-    task::{Context, Poll},
-};
+use std::sync::Arc;
 
 use crate::{
-    audio::WaveStream,
-    auth::{User, UserId},
+    audio::{new::Player, Queue, QueuePosition, Track},
+    auth::User,
     db::{Database, Record},
-    events::{Event, Events},
-    server::ws::Recipients,
-    util::{ApiError, ID_COUNTER},
+    util::ApiError,
 };
-use futures_util::Stream;
-use parking_lot::RwLock;
+
 use serde::{Deserialize, Serialize};
 use surrealdb::sql::Thing;
 
-use super::RoomManager;
-
-pub type ConnectionId = u64;
 pub type RoomId = Thing;
 
 #[derive(Debug, Deserialize, Serialize)]
-pub struct RawRoom {
+pub struct RoomData {
     id: RoomId,
     name: String,
     owner: User,
-
-    #[serde(skip_deserializing)]
-    connections: Vec<User>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Room {
-    #[serde(skip)]
-    manager: Weak<RoomManager>,
-
-    #[serde(skip)]
-    events: Events,
-
     pub id: RoomId,
     pub name: String,
     pub owner: User,
 
-    #[serde(skip_deserializing)]
-    connections: Arc<RwLock<Vec<(ConnectionId, User)>>>,
-}
-
-/// Describes a connection to the stream of this room
-#[derive(Debug, Serialize)]
-pub struct Connection {
-    #[serde(skip)]
-    id: ConnectionId,
-
-    #[serde(skip)]
-    manager: Weak<RoomManager>,
-
-    #[serde(skip)]
-    room_id: RoomId,
-
-    #[serde(skip)]
-    stream: WaveStream,
-
-    user: User,
+    pub player: Arc<Player>,
+    pub queue: Arc<Queue>,
 }
 
 impl Room {
-    fn from_raw(raw: RawRoom, events: Events, manager: Weak<RoomManager>) -> Self {
+    fn from_data(raw: RoomData) -> Self {
         Self {
-            events,
-            manager,
             id: raw.id,
             name: raw.name,
             owner: raw.owner,
-            connections: Default::default(),
+            queue: Queue::new().into(),
+            player: Player::default().into(),
         }
     }
 
-    pub async fn create(
-        db: &Database,
-        events: Events,
-        manager: Weak<RoomManager>,
-        user: &User,
-        name: String,
-    ) -> Result<Self, ApiError> {
+    pub fn into_data(self) -> RoomData {
+        RoomData {
+            id: self.id,
+            name: self.name,
+            owner: self.owner,
+        }
+    }
+
+    pub async fn create(db: &Database, user: &User, name: String) -> Result<Self, ApiError> {
         #[derive(Serialize)]
         struct NewRoom {
             name: String,
@@ -102,122 +64,52 @@ impl Room {
             .await
             .map_err(ApiError::from_db)?;
 
-        let raw: RawRoom = Self::get(db, raw.id().to_string()).await?;
+        let raw: RoomData = Self::get(db, raw.id().to_string()).await?;
 
-        Ok(Self::from_raw(raw, events, manager))
+        Ok(Self::from_data(raw))
     }
 
-    pub async fn all(
-        db: &Database,
-        events: Events,
-        manager: Weak<RoomManager>,
-    ) -> Result<Vec<Self>, ApiError> {
-        let raw_rooms: Vec<RawRoom> = db
+    pub async fn all(db: &Database) -> Result<Vec<Self>, ApiError> {
+        let raw_rooms: Vec<RoomData> = db
             .query("SELECT *, owner.* FROM room")
             .await?
             .take(0)
             .map_err(ApiError::Database)?;
 
-        let results: Vec<_> = raw_rooms
-            .into_iter()
-            .map(|r| Self::from_raw(r, events.clone(), manager.clone()))
-            .collect();
+        let results: Vec<_> = raw_rooms.into_iter().map(|r| Self::from_data(r)).collect();
 
         Ok(results)
     }
 
-    pub async fn get(db: &Database, id: String) -> Result<RawRoom, ApiError> {
+    pub async fn get(db: &Database, id: String) -> Result<RoomData, ApiError> {
         db.query("SELECT *, owner.* FROM type::thing($tb, $id)")
             .bind(("tb", "room"))
             .bind(("id", id))
             .await?
-            .take::<Option<RawRoom>>(0)?
+            .take::<Option<RoomData>>(0)?
             .ok_or(ApiError::NotFound("Room"))
     }
 
-    pub fn connect(&self, stream: WaveStream, user: User) -> Connection {
-        let connection = Connection {
-            id: ID_COUNTER.fetch_add(1),
-            manager: self.manager.clone(),
-            room_id: self.id.clone(),
-            user: user.clone(),
-            stream,
-        };
+    fn update_player_sinks(&self) {
+        let sinks: Vec<_> = self
+            .queue
+            .peek_ahead(3)
+            .into_iter()
+            .map(|t| t.sink)
+            .collect();
 
-        self.connections
-            .write()
-            .push((connection.id, connection.user.clone()));
-
-        self.events.emit(
-            Event::UserEnteredRoom {
-                user,
-                room: self.id.clone(),
-            },
-            Recipients::Some(self.user_ids()),
-        );
-
-        connection
+        self.player.set_sinks(sinks);
     }
 
-    pub fn disconnect(&self, id: ConnectionId) {
-        let user = self
-            .connections
-            .read()
-            .iter()
-            .find_map(|(c, u)| (c == &id).then(|| u.id.clone()))
-            .expect("user exists in connections");
+    pub fn next(&self) -> Track {
+        let track = self.queue.next();
+        self.update_player_sinks();
 
-        self.events.emit(
-            Event::UserLeftRoom {
-                room: self.id.clone(),
-                user,
-            },
-            Recipients::Some(self.user_ids()),
-        );
-
-        self.connections.write().retain(|(c, _)| *c != id);
+        track
     }
 
-    pub fn into_raw(self) -> RawRoom {
-        RawRoom {
-            id: self.id,
-            name: self.name,
-            owner: self.owner,
-            connections: self
-                .connections
-                .read()
-                .iter()
-                .map(|(_, u)| u.clone())
-                .collect(),
-        }
-    }
-
-    fn user_ids(&self) -> Vec<UserId> {
-        self.connections
-            .read()
-            .iter()
-            .map(|(_, u)| u.id.clone())
-            .collect()
-    }
-}
-
-impl Drop for Connection {
-    fn drop(&mut self) {
-        self.manager
-            .upgrade()
-            .expect("upgrade weak")
-            .notify_disconnect(&self.room_id, self.id)
-    }
-}
-
-impl Stream for Connection {
-    type Item = Result<Vec<u8>, Infallible>;
-
-    fn poll_next(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let mut buf = vec![0; 2048];
-
-        self.stream.read(&mut buf).ok();
-
-        Poll::Ready(Some(Ok(buf)))
+    pub fn add_track(&self, track: Track) {
+        self.queue.add_track(track, QueuePosition::Add);
+        self.update_player_sinks();
     }
 }
