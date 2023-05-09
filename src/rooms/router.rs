@@ -19,7 +19,7 @@ use crate::{
     VinylContext,
 };
 
-use super::{Room, RoomData};
+use super::{Room, RoomData, SerializedRoom};
 
 pub fn router() -> Router {
     Router::new()
@@ -39,22 +39,17 @@ async fn create_room(
     session: Session,
     State(context): Context,
     Json(body): Json<CreateRoomBody>,
-) -> Result<(StatusCode, Json<RoomData>), ApiError> {
+) -> Result<(StatusCode, Json<SerializedRoom>), ApiError> {
     let room = context
         .rooms
         .create_room(&context.db, &session.user, body.name)
         .await?;
 
-    Ok((StatusCode::CREATED, Json(room.into_data())))
+    Ok((StatusCode::CREATED, Json(room)))
 }
 
-async fn get_rooms(_: Session, State(context): Context) -> Json<Vec<RoomData>> {
-    let rooms: Vec<_> = context
-        .rooms
-        .rooms()
-        .into_iter()
-        .map(Room::into_data)
-        .collect();
+async fn get_rooms(_: Session, State(context): Context) -> Json<Vec<SerializedRoom>> {
+    let rooms: Vec<_> = context.rooms.rooms();
 
     Json(rooms)
 }
@@ -67,7 +62,7 @@ async fn add_input(
 ) -> Result<String, ApiError> {
     let room = context
         .rooms
-        .rooms()
+        .raw_rooms()
         .into_iter()
         .find(|r| r.id.id.to_string() == id)
         .ok_or(ApiError::NotFound("Room"))?;
@@ -93,7 +88,7 @@ async fn get_room_stream(
 ) -> Result<Response<hyper::Body>, ApiError> {
     let room = context
         .rooms
-        .rooms()
+        .raw_rooms()
         .into_iter()
         .find(|r| r.id.id.to_string() == id)
         .ok_or(ApiError::NotFound("Room"))?;

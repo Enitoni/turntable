@@ -65,11 +65,12 @@ impl RoomManager {
         db: &Database,
         user: &User,
         name: String,
-    ) -> Result<Room, ApiError> {
+    ) -> Result<SerializedRoom, ApiError> {
         let room = Room::create(db, user, name).await?;
         self.rooms.insert(room.id.clone(), room.clone());
 
-        Ok(room)
+        let serialized = SerializedRoom::new(&room, vec![]);
+        Ok(serialized)
     }
 
     fn users_connected_to_room(&self, id: &RoomId) -> Vec<User> {
@@ -87,8 +88,20 @@ impl RoomManager {
             .collect()
     }
 
-    pub fn rooms(&self) -> Vec<Room> {
-        self.rooms.iter().map(|r| r.value().clone()).collect()
+    pub fn raw_rooms(&self) -> Vec<Room> {
+        self.rooms.iter().map(|r| r.clone()).collect()
+    }
+
+    pub fn rooms(&self) -> Vec<SerializedRoom> {
+        self.rooms
+            .iter()
+            .map(|r| {
+                let room = r.value();
+                let users = self.users_connected_to_room(&room.id);
+
+                SerializedRoom::new(room, users)
+            })
+            .collect()
     }
 
     /// Create a user's connection to a room, returning a streamable handle
@@ -181,24 +194,36 @@ fn process_rooms(manager: Arc<RoomManager>) {
         let seconds = processed.new_sink_offset as f32 / (SAMPLE_RATE * 2) as f32;
         let users_to_notify = manager.user_ids_in_room(&room.id);
 
-        events.emit(
-            Event::PlayerTime {
-                room: room.id.clone(),
-                seconds,
-            },
-            Recipients::Some(users_to_notify.clone()),
-        );
+        if processed.difference > 0 {
+            events.emit(
+                Event::PlayerTime {
+                    room: room.id.clone(),
+                    seconds,
+                },
+                Recipients::Some(users_to_notify.clone()),
+            );
+        } else {
+            events.emit(
+                Event::PlayerTime {
+                    room: room.id.clone(),
+                    seconds: 0.,
+                },
+                Recipients::Some(users_to_notify.clone()),
+            );
+        }
 
         for _ in 0..processed.consumed_sinks {
             let track = room.next();
 
-            events.emit(
-                Event::TrackUpdate {
-                    room: room.id.clone(),
-                    track,
-                },
-                Recipients::Some(users_to_notify.clone()),
-            )
+            if let Some(track) = track {
+                events.emit(
+                    Event::TrackUpdate {
+                        room: room.id.clone(),
+                        track,
+                    },
+                    Recipients::Some(users_to_notify.clone()),
+                )
+            }
         }
     }
 }

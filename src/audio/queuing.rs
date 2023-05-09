@@ -37,7 +37,7 @@ impl Queue {
     }
 
     /// Advance the queue, returning the next track
-    pub fn next(&self) -> Track {
+    pub fn next(&self) -> Option<Track> {
         self.advance_index(1);
         self.current_track()
     }
@@ -54,13 +54,10 @@ impl Queue {
             .collect()
     }
 
-    pub fn current_track(&self) -> Track {
+    pub fn current_track(&self) -> Option<Track> {
         let tracks = self.tracks.lock().unwrap();
 
-        tracks
-            .get(self.current_index())
-            .cloned()
-            .expect("Current track exists in queue")
+        tracks.get(self.current_index()).cloned()
     }
 
     fn advance_index(&self, advance: isize) {

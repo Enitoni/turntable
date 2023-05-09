@@ -12,7 +12,7 @@ use surrealdb::sql::Thing;
 
 pub type RoomId = Thing;
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize)]
 pub struct RoomData {
     id: RoomId,
     name: String,
@@ -24,7 +24,6 @@ pub struct Room {
     pub id: RoomId,
     pub name: String,
     pub owner: User,
-
     pub player: Arc<Player>,
     pub queue: Arc<Queue>,
 }
@@ -101,7 +100,7 @@ impl Room {
         self.player.set_sinks(sinks);
     }
 
-    pub fn next(&self) -> Track {
+    pub fn next(&self) -> Option<Track> {
         let track = self.queue.next();
         self.update_player_sinks();
 
@@ -111,5 +110,28 @@ impl Room {
     pub fn add_track(&self, track: Track) {
         self.queue.add_track(track, QueuePosition::Add);
         self.update_player_sinks();
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub struct SerializedRoom {
+    pub id: String,
+    pub name: String,
+    pub owner: User,
+    pub connections: Vec<User>,
+    pub current_track: Option<Track>,
+}
+
+impl SerializedRoom {
+    pub fn new(room: &Room, connections: Vec<User>) -> Self {
+        Self {
+            // TODO: There should probably be a better way to do this
+            id: room.id.id.to_string(),
+
+            current_track: room.queue.current_track(),
+            owner: room.owner.clone(),
+            name: room.name.clone(),
+            connections,
+        }
     }
 }
