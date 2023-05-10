@@ -88,10 +88,14 @@ pub mod new {
             let mut amount_read = 0;
             let consumed_sinks = advancements.len().saturating_sub(1);
 
-            for advancement in advancements {
+            for (i, advancement) in advancements.into_iter().enumerate() {
                 amount_read += advancement
                     .sink
                     .read(advancement.start_offset, &mut samples[amount_read..]);
+
+                if i < consumed_sinks && consumed_sinks >= 1 {
+                    advancement.sink.consume();
+                }
             }
 
             self.stream.write(&samples);
