@@ -60,7 +60,7 @@ impl Input {
                 Err(InputError::NoMatch) => None,
                 x => Some(x),
             })
-            .unwrap_or(Err(InputError::NoMatch))
+            .unwrap_or(Err(InputError::UnsupportedType))
     }
 
     pub fn loader(&self) -> Result<Box<dyn Loader>, InputError> {
