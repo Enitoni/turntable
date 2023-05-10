@@ -110,19 +110,19 @@ impl RoomManager {
         let stream = WaveStream::new(room.player.consumer());
 
         let handle = ConnectionHandle::new(self.me.clone(), stream);
-        let connection = Connection::new(handle.id, room.id.clone(), user);
+
+        let connection = Connection::new(handle.id, room.id.clone(), user.clone());
+        self.connections.insert(handle.id, connection);
 
         let users_to_notify = self.user_ids_in_room(&room.id);
 
         self.events.emit(
             Event::UserEnteredRoom {
-                room: connection.room.clone(),
-                user: connection.user.clone(),
+                room: room.id.clone(),
+                user,
             },
             Recipients::Some(users_to_notify),
         );
-
-        self.connections.insert(handle.id, connection);
 
         handle
     }
@@ -143,7 +143,12 @@ impl RoomManager {
             Recipients::Some(users_to_notify),
         );
 
+        let is_queue_empty = room.queue.current_track().is_none();
         room.add_track(track);
+
+        if is_queue_empty {
+            self.notify_track_change(&room);
+        }
     }
 
     pub(self) fn notify_disconnect(&self, id: ConnectionHandleId) {
@@ -161,6 +166,21 @@ impl RoomManager {
             },
             Recipients::Some(users_to_notify),
         );
+    }
+
+    pub(self) fn notify_track_change(&self, room: &Room) {
+        let users_to_notify = self.user_ids_in_room(&room.id);
+        let track = room.queue.current_track();
+
+        if let Some(track) = track {
+            self.events.emit(
+                Event::TrackUpdate {
+                    room: room.id.clone(),
+                    track,
+                },
+                Recipients::Some(users_to_notify),
+            )
+        }
     }
 }
 
@@ -213,17 +233,8 @@ fn process_rooms(manager: Arc<RoomManager>) {
         }
 
         for _ in 0..processed.consumed_sinks {
-            let track = room.next();
-
-            if let Some(track) = track {
-                events.emit(
-                    Event::TrackUpdate {
-                        room: room.id.clone(),
-                        track,
-                    },
-                    Recipients::Some(users_to_notify.clone()),
-                )
-            }
+            room.next();
+            manager.notify_track_change(&room);
         }
     }
 }
