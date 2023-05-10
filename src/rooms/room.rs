@@ -114,6 +114,7 @@ impl Room {
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SerializedRoom {
     pub id: String,
     pub name: String,
