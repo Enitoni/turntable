@@ -147,8 +147,10 @@ mod youtube {
         process::{Command, Stdio},
     };
 
+    use lazy_static::lazy_static;
     use log::error;
     use parking_lot::Mutex;
+    use regex::Regex;
     use serde::Deserialize;
 
     use crate::{
@@ -162,6 +164,12 @@ mod youtube {
     };
 
     use super::InputError;
+
+    lazy_static! {
+        static ref REGEX: Regex =
+            Regex::new(r"^(?:https?://)?(?:.+\.)?youtube\.com/(?:watch\?v=|v/)[A-Za-z\d_-]+")
+                .unwrap();
+    }
 
     /// Parsed from youtube-dl
     #[derive(Debug, Clone)]
@@ -205,9 +213,10 @@ mod youtube {
         }
 
         pub fn from_url(url: &str) -> Result<Self, InputError> {
-            if !Self::is_valid_url(url) {
-                return Err(InputError::NoMatch);
-            }
+            let url = REGEX
+                .find(url)
+                .map(|m| m.as_str())
+                .ok_or(InputError::NoMatch)?;
 
             parse_from_url(url).ok_or(InputError::NotFound)
         }
@@ -219,29 +228,6 @@ mod youtube {
 
             let video = self.clone().into();
             Ok(Box::new(YouTubeVideoLoader { video, stream }))
-        }
-
-        /// Returns true if this is a valid YouTube video url
-        fn is_valid_url(url: &str) -> bool {
-            // Remove protocol if any
-            let rest = url.split_once("://").map(|(_, rest)| rest).unwrap_or(url);
-
-            // Remove www if any
-            let rest = rest
-                .split_once("www.")
-                .map(|(_, rest)| rest)
-                .unwrap_or(rest);
-
-            let mut split = rest.split('/');
-            let domain = split.next();
-            let path = split.next();
-
-            domain
-                .zip(path)
-                .map(|(domain, path)| {
-                    domain == "youtube.com" && path.starts_with("watch?v=") || domain == "youtu.be"
-                })
-                .unwrap_or_default()
         }
     }
 
@@ -312,37 +298,13 @@ mod youtube {
                     })
             })
     }
-
-    #[cfg(test)]
-    mod test {
-        use super::YouTubeVideo;
-
-        #[test]
-        fn test_url() {
-            assert!(YouTubeVideo::is_valid_url(
-                "https://www.youtube.com/watch?v=RiZ_5jo9WBg"
-            ));
-            assert!(YouTubeVideo::is_valid_url(
-                "https://youtube.com/watch?v=RiZ_5jo9WBg"
-            ));
-            assert!(YouTubeVideo::is_valid_url(
-                "youtube.com/watch?v=RiZ_5jo9WBg"
-            ));
-
-            assert!(!YouTubeVideo::is_valid_url(
-                "yourtube.com/watch?v=RiZ_5jo9WBg"
-            ));
-            assert!(!YouTubeVideo::is_valid_url("https://google.com"));
-            assert!(!YouTubeVideo::is_valid_url("kpofkagt"));
-        }
-    }
 }
 
 mod wavedistrict {
     use std::{fmt::Display, io::Read};
 
-    use fundsp::lazy_static::lazy_static;
     use hyper::StatusCode;
+    use lazy_static::lazy_static;
     use parking_lot::Mutex;
     use regex::Regex;
     use serde::Deserialize;
