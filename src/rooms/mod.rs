@@ -158,14 +158,17 @@ impl RoomManager {
             .expect("connection exists upon notify");
 
         let users_to_notify = self.user_ids_in_room(&connection.room);
+        let user_not_in_room = users_to_notify.iter().all(|u| u != &connection.user.id);
 
-        self.events.emit(
-            Event::UserLeftRoom {
-                room: connection.room,
-                user: connection.user.id,
-            },
-            Recipients::Some(users_to_notify),
-        );
+        if user_not_in_room {
+            self.events.emit(
+                Event::UserLeftRoom {
+                    room: connection.room,
+                    user: connection.user.id,
+                },
+                Recipients::Some(users_to_notify),
+            );
+        }
     }
 
     pub(self) fn notify_track_change(&self, room: &Room) {
