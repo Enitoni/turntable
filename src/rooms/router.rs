@@ -100,6 +100,7 @@ async fn get_room_stream(
         .status(200)
         .header("Transfer-Encoding", "chunked")
         .header("Content-Type", WaveStream::MIME)
+        .header("Cache-Control", "no-store")
         .header("Content-Disposition", "inline; filename=\"stream.wav\"")
         .body(body)
         .unwrap())
