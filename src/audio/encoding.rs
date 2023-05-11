@@ -93,27 +93,23 @@ impl WaveHeader {
     // ChunkID: Contains the letters "RIFF" in ASCII form, change last number to 80 if "RIFX" is used
     const CHUNK_ID: HeaderValue = HeaderValue::Ascii("RIFF");
 
-    // ChunkSize: 36 + SubChunk2Size
-    const CHUNK_SIZE: HeaderValue = HeaderValue::FourBytes(36);
+    // This is set to max because vinyl is a live audio stream
+    const CHUNK_SIZE: HeaderValue = HeaderValue::FourBytes(i32::MAX as u32);
 
     // Format: Contains the letters "WAVE"
     const FORMAT: HeaderValue = HeaderValue::Ascii("WAVE");
 
     // Subchunk1ID: Contains the letters "fmt "
-    const SUBCHUNK_1_ID: HeaderValue = HeaderValue::Ascii("fmt ");
+    const FMT_CHUNK_ID: HeaderValue = HeaderValue::Ascii("fmt ");
 
     // Subchunk1Size: 16 for PCM.
-    const SUBCHUNK_1_SIZE: HeaderValue = HeaderValue::FourBytes(16);
+    const FMT_CHUNK_SIZE: HeaderValue = HeaderValue::FourBytes(16);
 
     // AudioFormat: PCM = 1
     const AUDIO_FORMAT: HeaderValue = HeaderValue::TwoBytes(1);
 
     // Subchunk2ID: Contains the letters "data"
-    const SUBCHUNK_2_ID: HeaderValue = HeaderValue::Ascii("data");
-
-    // Subchunk2Size: NumSamples * NumChannels * BitsPerSample / 8
-    // This is 0 because size is unknown.
-    const SUBCHUNK_2_SIZE: HeaderValue = HeaderValue::FourBytes(0);
+    const DATA_CHUNK_ID: HeaderValue = HeaderValue::Ascii("data");
 
     fn to_bytes(&self) -> Vec<u8> {
         let num_channels = HeaderValue::TwoBytes(self.channel_count);
@@ -126,20 +122,23 @@ impl WaveHeader {
         let block_align = HeaderValue::TwoBytes(self.channel_count * self.bit_depth / 8);
         let bits_per_sample = HeaderValue::TwoBytes(self.bit_depth);
 
+        // This is set to max because vinyl is a live audio stream
+        let data_chunk_size = HeaderValue::FourBytes(i32::MAX as u32);
+
         [
             Self::CHUNK_ID,
             Self::CHUNK_SIZE,
             Self::FORMAT,
-            Self::SUBCHUNK_1_ID,
-            Self::SUBCHUNK_1_SIZE,
+            Self::FMT_CHUNK_ID,
+            Self::FMT_CHUNK_SIZE,
             Self::AUDIO_FORMAT,
             num_channels,
             sample_rate,
             byte_rate,
             block_align,
             bits_per_sample,
-            Self::SUBCHUNK_2_ID,
-            Self::SUBCHUNK_2_SIZE,
+            Self::DATA_CHUNK_ID,
+            data_chunk_size,
         ]
         .into_iter()
         .flat_map(HeaderValue::to_bytes)
