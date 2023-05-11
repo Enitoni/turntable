@@ -243,15 +243,17 @@ pub mod new {
         entries: Mutex<Vec<(StreamConsumerId, Producer<Sample>)>>,
 
         /// Preloaded samples a consumer will be filled with
-        preloaded: RwLock<[Sample; SAMPLES_PER_SEC]>,
+        preloaded: RwLock<Vec<Sample>>,
     }
 
     impl Stream {
+        const PRELOAD_BUFFER_SIZE: usize = SAMPLES_PER_SEC;
+
         pub fn new() -> Arc<Self> {
             Arc::new_cyclic(|me| Stream {
                 me: me.clone(),
                 entries: Default::default(),
-                preloaded: RwLock::new([0f32; SAMPLES_PER_SEC]),
+                preloaded: Default::default(),
             })
         }
 
@@ -262,7 +264,7 @@ pub mod new {
             let (mut producer, consumer) = buffer.split();
 
             let preloaded = self.preloaded.read();
-            producer.push_slice(&*preloaded);
+            producer.push_slice(&preloaded);
 
             let stream_consumer = StreamConsumer {
                 id: ID_COUNTER.fetch_add(1),
@@ -282,9 +284,18 @@ pub mod new {
                 producer.push_slice(buf);
             }
 
+            self.write_preload(buf);
+        }
+
+        fn write_preload(&self, buf: &[Sample]) {
             let mut preloaded = self.preloaded.write();
-            let slice = &mut preloaded[..buf.len()];
-            slice.copy_from_slice(buf);
+
+            preloaded.extend_from_slice(buf);
+            let overflowing = preloaded.len().saturating_sub(Self::PRELOAD_BUFFER_SIZE);
+
+            if overflowing > 0 {
+                preloaded.drain(..overflowing);
+            }
         }
 
         /// Remove an entry after the consumer has been dropped
