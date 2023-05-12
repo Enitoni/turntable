@@ -201,6 +201,12 @@ mod new {
         fn filter(event: E) -> Option<Self>;
     }
 
+    impl<T> Filter<Self> for T {
+        fn filter(event: Self) -> Option<Self> {
+            Some(event)
+        }
+    }
+
     /// Any sub-event that can be converted into an actual event.
     /// This makes ergonomics for module-specific events better.
     ///
