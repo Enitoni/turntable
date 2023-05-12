@@ -1,7 +1,9 @@
 use std::fmt::{Debug, Display};
 
 use colored::{Color, Colorize};
-use log::Level;
+use log::{trace, Level};
+
+use crate::{events::Handler, ingest::IngestionEvent, VinylEvent};
 
 pub fn init_logger() {
     fern::Dispatch::new()
@@ -176,5 +178,44 @@ impl From<LogColor> for Color {
     fn from(color: LogColor) -> Self {
         let (r, g, b) = color.values();
         Color::TrueColor { r, g, b }
+    }
+}
+
+pub struct EventLogger;
+
+impl EventLogger {
+    fn log_ingestion(ingestion: IngestionEvent) {
+        match ingestion {
+            IngestionEvent::Finished { sink, total } => trace!(target: "vinyl::audio",
+                "{}: {}",
+                sink,
+                format!("Sealed at {} samples", total).color(LogColor::Orange),
+            ),
+            IngestionEvent::Loading { sink, amount } => trace!(target: "vinyl::audio",
+                "{}: {}",
+                sink,
+                format!("Loading {} samples", amount).color(LogColor::White),
+            ),
+            IngestionEvent::Loaded {
+                sink,
+                amount,
+                expected,
+            } => trace!(target: "vinyl::audio",
+                "{}: {}",
+                sink,
+                format!("Received {}/{} samples", amount, expected)
+                    .color(LogColor::Success),
+            ),
+        }
+    }
+}
+
+impl Handler<VinylEvent> for EventLogger {
+    type Incoming = VinylEvent;
+
+    fn handle(&self, incoming: Self::Incoming) {
+        match incoming {
+            VinylEvent::Ingestion(x) => Self::log_ingestion(x),
+        }
     }
 }

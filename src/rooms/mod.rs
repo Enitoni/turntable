@@ -24,6 +24,7 @@ use crate::{
     ingest::{run_ingestion, Ingestion, Input},
     server::ws::Recipients,
     util::ApiError,
+    EventEmitter,
 };
 
 use self::connection::{Connection, ConnectionHandle, ConnectionHandleId};
@@ -40,13 +41,13 @@ pub struct RoomManager {
 }
 
 impl RoomManager {
-    pub fn new(events: Events) -> Arc<Self> {
+    pub fn new(events: Events, emitter: EventEmitter) -> Arc<Self> {
         Arc::new_cyclic(|me| Self {
             events,
             me: me.clone(),
             rooms: Default::default(),
             connections: Default::default(),
-            ingestion: Ingestion::new().into(),
+            ingestion: Ingestion::new(emitter).into(),
         })
     }
 

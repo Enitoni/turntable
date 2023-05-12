@@ -6,7 +6,6 @@ use std::{
     time::Duration,
 };
 
-use colored::Colorize;
 use crossbeam::{
     atomic::AtomicCell,
     channel::{unbounded, Receiver, Sender},
@@ -17,21 +16,25 @@ use parking_lot::Mutex;
 
 use crate::{
     audio::{raw_samples_from_bytes, Sample, SAMPLES_PER_SEC},
-    logging::LogColor,
+    EventEmitter,
 };
 
 use self::loading::{LoadResult, Loader};
 
+mod events;
 mod ffmpeg;
 mod input;
 mod loading;
 mod sink;
 
+pub use events::*;
 pub use input::*;
 pub use sink::*;
 
 #[derive(Debug)]
 pub struct Ingestion {
+    emitter: EventEmitter,
+
     current_sink_id: AtomicCell<SinkId>,
     child: Mutex<Option<Child>>,
 
@@ -64,11 +67,13 @@ struct WriteMessage {
 }
 
 impl Ingestion {
-    pub fn new() -> Self {
+    pub fn new(emitter: EventEmitter) -> Self {
         let (loading_sender, loading_receiver) = unbounded();
         let (processing_sender, processing_receiver) = unbounded();
 
         Self {
+            emitter,
+
             current_sink_id: Default::default(),
             child: None.into(),
 
@@ -157,6 +162,7 @@ pub fn spawn_loading_thread(ingestion: Arc<Ingestion>) {
         let mut sink_id = 0;
 
         let receiver = ingestion.loading_receiver.clone();
+        let emitter = ingestion.emitter.clone();
 
         loop {
             match receiver.recv() {
@@ -179,22 +185,20 @@ pub fn spawn_loading_thread(ingestion: Arc<Ingestion>) {
                         .get(&sink_id)
                         .expect("sink exists in ingestion");
 
-                    trace!(target: "vinyl::audio",
-                        "{}: {}",
-                        sink_id,
-                        format!("Loading {} samples", amount).color(LogColor::White),
-                    );
+                    emitter.dispatch(IngestionEvent::Loading {
+                        sink: sink_id,
+                        amount,
+                    });
 
                     match loader.load(amount) {
                         LoadResult::Data(buf) => stdin.write_all(&buf).expect("write all"),
                         LoadResult::Empty => {
                             sink.seal();
 
-                            trace!(target: "vinyl::audio",
-                                "{}: {}",
-                                sink.id(),
-                                format!("Sealed at {} samples", sink.available()).color(LogColor::Orange),
-                            );
+                            emitter.dispatch(IngestionEvent::Finished {
+                                sink: sink.id(),
+                                total: sink.available(),
+                            });
                         }
                         LoadResult::Error => todo!(),
                     }
@@ -245,6 +249,8 @@ pub fn spawn_processing_thread(ingestion: Arc<Ingestion>) {
 pub fn spawn_load_write_thread(ingestion: Arc<Ingestion>) {
     let run = move || {
         let receiver = ingestion.check_channel.1.clone();
+        let emitter = ingestion.emitter.clone();
+
         let mut data = vec![];
 
         loop {
@@ -263,12 +269,11 @@ pub fn spawn_load_write_thread(ingestion: Arc<Ingestion>) {
 
                 sink.write(&data);
 
-                trace!(target: "vinyl::audio",
-                    "{}: {}",
-                    sink.id(),
-                    format!("Received {}/{} samples", sink.available(), sink.length())
-                        .color(LogColor::Success),
-                );
+                emitter.dispatch(IngestionEvent::Loaded {
+                    sink: sink.id(),
+                    amount: sink.available(),
+                    expected: sink.length(),
+                });
 
                 data.clear();
             } else {
