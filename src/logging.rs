@@ -206,6 +206,9 @@ impl EventLogger {
                 format!("Received {}/{} samples", amount, expected)
                     .color(LogColor::Success),
             ),
+            IngestionEvent::Cleared { amount } => {
+                trace!(target: "vinyl::audio", "Cleared {} samples.", amount)
+            }
         }
     }
 }

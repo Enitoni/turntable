@@ -20,6 +20,9 @@ pub enum IngestionEvent {
         amount: usize,
         expected: SinkLength,
     },
+    Cleared {
+        amount: usize,
+    },
 }
 
 impl IntoEvent<VinylEvent> for IngestionEvent {

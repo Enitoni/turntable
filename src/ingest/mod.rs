@@ -292,6 +292,8 @@ pub fn spawn_cleanup_thread(ingestion: Arc<Ingestion>) {
     let run = move || loop {
         thread::sleep(Duration::from_secs(60 * 5));
 
+        let emitter = ingestion.emitter.clone();
+
         let mut samples_cleared = 0;
         let consumed_sinks: Vec<_> = ingestion
             .sinks
@@ -304,8 +306,6 @@ pub fn spawn_cleanup_thread(ingestion: Arc<Ingestion>) {
             continue;
         }
 
-        trace!(target: "vinyl::audio", "Cleaning up {} sinks...", consumed_sinks.len());
-
         for id in consumed_sinks {
             let (_, sink) = ingestion.sinks.remove(&id).expect("get sink for cleanup");
 
@@ -313,7 +313,9 @@ pub fn spawn_cleanup_thread(ingestion: Arc<Ingestion>) {
             sink.clear();
         }
 
-        trace!(target: "vinyl::audio", "Cleared {} samples.", samples_cleared);
+        emitter.dispatch(IngestionEvent::Cleared {
+            amount: samples_cleared,
+        });
     };
 
     thread::Builder::new()
