@@ -205,6 +205,7 @@ mod new {
     }
 
     /// A gateway that uses [crossbeam::channel] to send and receive events.
+    #[derive(Debug)]
     pub struct Channel<E> {
         sender: Sender<E>,
         receiver: Receiver<E>,
@@ -214,6 +215,12 @@ mod new {
         pub fn new() -> Self {
             let (sender, receiver) = unbounded();
             Self { sender, receiver }
+        }
+    }
+
+    impl<E> Default for Channel<E> {
+        fn default() -> Self {
+            Self::new()
         }
     }
 
