@@ -139,7 +139,7 @@ mod new {
     }
 
     /// An emitter for a [Bus]
-    #[derive(Debug, Clone)]
+    #[derive(Debug)]
     pub struct Emitter<G, E>(Weak<Bus<G, E>>);
 
     impl<G, E> Emitter<G, E>
@@ -154,6 +154,12 @@ mod new {
                 .upgrade()
                 .expect("upgrade event bus in emitter")
                 .dispatch(event)
+        }
+    }
+
+    impl<G, E> Clone for Emitter<G, E> {
+        fn clone(&self) -> Self {
+            Emitter(self.0.clone())
         }
     }
 
