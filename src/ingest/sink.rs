@@ -1,11 +1,12 @@
 use crate::{
     audio::{util::Buffer, Sample},
-    util::{sync::Wait, ID_COUNTER},
+    store::Id,
+    util::{sync::Wait},
 };
 use crossbeam::atomic::AtomicCell;
 use std::{fmt::Display, sync::Arc};
 
-pub type SinkId = u64;
+pub type SinkId = Id<InternalSink>;
 pub type Sink = Arc<InternalSink>;
 
 /// A destination sink, serving as a source of samples.
@@ -54,9 +55,9 @@ impl InternalSink {
         let buffer_size = length.value();
 
         Self {
+            id: SinkId::new(),
             samples: Buffer::new(buffer_size),
             status: SinkStatus::Partial(0).into(),
-            id: ID_COUNTER.fetch_add(1),
             expected_length: length,
             consumed: false.into(),
             pending: false.into(),
@@ -111,6 +112,10 @@ impl InternalSink {
             self.status.load(),
             SinkStatus::Completed(_) | SinkStatus::Error
         )
+    }
+
+    pub fn is_consumed(&self) -> bool {
+        self.consumed.load()
     }
 
     pub fn is_pending(&self) -> bool {

@@ -1,7 +1,5 @@
-use std::sync::Arc;
-
 use crate::{
-    audio::{new::Player, Queue, QueuePosition, Track},
+    audio::{PlayerId, QueueId, Track},
     auth::User,
     db::{Database, Record},
     util::ApiError,
@@ -12,41 +10,14 @@ use surrealdb::sql::Thing;
 
 pub type RoomId = Thing;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct RoomData {
-    id: RoomId,
-    name: String,
-    owner: User,
-}
-
-#[derive(Debug, Clone)]
-pub struct Room {
     pub id: RoomId,
     pub name: String,
     pub owner: User,
-    pub player: Arc<Player>,
-    pub queue: Arc<Queue>,
 }
 
-impl Room {
-    fn from_data(raw: RoomData) -> Self {
-        Self {
-            id: raw.id,
-            name: raw.name,
-            owner: raw.owner,
-            queue: Queue::new().into(),
-            player: Player::default().into(),
-        }
-    }
-
-    pub fn into_data(self) -> RoomData {
-        RoomData {
-            id: self.id,
-            name: self.name,
-            owner: self.owner,
-        }
-    }
-
+impl RoomData {
     pub async fn create(db: &Database, user: &User, name: String) -> Result<Self, ApiError> {
         #[derive(Serialize)]
         struct NewRoom {
@@ -63,9 +34,7 @@ impl Room {
             .await
             .map_err(ApiError::from_db)?;
 
-        let raw: RoomData = Self::get(db, raw.id().to_string()).await?;
-
-        Ok(Self::from_data(raw))
+        Self::get(db, raw.id().to_string()).await
     }
 
     pub async fn all(db: &Database) -> Result<Vec<Self>, ApiError> {
@@ -75,12 +44,10 @@ impl Room {
             .take(0)
             .map_err(ApiError::Database)?;
 
-        let results: Vec<_> = raw_rooms.into_iter().map(|r| Self::from_data(r)).collect();
-
-        Ok(results)
+        Ok(raw_rooms)
     }
 
-    pub async fn get(db: &Database, id: String) -> Result<RoomData, ApiError> {
+    pub async fn get(db: &Database, id: String) -> Result<Self, ApiError> {
         db.query("SELECT *, owner.* FROM type::thing($tb, $id)")
             .bind(("tb", "room"))
             .bind(("id", id))
@@ -88,28 +55,24 @@ impl Room {
             .take::<Option<RoomData>>(0)?
             .ok_or(ApiError::NotFound("Room"))
     }
+}
 
-    fn update_player_sinks(&self) {
-        let sinks: Vec<_> = self
-            .queue
-            .peek_ahead(3)
-            .into_iter()
-            .map(|t| t.sink)
-            .collect();
+#[derive(Debug, Clone)]
+pub struct Room {
+    pub id: RoomId,
+    pub data: RoomData,
+    pub player: PlayerId,
+    pub queue: QueueId,
+}
 
-        self.player.set_sinks(sinks);
-    }
-
-    pub fn next(&self) -> Option<Track> {
-        let track = self.queue.next();
-        self.update_player_sinks();
-
-        track
-    }
-
-    pub fn add_track(&self, track: Track) {
-        self.queue.add_track(track, QueuePosition::Add);
-        self.update_player_sinks();
+impl Room {
+    pub fn new(data: RoomData, queue: QueueId, player: PlayerId) -> Self {
+        Self {
+            id: data.id.clone(),
+            data,
+            queue,
+            player,
+        }
     }
 }
 
@@ -121,18 +84,4 @@ pub struct SerializedRoom {
     pub owner: User,
     pub connections: Vec<User>,
     pub current_track: Option<Track>,
-}
-
-impl SerializedRoom {
-    pub fn new(room: &Room, connections: Vec<User>) -> Self {
-        Self {
-            // TODO: There should probably be a better way to do this
-            id: room.id.id.to_string(),
-
-            current_track: room.queue.current_track(),
-            owner: room.owner.clone(),
-            name: room.name.clone(),
-            connections,
-        }
-    }
 }

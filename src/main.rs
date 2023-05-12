@@ -1,11 +1,13 @@
 use std::{sync::Arc, thread};
 
+use audio::AudioEvent;
 use colored::Colorize;
 use db::Database;
 use events::{Bus, Channel, Emitter, Events};
 use ingest::IngestionEvent;
 use log::{error, info};
 use server::ws::WebSocketManager;
+use store::Store;
 use thiserror::Error;
 use tokio::runtime::{self, Runtime};
 
@@ -29,6 +31,7 @@ mod util;
 
 pub struct Vinyl {
     db: Arc<Database>,
+    store: Arc<Store>,
     event_bus: Arc<EventBus>,
     websockets: Arc<WebSocketManager>,
     rooms: Arc<RoomManager>,
@@ -39,6 +42,7 @@ pub struct Vinyl {
 #[derive(Debug, Clone)]
 pub enum VinylEvent {
     Ingestion(IngestionEvent),
+    Audio(AudioEvent),
 }
 
 pub type EventEmitter = Emitter<Channel<VinylEvent>, VinylEvent>;
@@ -73,12 +77,15 @@ impl Vinyl {
         info!("Connecting to database...");
 
         let channel = Channel::new();
-        let event_bus = EventBus::new(channel);
 
+        let event_bus = EventBus::new(channel);
         event_bus.register(EventLogger);
 
+        let store = Store::new(event_bus.emitter());
+
         let events = Events::default();
-        let rooms = RoomManager::new(events.clone(), event_bus.emitter());
+
+        let rooms = RoomManager::new(Arc::downgrade(&store), events.clone());
 
         let database = main_runtime.block_on(db::connect())?;
 
@@ -88,6 +95,7 @@ impl Vinyl {
 
         Ok(Self {
             rooms,
+            store,
             events,
             event_bus,
             db: database.into(),
@@ -97,7 +105,8 @@ impl Vinyl {
     }
 
     fn run(&self) {
-        rooms::run_room_manager(self.rooms.clone());
+        audio::run_playback(self.store.playback.clone());
+        ingest::run_ingestion(self.store.ingestion.clone());
 
         let event_bus = self.event_bus.clone();
         thread::spawn(move || loop {

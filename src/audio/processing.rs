@@ -5,7 +5,7 @@ mod dsp {
     use log::trace;
 
     use crate::audio::{
-        pipeline::{SampleReader, SamplesRead, Transform},
+        util::pipeline::{SampleReader, SamplesRead, Transform},
         Sample,
     };
 
@@ -166,8 +166,8 @@ mod dsp {
         use super::Dsp;
         use crate::audio::{
             config::SAMPLES_PER_SEC,
-            pipeline::{IntoSampleReader, SamplesRead},
             util::pipeline::SampleReader,
+            util::pipeline::{IntoSampleReader, SamplesRead},
         };
 
         #[test]

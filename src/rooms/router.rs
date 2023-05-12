@@ -19,7 +19,7 @@ use crate::{
     VinylContext,
 };
 
-use super::{Room, RoomData, SerializedRoom};
+use super::{SerializedRoom};
 
 pub fn router() -> Router {
     Router::new()

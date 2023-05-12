@@ -1,18 +1,23 @@
 mod decoding;
 mod encoding;
+mod events;
+mod playback;
 mod processing;
 mod queuing;
 mod source;
+mod timeline;
 mod track;
 pub mod util;
 
 use crate::ingest;
 pub use decoding::raw_samples_from_bytes;
 pub use encoding::*;
+pub use events::*;
 pub use ingest::Input;
+pub use playback::*;
 pub use queuing::*;
+pub use timeline::*;
 pub use track::Track;
-pub use util::pipeline;
 
 mod config {
     use std::time::Duration;
@@ -42,198 +47,16 @@ pub mod new {
     use std::time::Duration;
     use std::{fmt::Debug, sync::Arc};
 
-    use crossbeam::atomic::AtomicCell;
+    
     use parking_lot::{Mutex, RwLock};
     use ringbuf::{Consumer, Producer, RingBuffer};
 
-    use crate::audio::PRELOAD_THRESHOLD;
-    use crate::ingest::{Sink, SinkId};
+    
+    
+    
     use crate::util::ID_COUNTER;
 
-    use super::{Sample, SAMPLES_PER_SEC, STREAM_CHUNK_SIZE};
-
-    /// Handles playback for a list of sinks.
-    #[derive(Debug)]
-    pub struct Player {
-        timeline: Timeline,
-        stream: Arc<Stream>,
-    }
-
-    impl Player {
-        /// Set the sinks to play.
-        ///
-        /// **Note that the first sink is the one currently being played.**
-        pub fn set_sinks(&self, sinks: Vec<Sink>) {
-            self.timeline.set_sinks(sinks);
-        }
-
-        /// Get a new consumer of the underlying stream.
-        pub fn consumer(&self) -> StreamConsumer {
-            self.stream.consumer()
-        }
-
-        /// Return the sink to preload, if any
-        pub fn preload(&self) -> Option<SinkId> {
-            self.timeline.preload()
-        }
-
-        /// Advance the playback by reading from sinks and pushing samples into a ringbuffer.
-        /// Returns information about the advancement.
-        pub fn process(&self) -> ProcessMetadata {
-            let mut samples = vec![0.; STREAM_CHUNK_SIZE];
-
-            let current_offset = self.timeline.offset.load();
-            let advancements = self.timeline.advance(samples.len());
-
-            let mut amount_read = 0;
-            let consumed_sinks = advancements.len().saturating_sub(1);
-
-            for (i, advancement) in advancements.into_iter().enumerate() {
-                amount_read += advancement
-                    .sink
-                    .read(advancement.start_offset, &mut samples[amount_read..]);
-
-                if i < consumed_sinks && consumed_sinks >= 1 {
-                    advancement.sink.consume();
-                }
-            }
-
-            self.stream.write(&samples);
-
-            let new_sink_offset = self.timeline.offset.load();
-            let difference = new_sink_offset.saturating_sub(current_offset);
-
-            ProcessMetadata {
-                new_sink_offset,
-                consumed_sinks,
-                difference,
-            }
-        }
-    }
-
-    impl Default for Player {
-        fn default() -> Self {
-            Self {
-                timeline: Timeline::default(),
-                stream: Stream::new(),
-            }
-        }
-    }
-
-    /// Describes the result of processing a chunk.
-    #[derive(Debug, Clone)]
-    pub struct ProcessMetadata {
-        /// Offset of the sink currently playing.
-        pub new_sink_offset: usize,
-
-        /// Difference in this offset to the last one.
-        /// This will be 0 if the player has reached the end, is waiting for sinks to be loaded, or is paused.
-        pub difference: usize,
-
-        /// The amount of sinks that were fully played.
-        ///
-        /// This is 1 or more when the player has finished playing a track, otherwise it is usually 0.
-        ///
-        /// **Note that finished can also mean the sink was skipped due to an error.**
-        pub consumed_sinks: usize,
-    }
-
-    /// A list of consecutive sinks that keeps track of offset and amount loaded.
-    ///
-    /// This is responsible for advancing the playback.
-    #[derive(Debug, Default)]
-    pub struct Timeline {
-        /// A sequence of sinks. The first one is the currently playing one.
-        sinks: Mutex<Vec<Sink>>,
-        /// Offset of the current sink.
-        offset: AtomicCell<usize>,
-        /// The total amount of samples that have been advanced.
-        total_offset: AtomicCell<usize>,
-    }
-
-    impl Timeline {
-        pub fn set_sinks(&self, sinks: Vec<Sink>) {
-            *self.sinks.lock() = sinks
-        }
-
-        /// Optionally returns a sink to preload if necessary
-        pub fn preload(&self) -> Option<SinkId> {
-            let sinks: Vec<_> = self.sinks.lock().iter().cloned().collect();
-
-            let total_available: usize = sinks
-                .iter()
-                .scan(true, |previous_was_complete, item| {
-                    if !*previous_was_complete {
-                        return None;
-                    }
-
-                    let available = item.available();
-                    *previous_was_complete = item.is_complete();
-
-                    Some(available)
-                })
-                .sum();
-
-            let available = total_available.saturating_sub(self.offset.load());
-
-            if available > PRELOAD_THRESHOLD {
-                return None;
-            }
-
-            sinks
-                .into_iter()
-                .filter(|s| !s.is_complete())
-                .take(1)
-                .find_map(|s| (!s.is_pending()).then(|| s.id()))
-        }
-
-        /// Advance the timeline and return a list of advancements describing sinks to read from.
-        pub fn advance(&self, amount: usize) -> Vec<Advancement> {
-            let mut result = vec![];
-
-            let sinks: Vec<_> = self.sinks.lock().iter().cloned().collect();
-
-            let mut remaining = amount;
-            let mut offset = self.offset.load();
-
-            for sink in sinks {
-                if remaining == 0 {
-                    break;
-                }
-
-                let available = sink.available();
-                let amount_ahead = available.saturating_sub(offset);
-                let amount_to_read = amount_ahead.min(remaining);
-                let new_offset = offset + amount_to_read;
-
-                remaining -= amount_to_read;
-                result.push(Advancement {
-                    sink: sink.clone(),
-                    start_offset: offset,
-                    end_offset: new_offset,
-                });
-
-                self.total_offset.fetch_add(amount_to_read);
-                self.offset.store(new_offset);
-
-                offset = 0;
-
-                if !sink.is_complete() {
-                    break;
-                }
-            }
-
-            result
-        }
-    }
-
-    #[derive(Debug)]
-    /// Read from a sink at a specific offset.
-    pub struct Advancement {
-        sink: Sink,
-        start_offset: usize,
-        end_offset: usize,
-    }
+    use super::{Sample, SAMPLES_PER_SEC};
 
     type StreamConsumerId = u64;
 

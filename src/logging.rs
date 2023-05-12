@@ -219,6 +219,7 @@ impl Handler<VinylEvent> for EventLogger {
     fn handle(&self, incoming: Self::Incoming) {
         match incoming {
             VinylEvent::Ingestion(x) => Self::log_ingestion(x),
+            _ => {}
         }
     }
 }

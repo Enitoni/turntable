@@ -1,8 +1,4 @@
-use std::{
-    sync::{Arc, Weak},
-    thread,
-    time::{Duration, Instant},
-};
+use std::sync::{Arc, Weak};
 
 use dashmap::DashMap;
 
@@ -10,52 +6,84 @@ mod connection;
 mod room;
 mod router;
 
-use log::warn;
 pub use room::*;
 pub use router::router;
 
 use crate::{
-    audio::{
-        Track, WaveStream, PRELOAD_AMOUNT, SAMPLES_PER_SEC, SAMPLE_RATE, STREAM_CHUNK_DURATION,
-    },
+    audio::{Player, Queue, QueuePosition, Track, WaveStream},
     auth::{User, UserId},
     db::Database,
     events::{Event, Events},
-    ingest::{run_ingestion, Ingestion, Input},
+    ingest::Input,
     server::ws::Recipients,
+    store::Store,
     util::ApiError,
-    EventEmitter,
 };
 
 use self::connection::{Connection, ConnectionHandle, ConnectionHandleId};
 
 #[derive(Debug)]
 pub struct RoomManager {
-    me: Weak<RoomManager>,
-
     events: Events,
-    ingestion: Arc<Ingestion>,
 
-    connections: DashMap<ConnectionHandleId, connection::Connection>,
+    me: Weak<RoomManager>,
+    store: Weak<Store>,
+
+    connections: DashMap<ConnectionHandleId, Connection>,
+    queues: DashMap<RoomId, Queue>,
     rooms: DashMap<RoomId, Room>,
 }
 
 impl RoomManager {
-    pub fn new(events: Events, emitter: EventEmitter) -> Arc<Self> {
+    pub fn new(store: Weak<Store>, events: Events) -> Arc<Self> {
         Arc::new_cyclic(|me| Self {
             events,
+            store,
             me: me.clone(),
             rooms: Default::default(),
             connections: Default::default(),
-            ingestion: Ingestion::new(emitter).into(),
+            queues: Default::default(),
         })
     }
 
+    fn store(&self) -> Arc<Store> {
+        self.store.upgrade().expect("upgrade store in room manager")
+    }
+
+    fn set_up_room(&self, data: RoomData) -> RoomId {
+        let store = self.store();
+
+        let player = store.playback.create_player().expect("create player");
+        let queue = Queue::new();
+
+        let room = Room::new(data, queue.id, player);
+        let id = room.id.clone();
+
+        self.queues.insert(id.clone(), queue);
+        self.rooms.insert(id.clone(), room);
+
+        id
+    }
+
+    fn serialize_room(&self, id: &RoomId) -> SerializedRoom {
+        let room = self.rooms.get(id).expect("get room").clone();
+        let queue = self.queues.get(id).expect("get queue");
+        let users = self.users_connected_to_room(id);
+
+        SerializedRoom {
+            id: room.id.id.to_string(),
+            name: room.data.name,
+            owner: room.data.owner,
+            connections: users,
+            current_track: queue.current_track(),
+        }
+    }
+
     pub async fn init(&self, db: &Database) -> Result<(), ApiError> {
-        let rooms = Room::all(db).await?;
+        let rooms = RoomData::all(db).await?;
 
         for room in rooms {
-            self.rooms.insert(room.id.clone(), room);
+            self.set_up_room(room);
         }
 
         Ok(())
@@ -67,11 +95,10 @@ impl RoomManager {
         user: &User,
         name: String,
     ) -> Result<SerializedRoom, ApiError> {
-        let room = Room::create(db, user, name).await?;
-        self.rooms.insert(room.id.clone(), room.clone());
+        let room = RoomData::create(db, user, name).await?;
+        let id = self.set_up_room(room);
 
-        let serialized = SerializedRoom::new(&room, vec![]);
-        Ok(serialized)
+        Ok(self.serialize_room(&id))
     }
 
     fn users_connected_to_room(&self, id: &RoomId) -> Vec<User> {
@@ -96,19 +123,16 @@ impl RoomManager {
     pub fn rooms(&self) -> Vec<SerializedRoom> {
         self.rooms
             .iter()
-            .map(|r| {
-                let room = r.value();
-                let users = self.users_connected_to_room(&room.id);
-
-                SerializedRoom::new(room, users)
-            })
+            .map(|r| self.serialize_room(&r.id))
             .collect()
     }
 
     /// Create a user's connection to a room, returning a streamable handle
     pub fn connect(&self, user: User, room: &RoomId) -> ConnectionHandle {
         let room = self.rooms.get(room).expect("room exists");
-        let stream = WaveStream::new(room.player.consumer());
+
+        let player: Arc<Player> = self.store().get(&room.player).expect("get player");
+        let stream = WaveStream::new(player.consumer());
 
         let handle = ConnectionHandle::new(self.me.clone(), stream);
 
@@ -130,10 +154,18 @@ impl RoomManager {
 
     // TODO: Fix this code when implementing proper queuing later
     pub fn add_input(&self, user: User, room: &RoomId, input: Input) {
+        let queue = self.queues.get(room).expect("get queue");
         let room = self.rooms.get(room).expect("room exists");
         let users_to_notify = self.user_ids_in_room(&room.id);
+        let player: Arc<Player> = self.store().get(&room.player).expect("get player");
 
-        let sink = self.ingestion.add(input.loader().expect("loader"));
+        let sink = self
+            .store
+            .upgrade()
+            .unwrap()
+            .ingestion
+            .add(input.loader().expect("loader"));
+
         let track = Track::new(input.duration(), input.to_string(), sink);
 
         self.events.emit(
@@ -144,12 +176,8 @@ impl RoomManager {
             Recipients::Some(users_to_notify),
         );
 
-        let is_queue_empty = room.queue.current_track().is_none();
-        room.add_track(track);
-
-        if is_queue_empty {
-            self.notify_track_change(&room);
-        }
+        queue.add_track(track, QueuePosition::Add);
+        player.set_sinks(queue.peek_ahead(3).into_iter().map(|t| t.sink).collect());
     }
 
     pub(self) fn notify_disconnect(&self, id: ConnectionHandleId) {
@@ -171,126 +199,4 @@ impl RoomManager {
             );
         }
     }
-
-    pub(self) fn notify_track_change(&self, room: &Room) {
-        let users_to_notify = self.user_ids_in_room(&room.id);
-        let track = room.queue.current_track();
-
-        if let Some(track) = track {
-            self.events.emit(
-                Event::TrackUpdate {
-                    room: room.id.clone(),
-                    track,
-                },
-                Recipients::Some(users_to_notify),
-            )
-        }
-    }
-}
-
-fn process_load_requests(manager: Arc<RoomManager>) {
-    let ingestion = manager.ingestion.clone();
-
-    let sinks_to_load: Vec<_> = manager
-        .rooms
-        .iter()
-        .filter_map(|r| r.player.preload())
-        .collect();
-
-    for sink in sinks_to_load {
-        ingestion.request(sink, PRELOAD_AMOUNT);
-    }
-}
-
-fn process_rooms(manager: Arc<RoomManager>) {
-    let events = manager.events.clone();
-
-    let rooms: Vec<_> = manager
-        .rooms
-        .iter()
-        // TODO: Fix this .filter(|r| r.is_active())
-        .map(|r| r.clone())
-        .collect();
-
-    for room in rooms {
-        let processed = room.player.process();
-
-        let seconds = processed.new_sink_offset as f32 / (SAMPLE_RATE * 2) as f32;
-        let users_to_notify = manager.user_ids_in_room(&room.id);
-
-        if processed.difference > 0 {
-            events.emit(
-                Event::PlayerTime {
-                    room: room.id.clone(),
-                    seconds,
-                },
-                Recipients::Some(users_to_notify.clone()),
-            );
-        } else {
-            events.emit(
-                Event::PlayerTime {
-                    room: room.id.clone(),
-                    seconds: 0.,
-                },
-                Recipients::Some(users_to_notify.clone()),
-            );
-        }
-
-        for _ in 0..processed.consumed_sinks {
-            room.next();
-            manager.notify_track_change(&room);
-        }
-    }
-}
-
-fn spawn_room_loading_thread(manager: Arc<RoomManager>) {
-    let run = move || loop {
-        process_load_requests(manager.clone());
-        thread::sleep(Duration::from_millis(100));
-    };
-
-    thread::Builder::new()
-        .name("room_loading".to_string())
-        .spawn(run)
-        .unwrap();
-}
-
-fn spawn_room_processing_thread(manager: Arc<RoomManager>) {
-    let run = move || loop {
-        let now = Instant::now();
-        process_rooms(manager.clone());
-        wait_for_next(now);
-    };
-
-    thread::Builder::new()
-        .name("room_processing".to_string())
-        .spawn(run)
-        .unwrap();
-}
-
-pub fn run_room_manager(manager: Arc<RoomManager>) {
-    spawn_room_loading_thread(manager.clone());
-    spawn_room_processing_thread(manager.clone());
-    run_ingestion(manager.ingestion.clone());
-}
-
-fn wait_for_next(now: Instant) {
-    let elapsed = now.elapsed();
-    let elapsed_micros = elapsed.as_micros();
-    let elapsed_millis = elapsed_micros / 1000;
-
-    let duration_micros = STREAM_CHUNK_DURATION.as_micros();
-
-    if elapsed_millis > SAMPLES_PER_SEC as u128 / 10000 {
-        warn!(
-            "Stream took too long ({}ms) to process samples!",
-            elapsed_millis
-        )
-    }
-
-    let corrected = duration_micros
-        .checked_sub(elapsed_micros)
-        .unwrap_or_default();
-
-    spin_sleep::sleep(Duration::from_micros(corrected as u64));
 }

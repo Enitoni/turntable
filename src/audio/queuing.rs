@@ -1,9 +1,14 @@
 use std::sync::Mutex;
 
+use crate::store::Id;
+
 use super::Track;
+
+pub type QueueId = Id<Queue>;
 
 #[derive(Debug)]
 pub struct Queue {
+    pub id: QueueId,
     tracks: Mutex<Vec<Track>>,
     index: Mutex<usize>,
 }
@@ -16,6 +21,7 @@ pub enum QueuePosition {
 impl Queue {
     pub fn new() -> Self {
         Self {
+            id: QueueId::new(),
             tracks: Default::default(),
             index: Default::default(),
         }

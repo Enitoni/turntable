@@ -11,7 +11,6 @@ use crossbeam::{
     channel::{unbounded, Receiver, Sender},
 };
 use dashmap::DashMap;
-use log::trace;
 use parking_lot::Mutex;
 
 use crate::{
@@ -74,7 +73,7 @@ impl Ingestion {
         Self {
             emitter,
 
-            current_sink_id: Default::default(),
+            current_sink_id: SinkId::none().into(),
             child: None.into(),
 
             sinks: Default::default(),
@@ -134,10 +133,6 @@ impl Ingestion {
         sink
     }
 
-    pub fn get(&self, id: SinkId) -> Sink {
-        self.sinks.get(&id).expect("sink exists").to_owned()
-    }
-
     pub fn request(&self, id: SinkId, amount: usize) {
         self.ensure_correct_sink(id);
 
@@ -159,7 +154,7 @@ impl Ingestion {
 pub fn spawn_loading_thread(ingestion: Arc<Ingestion>) {
     let run = move || {
         let mut stdin: Option<ChildStdin> = None;
-        let mut sink_id = 0;
+        let mut sink_id = SinkId::none();
 
         let receiver = ingestion.loading_receiver.clone();
         let emitter = ingestion.emitter.clone();

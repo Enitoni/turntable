@@ -4,7 +4,7 @@ use dashmap::DashMap;
 
 use crate::store::{FromId, Id, Insert, Store};
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct TrackStore {
     tracks: DashMap<TrackId, Track>,
 }

@@ -278,8 +278,8 @@ mod buffering {
             let safe_start = offset.min(capacity);
             let safe_end = (safe_start + amount).min(capacity);
 
-            self.allocate_if_necessary(&mut *samples, safe_end);
-            self.resize_if_necessary(&mut *samples, safe_end);
+            self.allocate_if_necessary(&mut samples, safe_end);
+            self.resize_if_necessary(&mut samples, safe_end);
 
             let range = safe_start..safe_end;
             let amount_written = range.len();
