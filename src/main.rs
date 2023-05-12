@@ -97,14 +97,14 @@ impl Vinyl {
     fn run(&self) {
         rooms::run_room_manager(self.rooms.clone());
 
-        self.runtime.block_on(async move {
-            tokio::spawn(events::check_events(self.context()));
-            server::run_server(self.context()).await
-        });
-
         let event_bus = self.event_bus.clone();
         thread::spawn(move || loop {
             event_bus.tick()
+        });
+
+        self.runtime.block_on(async move {
+            tokio::spawn(events::check_events(self.context()));
+            server::run_server(self.context()).await
         });
     }
 
