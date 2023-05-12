@@ -139,6 +139,7 @@ mod new {
     }
 
     /// An emitter for a [Bus]
+    #[derive(Debug, Clone)]
     pub struct Emitter<G, E>(Weak<Bus<G, E>>);
 
     impl<G, E> Emitter<G, E>
