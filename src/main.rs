@@ -23,6 +23,8 @@ mod ingest;
 mod logging;
 mod rooms;
 mod server;
+mod store;
+mod track;
 mod util;
 
 pub struct Vinyl {
