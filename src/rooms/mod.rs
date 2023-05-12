@@ -10,14 +10,15 @@ pub use room::*;
 pub use router::router;
 
 use crate::{
-    audio::{Player, Queue, QueuePosition, Track, WaveStream},
+    audio::{AudioEvent, Player, PlayerId, Queue, QueuePosition, Track, WaveStream, SAMPLE_RATE},
     auth::{User, UserId},
     db::Database,
-    events::{Event, Events},
+    events::{Event, Events, Handler},
     ingest::Input,
     server::ws::Recipients,
-    store::Store,
+    store::{FromId, Store},
     util::ApiError,
+    VinylEvent,
 };
 
 use self::connection::{Connection, ConnectionHandle, ConnectionHandleId};
@@ -180,6 +181,12 @@ impl RoomManager {
         player.set_sinks(queue.peek_ahead(3).into_iter().map(|t| t.sink).collect());
     }
 
+    pub fn handler(&self) -> RoomManagerHandler {
+        RoomManagerHandler {
+            manager: self.me.clone(),
+        }
+    }
+
     pub(self) fn notify_disconnect(&self, id: ConnectionHandleId) {
         let (_, connection) = self
             .connections
@@ -197,6 +204,55 @@ impl RoomManager {
                 },
                 Recipients::Some(users_to_notify),
             );
+        }
+    }
+}
+
+pub struct RoomManagerHandler {
+    manager: Weak<RoomManager>,
+}
+
+impl RoomManagerHandler {
+    fn handle_time(&self, player: PlayerId, offset: usize, total_offset: usize) {
+        let manager = self.manager();
+
+        let room = manager
+            .rooms
+            .iter()
+            .find(|r| r.player == player)
+            .map(|x| x.clone())
+            .expect("get room by player id");
+
+        let users = manager.user_ids_in_room(&room.id);
+        let time_in_seconds = offset as f32 / (SAMPLE_RATE * 2) as f32;
+
+        manager.events.emit(
+            Event::PlayerTime {
+                room: room.id,
+                seconds: time_in_seconds,
+            },
+            Recipients::Some(users),
+        )
+    }
+
+    fn manager(&self) -> Arc<RoomManager> {
+        self.manager
+            .upgrade()
+            .expect("upgrade room manager in handler")
+    }
+}
+
+impl Handler<VinylEvent> for RoomManagerHandler {
+    type Incoming = AudioEvent;
+
+    fn handle(&self, incoming: Self::Incoming) {
+        match incoming {
+            AudioEvent::Time {
+                player,
+                total_offset,
+                offset,
+            } => self.handle_time(player, offset, total_offset),
+            AudioEvent::Next { player } => todo!(),
         }
     }
 }

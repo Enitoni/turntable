@@ -79,15 +79,16 @@ impl Vinyl {
         let channel = Channel::new();
 
         let event_bus = EventBus::new(channel);
-        event_bus.register(EventLogger);
+        let events = Events::default();
 
         let store = Store::new(event_bus.emitter());
-
-        let events = Events::default();
 
         let rooms = RoomManager::new(Arc::downgrade(&store), events.clone());
 
         let database = main_runtime.block_on(db::connect())?;
+
+        event_bus.register(EventLogger);
+        event_bus.register(rooms.handler());
 
         main_runtime
             .block_on(rooms.init(&database))
