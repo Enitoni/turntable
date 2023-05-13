@@ -213,7 +213,7 @@ pub struct RoomManagerHandler {
 }
 
 impl RoomManagerHandler {
-    fn handle_time(&self, player: PlayerId, offset: usize, total_offset: usize) {
+    fn handle_time(&self, player: PlayerId, offset: usize, _total_offset: usize) {
         let manager = self.manager();
 
         let room = manager
