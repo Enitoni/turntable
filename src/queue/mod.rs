@@ -86,7 +86,7 @@ impl Queue {
         self.items
             .lock()
             .iter()
-            .skip(current_index.saturating_sub(1))
+            .skip(current_index)
             .take(3)
             .map(|x| x.track.clone())
             .collect()

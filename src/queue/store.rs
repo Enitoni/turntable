@@ -1,5 +1,12 @@
 use super::{OrderStrategy, Queue, QueueEvent, QueueId, SerializedQueue, SubQueueId};
-use crate::{audio::PlayerId, auth::User, store::Store, track::Track, EventEmitter};
+use crate::{
+    audio::{AudioEvent, PlayerId},
+    auth::User,
+    events::Handler,
+    store::Store,
+    track::Track,
+    EventEmitter, VinylEvent,
+};
 use dashmap::DashMap;
 use std::sync::{Arc, Weak};
 
@@ -102,5 +109,34 @@ impl QueueStore {
 
     fn store(&self) -> Arc<Store> {
         self.store.upgrade().unwrap()
+    }
+
+    pub fn handler(&self) -> QueueHandler {
+        QueueHandler {
+            store: self.store.clone(),
+        }
+    }
+}
+
+pub struct QueueHandler {
+    store: Weak<Store>,
+}
+
+impl Handler<VinylEvent> for QueueHandler {
+    type Incoming = AudioEvent;
+
+    fn handle(&self, incoming: Self::Incoming) {
+        let store = self.store.upgrade().unwrap();
+
+        if let AudioEvent::Next { player } = incoming {
+            let queue = store
+                .queue_store
+                .players
+                .iter()
+                .find_map(|x| (x.value() == &player).then_some(*x.key()))
+                .expect("queue exists");
+
+            store.queue_store.next(queue)
+        }
     }
 }

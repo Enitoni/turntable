@@ -92,6 +92,7 @@ impl Vinyl {
 
         event_bus.register(EventLogger);
         event_bus.register(rooms.handler());
+        event_bus.register(store.queue_store.handler());
 
         main_runtime
             .block_on(rooms.init(&database))
