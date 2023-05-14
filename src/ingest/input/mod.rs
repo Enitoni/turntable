@@ -1,3 +1,5 @@
+use crate::track::Metadata;
+
 use super::loading::Loader;
 use axum::response::IntoResponse;
 use hyper::StatusCode;
@@ -70,10 +72,10 @@ impl Input {
         }
     }
 
-    pub fn duration(&self) -> f32 {
+    pub fn metadata(&self) -> Metadata {
         match self {
-            Input::WaveDistrict(x) => x.duration(),
-            Input::YouTube(x) => x.duration(),
+            Input::WaveDistrict(x) => x.metatada(),
+            Input::YouTube(x) => x.metadata(),
         }
     }
 }

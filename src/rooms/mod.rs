@@ -68,6 +68,7 @@ impl RoomManager {
         let room = Room::new(data);
         let id = room.id.clone();
 
+        self.players.insert(id.clone(), player);
         self.queues.insert(id.clone(), queue);
         self.rooms.insert(id.clone(), room);
 

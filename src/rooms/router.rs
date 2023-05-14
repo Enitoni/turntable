@@ -19,12 +19,12 @@ use crate::{
     VinylContext,
 };
 
-use super::{SerializedRoom};
+use super::SerializedRoom;
 
 pub fn router() -> Router {
     Router::new()
         .route("/:id/stream", get(get_room_stream))
-        .route("/:id/input", post(add_input))
+        .route("/:id/queue", post(add_input))
         .route("/", post(create_room))
         .route("/", get(get_rooms))
 }

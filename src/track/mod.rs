@@ -21,12 +21,25 @@ pub type TrackId = Id<Track>;
 #[derive(Debug, Clone, Serialize)]
 pub struct InternalTrack {
     pub id: TrackId,
+    pub metadata: Metadata,
 
     #[serde(skip)]
     input: Input,
 
     #[serde(skip)]
     state: Arc<AtomicCell<TrackState>>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct Metadata {
+    pub title: String,
+    pub artist: String,
+
+    pub canonical: String,
+    pub source: String,
+
+    pub duration: f32,
+    pub artwork: Option<String>,
 }
 
 /// Describes if this track has been ingested or not
@@ -38,8 +51,11 @@ enum TrackState {
 
 impl InternalTrack {
     pub fn new(input: Input) -> Self {
+        let metadata = input.metadata();
+
         Self {
             input,
+            metadata,
             id: TrackId::new(),
             state: Arc::new(TrackState::Inactive.into()),
         }

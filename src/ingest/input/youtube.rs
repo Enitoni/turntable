@@ -18,6 +18,7 @@ use crate::{
         loading::{LoadResult, Loader, ProbeResult},
         SinkLength,
     },
+    track::Metadata,
 };
 
 use super::InputError;
@@ -33,6 +34,7 @@ pub struct YouTubeVideo {
     id: String,
     title: String,
     duration: f32,
+    thumbnail: String,
     channel: String,
     audio_stream_url: String,
 }
@@ -48,6 +50,7 @@ struct RawYouTubeVideo {
     id: String,
     title: String,
     channel: String,
+    thumbnail: String,
     format_id: String,
     formats: Vec<RawFormat>,
     duration: f32,
@@ -64,8 +67,15 @@ impl YouTubeVideo {
         self.title.to_owned()
     }
 
-    pub fn duration(&self) -> f32 {
-        self.duration
+    pub fn metadata(&self) -> Metadata {
+        Metadata {
+            title: self.title.clone(),
+            artist: self.channel.clone(),
+            canonical: format!("https://youtube.com/v/{}", self.id),
+            source: "youtube".to_string(),
+            duration: self.duration,
+            artwork: Some(self.thumbnail.clone()),
+        }
     }
 
     pub fn from_url(url: &str) -> Result<Self, InputError> {
@@ -151,6 +161,7 @@ pub fn parse_from_url(url: &str) -> Option<YouTubeVideo> {
                     id: raw_video.id,
                     title: raw_video.title,
                     channel: raw_video.channel,
+                    thumbnail: raw_video.thumbnail,
                     duration: raw_video.duration,
                     audio_stream_url: format.url.to_owned(),
                 })

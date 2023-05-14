@@ -14,6 +14,7 @@ use crate::{
         loading::{LoadResult, Loader, ProbeResult},
         SinkLength,
     },
+    track::Metadata,
 };
 
 use super::InputError;
@@ -103,8 +104,15 @@ impl Track {
         }))
     }
 
-    pub fn duration(&self) -> f32 {
-        self.audio.metadata.duration
+    pub fn metatada(&self) -> Metadata {
+        Metadata {
+            title: self.title.clone(),
+            artist: "I am too lazy to implement this rn".to_string(),
+            canonical: "This too".to_string(),
+            source: "WaveDistrict".to_string(),
+            duration: self.audio.metadata.duration,
+            artwork: None,
+        }
     }
 }
 
