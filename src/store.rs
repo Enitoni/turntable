@@ -66,7 +66,7 @@ impl<T> Id<T> {
 
 impl<T> Default for Id<T> {
     fn default() -> Self {
-        Self::new()
+        Self::none()
     }
 }
 
