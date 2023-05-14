@@ -1,3 +1,5 @@
+use std::cell::RefCell;
+
 use crossbeam::atomic::AtomicCell;
 use parking_lot::Mutex;
 use serde::Serialize;
@@ -167,11 +169,16 @@ impl Queue {
         // We get iterators here so we can call next on each one
         let iterators = queues
             .iter()
-            .map(|x| x.to_items().into_iter())
-            .cycle()
-            .take(iterations);
+            .map(|x| RefCell::new(x.to_items().into_iter()))
+            .collect::<Vec<_>>();
 
-        iterators.flat_map(|mut i| i.next()).flatten().collect()
+        iterators
+            .iter()
+            .cycle()
+            .take(iterations)
+            .flat_map(|i| i.borrow_mut().next())
+            .flatten()
+            .collect()
     }
 
     /// Gets the items from each fallback sub-queue
