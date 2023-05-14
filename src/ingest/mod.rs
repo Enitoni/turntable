@@ -105,6 +105,7 @@ impl Ingestion {
         let stdout = new_child.stdout.take().unwrap();
 
         self.current_sink_id.store(new_sink_id);
+        *self.child.lock() = Some(new_child);
 
         self.loading_sender
             .send(LoadingMessage::Respawn(stdin, new_sink_id))

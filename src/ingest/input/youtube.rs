@@ -135,6 +135,8 @@ pub fn parse_from_url(url: &str) -> Option<YouTubeVideo> {
     let stdout = child.stdout.take().unwrap();
     let video: Result<RawYouTubeVideo, serde_json::Error> = serde_json::from_reader(stdout);
 
+    child.wait().expect("yt-dlp exits");
+
     video
         .map_err(|err| {
             error!("Failed to fetch YouTube video: {}", err.to_string());
