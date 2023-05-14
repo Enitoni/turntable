@@ -1,4 +1,4 @@
-use super::{OrderStrategy, Queue, QueueEvent, QueueId, SerializedQueue, SubQueueId};
+use super::{OrderStrategy, Queue, QueueEvent, QueueId, QueueItem, SerializedQueue, SubQueueId};
 use crate::{
     audio::{AudioEvent, PlayerId},
     auth::User,
@@ -67,12 +67,17 @@ impl QueueStore {
         let item = self.queues.get(&queue).expect("queue exists").next();
 
         self.apply_to_player(queue);
-        self.emitter.dispatch(QueueEvent::Advance { queue, item });
+
+        if let Some(item) = item {
+            self.emitter.dispatch(QueueEvent::Advance { queue, item });
+        }
     }
 
-    pub fn current_track(&self, queue: QueueId) -> Option<Track> {
-        let queue = self.queues.get(&queue).expect("queue exists");
-        queue.tracks_to_play().into_iter().next()
+    pub fn current_item(&self, queue: QueueId) -> Option<QueueItem> {
+        self.queues
+            .get(&queue)
+            .expect("queue exists")
+            .current_item()
     }
 
     pub fn serialized(&self, queue: QueueId) -> SerializedQueue {

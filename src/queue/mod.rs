@@ -15,7 +15,7 @@ mod store;
 
 pub type QueueId = Id<Queue>;
 pub type SubQueueId = Id<SubQueue>;
-pub type ItemId = Id<Item>;
+pub type QueueItemId = Id<QueueItem>;
 
 pub use events::*;
 pub use store::*;
@@ -27,16 +27,16 @@ pub struct Queue {
     sub_queues: Mutex<Vec<SubQueue>>,
 
     /// The current track playing
-    current_item: AtomicCell<ItemId>,
+    current_item: AtomicCell<QueueItemId>,
 
     /// The calculated list of queue items
-    items: Mutex<Vec<Item>>,
+    items: Mutex<Vec<QueueItem>>,
 }
 
 /// An item  in the queue
 #[derive(Debug, Clone, Serialize)]
-pub struct Item {
-    id: ItemId,
+pub struct QueueItem {
+    id: QueueItemId,
     submitter: UserId,
     track: Track,
 }
@@ -62,8 +62,8 @@ pub enum OrderStrategy {
 
 #[derive(Debug)]
 pub enum Entry {
-    Single(Track, ItemId),
-    Multiple(Vec<(Track, ItemId)>),
+    Single(Track, QueueItemId),
+    Multiple(Vec<(Track, QueueItemId)>),
 }
 
 impl Queue {
@@ -111,13 +111,18 @@ impl Queue {
         self.update()
     }
 
-    pub fn next(&self) -> ItemId {
+    pub fn next(&self) -> Option<QueueItem> {
         self.advance_index(1);
-        self.current_item.load()
+        self.current_item()
     }
 
-    pub fn items(&self) -> Vec<Item> {
+    pub fn items(&self) -> Vec<QueueItem> {
         self.items.lock().clone()
+    }
+
+    pub fn current_item(&self) -> Option<QueueItem> {
+        let current_index = self.current_index();
+        self.items.lock().get(current_index).cloned()
     }
 
     /// Gets the index based on the current item being played
@@ -145,7 +150,7 @@ impl Queue {
         index.checked_rem_euclid(items).unwrap_or_default()
     }
 
-    fn item_at(&self, index: usize) -> Option<ItemId> {
+    fn item_at(&self, index: usize) -> Option<QueueItemId> {
         let index = self.index_at(index);
         self.items.lock().get(index).map(|i| i.id)
     }
@@ -159,7 +164,7 @@ impl Queue {
     }
 
     /// Gets the interleaved items from each interleaving sub-queue
-    fn collect_interleaved(queues: &[SubQueue]) -> Vec<Item> {
+    fn collect_interleaved(queues: &[SubQueue]) -> Vec<QueueItem> {
         let iterations: usize = queues
             .iter()
             .filter(|x| x.ordering == OrderStrategy::Interleave)
@@ -182,7 +187,7 @@ impl Queue {
     }
 
     /// Gets the items from each fallback sub-queue
-    fn collect_fallback(queues: &[SubQueue]) -> Vec<Item> {
+    fn collect_fallback(queues: &[SubQueue]) -> Vec<QueueItem> {
         queues
             .iter()
             .filter(|x| x.ordering == OrderStrategy::Fallback)
@@ -192,7 +197,7 @@ impl Queue {
     }
 
     /// Collects all sub-queues into a queue of items
-    fn collect(queues: &[SubQueue]) -> Vec<Item> {
+    fn collect(queues: &[SubQueue]) -> Vec<QueueItem> {
         let mut interleaving = Self::collect_interleaved(queues);
         let mut fallback = Self::collect_fallback(queues);
 
@@ -220,7 +225,7 @@ impl SubQueue {
         self.entries.lock().len()
     }
 
-    fn to_items(&self) -> Vec<Vec<Item>> {
+    fn to_items(&self) -> Vec<Vec<QueueItem>> {
         self.entries
             .lock()
             .iter()
@@ -241,9 +246,9 @@ impl Entry {
         }
     }
 
-    fn to_items(&self, submitter: UserId) -> Vec<Item> {
+    fn to_items(&self, submitter: UserId) -> Vec<QueueItem> {
         match self {
-            Entry::Single(track, id) => vec![Item {
+            Entry::Single(track, id) => vec![QueueItem {
                 id: *id,
                 submitter,
                 track: track.clone(),
@@ -251,7 +256,7 @@ impl Entry {
             Entry::Multiple(x) => x
                 .clone()
                 .into_iter()
-                .map(|(track, id)| Item {
+                .map(|(track, id)| QueueItem {
                     id,
                     track,
                     submitter: submitter.clone(),
@@ -264,8 +269,8 @@ impl Entry {
 #[derive(Debug, Serialize)]
 pub struct SerializedQueue {
     id: QueueId,
-    items: Vec<Item>,
-    current_item: ItemId,
+    items: Vec<QueueItem>,
+    current_item: QueueItemId,
     submitters: Vec<User>,
 }
 

@@ -3,17 +3,17 @@ use crate::{
     VinylEvent,
 };
 
-use super::{Item, ItemId, QueueId};
+use super::{QueueId, QueueItem};
 
 #[derive(Debug, Clone)]
 pub enum QueueEvent {
     Update {
         queue: QueueId,
-        new_items: Vec<Item>,
+        new_items: Vec<QueueItem>,
     },
     Advance {
         queue: QueueId,
-        item: ItemId,
+        item: QueueItem,
     },
 }
 

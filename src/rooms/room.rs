@@ -1,6 +1,7 @@
 use crate::{
     auth::User,
     db::{Database, Record},
+    queue::QueueItem,
     track::Track,
     util::ApiError,
 };
@@ -79,5 +80,5 @@ pub struct SerializedRoom {
     pub name: String,
     pub owner: User,
     pub connections: Vec<User>,
-    pub current_track: Option<Track>,
+    pub current_queue_item: Option<QueueItem>,
 }

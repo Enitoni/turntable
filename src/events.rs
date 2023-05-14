@@ -5,6 +5,7 @@ use tokio::task::spawn_blocking;
 use crate::{
     audio::Track,
     auth::{User, UserId},
+    queue::QueueItem,
     rooms::RoomId,
     server::ws::Recipients,
     VinylContext,
@@ -25,13 +26,13 @@ pub enum Event {
         room: RoomId,
     },
     /// The current track in a room changed
-    TrackUpdate {
+    QueueAdvance {
         room: RoomId,
-        track: Track,
+        item: QueueItem,
     },
-    QueueAdd {
-        user: UserId,
-        track: Track,
+    QueueUpdate {
+        room: RoomId,
+        items: Vec<QueueItem>,
     },
     /// Scheduler read a sink and set a new offset
     PlayerTime {

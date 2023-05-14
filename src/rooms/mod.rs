@@ -13,9 +13,9 @@ use crate::{
     audio::{AudioEvent, Player, PlayerId, Queue, QueuePosition, Track, WaveStream, SAMPLE_RATE},
     auth::{User, UserId},
     db::Database,
-    events::{Event, Events, Handler},
+    events::{Event, Events, Filter, Handler},
     ingest::Input,
-    queue::{QueueId, SerializedQueue, SubQueueId},
+    queue::{QueueEvent, QueueId, QueueItem, SerializedQueue, SubQueueId},
     server::ws::Recipients,
     store::{FromId, Store},
     track::InternalTrack,
@@ -82,14 +82,14 @@ impl RoomManager {
         let queue = self.queues.get(id).expect("get queue");
         let users = self.users_connected_to_room(id);
 
-        let current_track = store.queue_store.current_track(*queue);
+        let current_queue_item = store.queue_store.current_item(*queue);
 
         SerializedRoom {
             id: room.id.id.to_string(),
             name: room.data.name,
             owner: room.data.owner,
             connections: users,
-            current_track,
+            current_queue_item,
         }
     }
 
@@ -232,6 +232,12 @@ pub struct RoomManagerHandler {
     manager: Weak<RoomManager>,
 }
 
+#[derive(Debug)]
+pub enum RoomManagerEvent {
+    Queue(QueueEvent),
+    Audio(AudioEvent),
+}
+
 impl RoomManagerHandler {
     fn handle_time(&self, player: PlayerId, offset: usize, _total_offset: usize) {
         let manager = self.manager();
@@ -255,8 +261,61 @@ impl RoomManagerHandler {
         )
     }
 
-    fn handle_next(&self, player: PlayerId) {
+    fn handle_audio_event(&self, event: AudioEvent) {
+        if let AudioEvent::Time {
+            player,
+            total_offset,
+            offset,
+        } = event
+        {
+            self.handle_time(player, offset, total_offset)
+        }
+    }
+
+    fn handle_queue_event(&self, event: QueueEvent) {
+        match event {
+            QueueEvent::Update { queue, new_items } => self.handle_update(queue, new_items),
+            QueueEvent::Advance { queue, item } => self.handle_next(queue, item),
+        }
+    }
+
+    fn handle_update(&self, queue: QueueId, new_items: Vec<QueueItem>) {
         let manager = self.manager();
+
+        let room = manager
+            .queues
+            .iter()
+            .find(|r| r.value() == &queue)
+            .map(|x| x.key().clone())
+            .expect("get room by queue id");
+
+        let users_to_notify = manager.user_ids_in_room(&room);
+
+        manager.events.emit(
+            Event::QueueUpdate {
+                room,
+                items: new_items,
+            },
+            Recipients::Some(users_to_notify),
+        )
+    }
+
+    fn handle_next(&self, queue: QueueId, item: QueueItem) {
+        let manager = self.manager();
+
+        let room = manager
+            .queues
+            .iter()
+            .find(|r| r.value() == &queue)
+            .map(|x| x.key().clone())
+            .expect("get room by queue id");
+
+        let users_to_notify = manager.user_ids_in_room(&room);
+
+        manager.events.emit(
+            Event::QueueAdvance { room, item },
+            Recipients::Some(users_to_notify),
+        )
     }
 
     fn manager(&self) -> Arc<RoomManager> {
@@ -267,16 +326,22 @@ impl RoomManagerHandler {
 }
 
 impl Handler<VinylEvent> for RoomManagerHandler {
-    type Incoming = AudioEvent;
+    type Incoming = RoomManagerEvent;
 
     fn handle(&self, incoming: Self::Incoming) {
         match incoming {
-            AudioEvent::Time {
-                player,
-                total_offset,
-                offset,
-            } => self.handle_time(player, offset, total_offset),
-            AudioEvent::Next { player } => self.handle_next(player),
+            RoomManagerEvent::Audio(x) => self.handle_audio_event(x),
+            RoomManagerEvent::Queue(x) => self.handle_queue_event(x),
+        }
+    }
+}
+
+impl Filter<VinylEvent> for RoomManagerEvent {
+    fn filter(event: VinylEvent) -> Option<Self> {
+        match event {
+            VinylEvent::Audio(x) => Some(Self::Audio(x)),
+            VinylEvent::Queue(x) => Some(Self::Queue(x)),
+            _ => None,
         }
     }
 }
