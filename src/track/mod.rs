@@ -2,9 +2,11 @@ use std::sync::Arc;
 
 use crossbeam::atomic::AtomicCell;
 use dashmap::DashMap;
+use serde::Serialize;
 
 use crate::{
-    ingest::SinkId,
+    audio::Input,
+    ingest::{Ingestion, InputError, ProbeResult, SinkId},
     store::{FromId, Id, Insert, Store},
 };
 
@@ -16,10 +18,14 @@ pub struct TrackStore {
 pub type Track = Arc<InternalTrack>;
 pub type TrackId = Id<Track>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct InternalTrack {
     pub id: TrackId,
 
+    #[serde(skip)]
+    input: Input,
+
+    #[serde(skip)]
     state: Arc<AtomicCell<TrackState>>,
 }
 
@@ -27,23 +33,46 @@ pub struct InternalTrack {
 #[derive(Debug, Clone, Copy)]
 enum TrackState {
     Inactive,
-    Active { sink_id: SinkId },
+    Active { sink_id: SinkId, probe: ProbeResult },
 }
 
 impl InternalTrack {
-    pub fn new() -> Self {
+    pub fn new(input: Input) -> Self {
         Self {
+            input,
             id: TrackId::new(),
             state: Arc::new(TrackState::Inactive.into()),
         }
     }
 
     pub fn sink(&self) -> Option<SinkId> {
-        if let TrackState::Active { sink_id } = self.state.load() {
+        if let TrackState::Active { sink_id, probe: _ } = self.state.load() {
             Some(sink_id)
         } else {
             None
         }
+    }
+
+    pub fn ensure_activation(&self, ingestion: &Ingestion) -> Result<(), InputError> {
+        if let TrackState::Inactive = self.state.load() {
+            return self.activate(ingestion);
+        }
+
+        Ok(())
+    }
+
+    fn activate(&self, ingestion: &Ingestion) -> Result<(), InputError> {
+        let loader = self.input.loader()?;
+        let result = loader.probe().ok_or(InputError::Unknown)?;
+
+        let sink = ingestion.add(result, loader);
+
+        self.state.store(TrackState::Active {
+            sink_id: sink,
+            probe: result,
+        });
+
+        Ok(())
     }
 }
 

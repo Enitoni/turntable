@@ -9,7 +9,7 @@ pub enum LoadResult {
     Error,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct ProbeResult {
     pub length: SinkLength,
 }

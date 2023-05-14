@@ -28,6 +28,7 @@ mod sink;
 
 pub use events::*;
 pub use input::*;
+pub use loading::*;
 pub use sink::*;
 
 #[derive(Debug)]
@@ -122,16 +123,14 @@ impl Ingestion {
         }
     }
 
-    pub fn add(&self, loader: Box<dyn Loader>) -> Sink {
-        let result = loader.probe().unwrap_or_default();
-
-        let sink = Arc::new(InternalSink::new(result.length));
+    pub fn add(&self, probe_result: ProbeResult, loader: Box<dyn Loader>) -> SinkId {
+        let sink = Arc::new(InternalSink::new(probe_result.length));
         let sink_id = sink.id();
 
         self.sinks.insert(sink_id, sink.clone());
         self.loaders.insert(sink_id, loader);
 
-        sink
+        sink.id()
     }
 
     pub fn request(&self, id: SinkId, amount: usize) {

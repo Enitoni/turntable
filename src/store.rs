@@ -3,8 +3,11 @@ use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
 use std::sync::Arc;
 
+use serde::Serialize;
+
 use crate::audio::Playback;
 use crate::ingest::Ingestion;
+use crate::queue::QueueStore;
 use crate::track::TrackStore;
 use crate::util::ID_COUNTER;
 use crate::EventEmitter;
@@ -13,6 +16,7 @@ use crate::EventEmitter;
 #[derive(Debug)]
 pub struct Store {
     pub track_store: TrackStore,
+    pub queue_store: QueueStore,
     pub playback: Arc<Playback>,
     pub ingestion: Arc<Ingestion>,
 }
@@ -21,6 +25,7 @@ impl Store {
     pub fn new(emitter: EventEmitter) -> Arc<Self> {
         Arc::new_cyclic(|me| Self {
             playback: Playback::new(me.clone(), emitter.clone()).into(),
+            queue_store: QueueStore::new(me.clone(), emitter.clone()),
             ingestion: Ingestion::new(emitter).into(),
             track_store: Default::default(),
         })
@@ -132,6 +137,15 @@ impl<T> Clone for Id<T> {
 
 impl<T> Copy for Id<T> {}
 impl<T> Eq for Id<T> {}
+
+impl<T> Serialize for Id<T> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.value.serialize(serializer)
+    }
+}
 
 impl<T> Debug for Id<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

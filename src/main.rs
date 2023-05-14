@@ -6,6 +6,7 @@ use db::Database;
 use events::{Bus, Channel, Emitter, Events};
 use ingest::IngestionEvent;
 use log::{error, info};
+use queue::QueueEvent;
 use server::ws::WebSocketManager;
 use store::Store;
 use thiserror::Error;
@@ -23,6 +24,7 @@ mod events;
 mod http;
 mod ingest;
 mod logging;
+mod queue;
 mod rooms;
 mod server;
 mod store;
@@ -43,6 +45,7 @@ pub struct Vinyl {
 pub enum VinylEvent {
     Ingestion(IngestionEvent),
     Audio(AudioEvent),
+    Queue(QueueEvent),
 }
 
 pub type EventEmitter = Emitter<Channel<VinylEvent>, VinylEvent>;

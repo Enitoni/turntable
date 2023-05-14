@@ -15,8 +15,10 @@ use crate::{
     db::Database,
     events::{Event, Events, Handler},
     ingest::Input,
+    queue::{QueueId, SubQueueId},
     server::ws::Recipients,
     store::{FromId, Store},
+    track::InternalTrack,
     util::ApiError,
     VinylEvent,
 };
@@ -31,7 +33,11 @@ pub struct RoomManager {
     store: Weak<Store>,
 
     connections: DashMap<ConnectionHandleId, Connection>,
-    queues: DashMap<RoomId, Queue>,
+
+    queues: DashMap<RoomId, QueueId>,
+    sub_queues: DashMap<(RoomId, UserId), SubQueueId>,
+
+    players: DashMap<RoomId, PlayerId>,
     rooms: DashMap<RoomId, Room>,
 }
 
@@ -42,7 +48,9 @@ impl RoomManager {
             store,
             me: me.clone(),
             rooms: Default::default(),
+            players: Default::default(),
             connections: Default::default(),
+            sub_queues: Default::default(),
             queues: Default::default(),
         })
     }
@@ -55,9 +63,9 @@ impl RoomManager {
         let store = self.store();
 
         let player = store.playback.create_player().expect("create player");
-        let queue = Queue::new();
+        let queue = store.queue_store.create_queue(player);
 
-        let room = Room::new(data, queue.id, player);
+        let room = Room::new(data);
         let id = room.id.clone();
 
         self.queues.insert(id.clone(), queue);
@@ -67,16 +75,20 @@ impl RoomManager {
     }
 
     fn serialize_room(&self, id: &RoomId) -> SerializedRoom {
+        let store = self.store();
+
         let room = self.rooms.get(id).expect("get room").clone();
         let queue = self.queues.get(id).expect("get queue");
         let users = self.users_connected_to_room(id);
+
+        let current_track = store.queue_store.current_track(*queue);
 
         SerializedRoom {
             id: room.id.id.to_string(),
             name: room.data.name,
             owner: room.data.owner,
             connections: users,
-            current_track: queue.current_track(),
+            current_track,
         }
     }
 
@@ -117,6 +129,14 @@ impl RoomManager {
             .collect()
     }
 
+    fn ensure_sub_queue(&self, user: User, room: &RoomId) {
+        let queue = self.queues.get(room).expect("queue exists");
+
+        self.sub_queues
+            .entry((room.clone(), user.id.clone()))
+            .or_insert_with(|| self.store().queue_store.create_sub_queue(*queue, user));
+    }
+
     pub fn raw_rooms(&self) -> Vec<Room> {
         self.rooms.iter().map(|r| r.clone()).collect()
     }
@@ -129,12 +149,17 @@ impl RoomManager {
     }
 
     /// Create a user's connection to a room, returning a streamable handle
-    pub fn connect(&self, user: User, room: &RoomId) -> ConnectionHandle {
-        let room = self.rooms.get(room).expect("room exists");
+    pub fn connect(&self, user: User, room_id: &RoomId) -> ConnectionHandle {
+        let store = self.store();
+        let room = self.rooms.get(room_id).expect("room exists");
 
-        let player = room.player.upgrade(&self.store());
+        let player = self
+            .players
+            .get(room_id)
+            .expect("player exists")
+            .upgrade(&store);
+
         let stream = WaveStream::new(player.consumer());
-
         let handle = ConnectionHandle::new(self.me.clone(), stream);
 
         let connection = Connection::new(handle.id, room.id.clone(), user.clone());
@@ -155,30 +180,19 @@ impl RoomManager {
 
     // TODO: Fix this code when implementing proper queuing later
     pub fn add_input(&self, user: User, room: &RoomId, input: Input) {
-        let queue = self.queues.get(room).expect("get queue");
+        self.ensure_sub_queue(user.clone(), room);
+
+        let sub_queue = self
+            .sub_queues
+            .get(&(room.clone(), user.id))
+            .expect("get queue");
+
         let room = self.rooms.get(room).expect("room exists");
-        let users_to_notify = self.user_ids_in_room(&room.id);
-        let player = room.player.upgrade(&self.store());
+        //let users_to_notify = self.user_ids_in_room(&room.id);
 
-        let sink = self
-            .store
-            .upgrade()
-            .unwrap()
-            .ingestion
-            .add(input.loader().expect("loader"));
-
-        let track = Track::new(input.duration(), input.to_string(), sink);
-
-        self.events.emit(
-            Event::QueueAdd {
-                user: user.id,
-                track: track.clone(),
-            },
-            Recipients::Some(users_to_notify),
-        );
-
-        queue.add_track(track, QueuePosition::Add);
-        player.set_sinks(queue.peek_ahead(3).into_iter().map(|t| t.sink).collect());
+        // TODO: Make this part of the track store
+        let track = InternalTrack::new(input);
+        self.store().queue_store.add(*sub_queue, vec![track.into()]);
     }
 
     pub fn handler(&self) -> RoomManagerHandler {
@@ -217,18 +231,18 @@ impl RoomManagerHandler {
         let manager = self.manager();
 
         let room = manager
-            .rooms
+            .players
             .iter()
-            .find(|r| r.player == player)
-            .map(|x| x.clone())
+            .find(|r| r.value() == &player)
+            .map(|x| x.key().clone())
             .expect("get room by player id");
 
-        let users = manager.user_ids_in_room(&room.id);
+        let users = manager.user_ids_in_room(&room);
         let time_in_seconds = offset as f32 / (SAMPLE_RATE * 2) as f32;
 
         manager.events.emit(
             Event::PlayerTime {
-                room: room.id,
+                room,
                 seconds: time_in_seconds,
             },
             Recipients::Some(users),
@@ -237,31 +251,6 @@ impl RoomManagerHandler {
 
     fn handle_next(&self, player: PlayerId) {
         let manager = self.manager();
-
-        let room = manager
-            .rooms
-            .iter()
-            .find(|r| r.player == player)
-            .map(|x| x.clone())
-            .expect("get room by player id");
-
-        let users = manager.user_ids_in_room(&room.id);
-        let player = player.upgrade(&manager.store());
-        let queue = manager.queues.get(&room.id).expect("get queue");
-
-        let track = queue.next();
-
-        player.set_sinks(queue.peek_ahead(3).into_iter().map(|t| t.sink).collect());
-
-        if let Some(track) = track {
-            manager.events.emit(
-                Event::TrackUpdate {
-                    room: room.id,
-                    track,
-                },
-                Recipients::Some(users),
-            )
-        }
     }
 
     fn manager(&self) -> Arc<RoomManager> {

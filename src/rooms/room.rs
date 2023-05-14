@@ -1,7 +1,7 @@
 use crate::{
-    audio::{PlayerId, QueueId, Track},
     auth::User,
     db::{Database, Record},
+    track::Track,
     util::ApiError,
 };
 
@@ -61,17 +61,13 @@ impl RoomData {
 pub struct Room {
     pub id: RoomId,
     pub data: RoomData,
-    pub player: PlayerId,
-    pub queue: QueueId,
 }
 
 impl Room {
-    pub fn new(data: RoomData, queue: QueueId, player: PlayerId) -> Self {
+    pub fn new(data: RoomData) -> Self {
         Self {
             id: data.id.clone(),
             data,
-            queue,
-            player,
         }
     }
 }

@@ -1,7 +1,7 @@
 use crate::{
     audio::{util::Buffer, Sample},
-    store::Id,
-    util::{sync::Wait},
+    store::{FromId, Id},
+    util::sync::Wait,
 };
 use crossbeam::atomic::AtomicCell;
 use std::{fmt::Display, sync::Arc};
@@ -136,6 +136,17 @@ impl InternalSink {
 
     pub fn wait_for_write(&self) {
         self.wait.wait()
+    }
+}
+
+impl FromId<SinkId> for InternalSink {
+    type Output = Sink;
+
+    fn from_id(store: &crate::store::Store, id: &SinkId) -> Option<Self::Output>
+    where
+        Self: Sized,
+    {
+        store.ingestion.sinks.get(id).map(|x| x.value().clone())
     }
 }
 
