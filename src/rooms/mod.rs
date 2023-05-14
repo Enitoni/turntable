@@ -235,6 +235,35 @@ impl RoomManagerHandler {
         )
     }
 
+    fn handle_next(&self, player: PlayerId) {
+        let manager = self.manager();
+
+        let room = manager
+            .rooms
+            .iter()
+            .find(|r| r.player == player)
+            .map(|x| x.clone())
+            .expect("get room by player id");
+
+        let users = manager.user_ids_in_room(&room.id);
+        let player: Arc<Player> = manager.store().get(&player).expect("get player");
+        let queue = manager.queues.get(&room.id).expect("get queue");
+
+        let track = queue.next();
+
+        player.set_sinks(queue.peek_ahead(3).into_iter().map(|t| t.sink).collect());
+
+        if let Some(track) = track {
+            manager.events.emit(
+                Event::TrackUpdate {
+                    room: room.id,
+                    track,
+                },
+                Recipients::Some(users),
+            )
+        }
+    }
+
     fn manager(&self) -> Arc<RoomManager> {
         self.manager
             .upgrade()
@@ -252,7 +281,7 @@ impl Handler<VinylEvent> for RoomManagerHandler {
                 total_offset,
                 offset,
             } => self.handle_time(player, offset, total_offset),
-            AudioEvent::Next { player } => todo!(),
+            AudioEvent::Next { player } => self.handle_next(player),
         }
     }
 }
