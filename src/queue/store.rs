@@ -1,4 +1,4 @@
-use super::{OrderStrategy, Queue, QueueEvent, QueueId, SubQueueId};
+use super::{OrderStrategy, Queue, QueueEvent, QueueId, SerializedQueue, SubQueueId};
 use crate::{audio::PlayerId, auth::User, store::Store, track::Track, EventEmitter};
 use dashmap::DashMap;
 use std::sync::{Arc, Weak};
@@ -66,6 +66,10 @@ impl QueueStore {
     pub fn current_track(&self, queue: QueueId) -> Option<Track> {
         let queue = self.queues.get(&queue).expect("queue exists");
         queue.tracks_to_play().into_iter().next()
+    }
+
+    pub fn serialized(&self, queue: QueueId) -> SerializedQueue {
+        SerializedQueue::new(&self.queues.get(&queue).expect("queue exists"))
     }
 
     /// Applies the queue to the player, ensuring tracks are activated

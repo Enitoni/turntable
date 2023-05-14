@@ -1,5 +1,6 @@
 use crossbeam::atomic::AtomicCell;
 use parking_lot::Mutex;
+use serde::Serialize;
 
 use crate::{
     auth::{User, UserId},
@@ -31,7 +32,7 @@ pub struct Queue {
 }
 
 /// An item  in the queue
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Item {
     id: ItemId,
     submitter: UserId,
@@ -248,6 +249,30 @@ impl Entry {
                     track,
                     submitter: submitter.clone(),
                 })
+                .collect(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub struct SerializedQueue {
+    id: QueueId,
+    items: Vec<Item>,
+    current_item: ItemId,
+    submitters: Vec<User>,
+}
+
+impl SerializedQueue {
+    pub fn new(queue: &Queue) -> Self {
+        Self {
+            id: queue.id,
+            current_item: queue.current_item.load(),
+            items: queue.items(),
+            submitters: queue
+                .sub_queues
+                .lock()
+                .iter()
+                .map(|s| s.owner.clone())
                 .collect(),
         }
     }

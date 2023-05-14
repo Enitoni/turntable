@@ -15,7 +15,7 @@ use crate::{
     db::Database,
     events::{Event, Events, Handler},
     ingest::Input,
-    queue::{QueueId, SubQueueId},
+    queue::{QueueId, SerializedQueue, SubQueueId},
     server::ws::Recipients,
     store::{FromId, Store},
     track::InternalTrack,
@@ -136,6 +136,11 @@ impl RoomManager {
         self.sub_queues
             .entry((room.clone(), user.id.clone()))
             .or_insert_with(|| self.store().queue_store.create_sub_queue(*queue, user));
+    }
+
+    pub fn queue(&self, room: &RoomId) -> SerializedQueue {
+        let queue = self.queues.get(room).expect("queue exists");
+        self.store().queue_store.serialized(*queue)
     }
 
     pub fn raw_rooms(&self) -> Vec<Room> {

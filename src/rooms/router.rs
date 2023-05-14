@@ -14,6 +14,7 @@ use crate::{
     audio::WaveStream,
     auth::Session,
     ingest::Input,
+    queue::SerializedQueue,
     server::{Context, Router},
     util::ApiError,
     VinylContext,
@@ -25,6 +26,7 @@ pub fn router() -> Router {
     Router::new()
         .route("/:id/stream", get(get_room_stream))
         .route("/:id/queue", post(add_input))
+        .route("/:id/queue", get(get_room_queue))
         .route("/", post(create_room))
         .route("/", get(get_rooms))
 }
@@ -104,4 +106,21 @@ async fn get_room_stream(
         .header("Content-Disposition", "inline; filename=\"stream.wav\"")
         .body(body)
         .unwrap())
+}
+
+async fn get_room_queue(
+    _: Session,
+    State(context): Context,
+    Path(id): Path<String>,
+) -> Result<Json<SerializedQueue>, ApiError> {
+    let room = context
+        .rooms
+        .raw_rooms()
+        .into_iter()
+        .find(|r| r.id.id.to_string() == id)
+        .ok_or(ApiError::NotFound("Room"))?;
+
+    let queue = context.rooms.queue(&room.id);
+
+    Ok(Json(queue))
 }
