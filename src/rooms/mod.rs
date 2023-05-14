@@ -132,7 +132,7 @@ impl RoomManager {
     pub fn connect(&self, user: User, room: &RoomId) -> ConnectionHandle {
         let room = self.rooms.get(room).expect("room exists");
 
-        let player: Arc<Player> = self.store().get(&room.player).expect("get player");
+        let player = room.player.upgrade(&self.store());
         let stream = WaveStream::new(player.consumer());
 
         let handle = ConnectionHandle::new(self.me.clone(), stream);
@@ -158,7 +158,7 @@ impl RoomManager {
         let queue = self.queues.get(room).expect("get queue");
         let room = self.rooms.get(room).expect("room exists");
         let users_to_notify = self.user_ids_in_room(&room.id);
-        let player: Arc<Player> = self.store().get(&room.player).expect("get player");
+        let player = room.player.upgrade(&self.store());
 
         let sink = self
             .store
@@ -246,7 +246,7 @@ impl RoomManagerHandler {
             .expect("get room by player id");
 
         let users = manager.user_ids_in_room(&room.id);
-        let player: Arc<Player> = manager.store().get(&player).expect("get player");
+        let player = player.upgrade(&manager.store());
         let queue = manager.queues.get(&room.id).expect("get queue");
 
         let track = queue.next();

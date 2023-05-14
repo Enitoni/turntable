@@ -26,8 +26,7 @@ impl Store {
         })
     }
 
-    /// Gets a resource based on the id
-    pub fn get<I, T>(&self, id: &I) -> Option<T>
+    fn get<I, T>(&self, id: &I) -> Option<T::Output>
     where
         T: FromId<I>,
     {
@@ -56,11 +55,63 @@ impl<T> Id<T> {
         }
     }
 
+    /// Returns an empty id
     pub fn none() -> Self {
         Self {
             value: 0,
             kind: PhantomData,
         }
+    }
+
+    /// Convert the id into the type it belongs to, returning [None] if it doesn't exist.
+    pub fn try_upgrade(self, store: &Store) -> Option<T::Output>
+    where
+        T: FromId<Self>,
+    {
+        store.get::<Self, T>(&self)
+    }
+
+    /// Convert the id into the type it belongs to.
+    ///
+    /// # Panics
+    /// This function will panic if the value does not exist.
+    pub fn upgrade(self, store: &Store) -> T::Output
+    where
+        T: FromId<Self>,
+    {
+        self.try_upgrade(store).unwrap_or_else(|| {
+            panic!(
+                "Could not get {} from store with id {}",
+                std::any::type_name::<T>(),
+                &self
+            )
+        })
+    }
+
+    /// Convert the id into the type the id's type is associated with, returning [None] if the association does not exist.
+    pub fn try_upgrade_into<V>(self, store: &Store) -> Option<V::Output>
+    where
+        V: FromId<Self>,
+    {
+        store.get::<Self, V>(&self)
+    }
+
+    /// Convert the id into the type the id's type is associated with.
+    ///
+    /// # Panics
+    /// This function will panic if the association does not exist.
+    pub fn upgrade_into<V>(self, store: &Store) -> V::Output
+    where
+        V: FromId<Self>,
+    {
+        self.try_upgrade_into::<V>(store).unwrap_or_else(|| {
+            panic!(
+                "Could not get {} associated with {} from store with id {}",
+                std::any::type_name::<V>(),
+                std::any::type_name::<T>(),
+                &self
+            )
+        })
     }
 }
 
@@ -107,7 +158,9 @@ impl<T> Hash for Id<T> {
 }
 
 pub trait FromId<I> {
-    fn from_id(store: &Store, id: &I) -> Option<Self>
+    type Output;
+
+    fn from_id(store: &Store, id: &I) -> Option<Self::Output>
     where
         Self: Sized;
 }

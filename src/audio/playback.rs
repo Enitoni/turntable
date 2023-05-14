@@ -93,8 +93,10 @@ impl Default for Player {
     }
 }
 
-impl FromId<PlayerId> for Arc<Player> {
-    fn from_id(store: &Store, id: &PlayerId) -> Option<Self>
+impl FromId<PlayerId> for Player {
+    type Output = Arc<Player>;
+
+    fn from_id(store: &Store, id: &PlayerId) -> Option<Self::Output>
     where
         Self: Sized,
     {
