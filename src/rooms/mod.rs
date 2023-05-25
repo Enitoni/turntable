@@ -214,9 +214,9 @@ impl RoomManager {
             .expect("connection exists upon notify");
 
         let mut users_to_notify = self.user_ids_in_room(&connection.room);
-        users_to_notify.push(connection.user.id.clone());
-
         let user_not_in_room = users_to_notify.iter().all(|u| u != &connection.user.id);
+
+        users_to_notify.push(connection.user.id.clone());
 
         if user_not_in_room {
             self.events.emit(
