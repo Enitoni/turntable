@@ -267,6 +267,7 @@ impl Entry {
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SerializedQueue {
     id: QueueId,
     items: Vec<QueueItem>,
