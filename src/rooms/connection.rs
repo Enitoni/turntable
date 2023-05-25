@@ -28,7 +28,7 @@ pub struct ConnectionHandle {
 }
 
 /// A connection to a room.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Connection {
     /// The id to the handle used to remove this connection when it is dropped
     pub handle: ConnectionHandleId,
