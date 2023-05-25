@@ -211,13 +211,14 @@ impl RoomManager {
         let connection = self.connections.get(&id).expect("connection exists");
 
         let users_to_notify = self.user_ids_in_room(&connection.room);
-        let user_not_in_room = users_to_notify.iter().all(|u| u != &connection.user.id);
-
+        
         let (_, connection) = self
-            .connections
+        .connections
             .remove(&id)
             .expect("connection exists upon notify");
-
+        
+        let user_not_in_room = users_to_notify.iter().all(|u| u != &connection.user.id);
+        
         if user_not_in_room {
             self.events.emit(
                 Event::UserLeftRoom {
