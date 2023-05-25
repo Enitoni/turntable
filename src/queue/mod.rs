@@ -101,14 +101,20 @@ impl Queue {
     }
 
     pub fn add(&self, sub_queue: SubQueueId, tracks: Vec<Track>) {
-        self.sub_queues
-            .lock()
+        let guard = self.sub_queues.lock();
+
+        let queue = guard
             .iter()
             .find(|q| q.id == sub_queue)
-            .expect("sub queue exists")
-            .add(Entry::new(tracks));
+            .expect("sub queue exists");
 
-        self.update()
+        let item = QueueItem {
+            id: Id::new(),
+            submitter: queue.owner.id.clone(),
+            track: tracks.get(0).expect("first track").clone(),
+        };
+
+        self.items.lock().push(item);
     }
 
     pub fn next(&self) -> Option<QueueItem> {
@@ -157,10 +163,10 @@ impl Queue {
 
     /// Should be called whenever the queue changes
     fn update(&self) {
-        let sub_queues = self.sub_queues.lock();
-        let updated_items = Self::collect(&sub_queues);
+        //let sub_queues = self.sub_queues.lock();
+        //let updated_items = Self::collect(&sub_queues);
 
-        *self.items.lock() = updated_items;
+        //*self.items.lock() = updated_items;
     }
 
     /// Gets the interleaved items from each interleaving sub-queue
