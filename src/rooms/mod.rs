@@ -10,14 +10,14 @@ pub use room::*;
 pub use router::router;
 
 use crate::{
-    audio::{AudioEvent, Player, PlayerId, Queue, QueuePosition, Track, WaveStream, SAMPLE_RATE},
+    audio::{AudioEvent, PlayerId, WaveStream, SAMPLE_RATE},
     auth::{User, UserId},
     db::Database,
     events::{Event, Events, Filter, Handler},
     ingest::Input,
     queue::{QueueEvent, QueueId, QueueItem, SerializedQueue, SubQueueId},
     server::ws::Recipients,
-    store::{FromId, Store},
+    store::Store,
     track::InternalTrack,
     util::ApiError,
     VinylEvent,
@@ -193,7 +193,7 @@ impl RoomManager {
             .get(&(room.clone(), user.id))
             .expect("get queue");
 
-        let room = self.rooms.get(room).expect("room exists");
+        let _room = self.rooms.get(room).expect("room exists");
         //let users_to_notify = self.user_ids_in_room(&room.id);
 
         // TODO: Make this part of the track store

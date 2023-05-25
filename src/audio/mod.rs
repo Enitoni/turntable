@@ -3,7 +3,6 @@ mod encoding;
 mod events;
 mod playback;
 mod processing;
-mod queuing;
 mod source;
 mod timeline;
 mod track;
@@ -15,7 +14,6 @@ pub use encoding::*;
 pub use events::*;
 pub use ingest::Input;
 pub use playback::*;
-pub use queuing::*;
 pub use timeline::*;
 pub use track::Track;
 
@@ -47,13 +45,9 @@ pub mod new {
     use std::time::Duration;
     use std::{fmt::Debug, sync::Arc};
 
-    
     use parking_lot::{Mutex, RwLock};
     use ringbuf::{Consumer, Producer, RingBuffer};
 
-    
-    
-    
     use crate::util::ID_COUNTER;
 
     use super::{Sample, SAMPLES_PER_SEC};
