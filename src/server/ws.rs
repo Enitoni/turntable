@@ -1,15 +1,16 @@
 use std::{
-    collections::HashMap,
     net::SocketAddr,
     sync::{Arc, Weak},
     time::Duration,
 };
 
+use dashmap::DashMap;
 use futures::{
     future::join_all,
     stream::{SplitSink, SplitStream},
-    SinkExt, StreamExt,
+    StreamExt,
 };
+use futures_util::SinkExt;
 use log::trace;
 use tokio::{spawn, sync::Mutex, time::sleep};
 
@@ -19,7 +20,7 @@ type Outgoing = SplitSink<Ws, Message>;
 #[derive(Debug)]
 pub struct WebSocketManager {
     me: Weak<WebSocketManager>,
-    connections: Mutex<HashMap<SocketAddr, Arc<Connection>>>,
+    connections: DashMap<SocketAddr, Arc<Connection>>,
 }
 
 #[derive(Debug)]
@@ -63,26 +64,24 @@ impl WebSocketManager {
         }
         .into();
 
-        self.connections.lock().await.insert(addr, new_connection);
+        self.connections.insert(addr, new_connection);
     }
 
     async fn unregister_connection(&self, addr: SocketAddr) {
         trace!(target: "vinyl::server", "WebSocket disconnected: {}", addr);
-        self.connections.lock().await.remove(&addr);
+        self.connections.remove(&addr);
     }
 
     pub async fn broadcast(&self, message: String, recipients: Recipients) {
         let connections: Vec<_> = self
             .connections
-            .lock()
-            .await
-            .values()
+            .iter()
             .filter(|x| match &recipients {
                 Recipients::All => true,
                 Recipients::Superuser => todo!(),
                 Recipients::Some(targets) => targets.contains(&x.user.id),
             })
-            .map(Arc::clone)
+            .map(|x| x.value().clone())
             .collect();
 
         for connection in connections {
@@ -102,10 +101,8 @@ async fn check_connections(manager: Arc<WebSocketManager>) {
     loop {
         let futures: Vec<_> = manager
             .connections
-            .lock()
-            .await
-            .values()
-            .cloned()
+            .iter()
+            .map(|c| c.value().clone())
             .map(|c| async move { c.incoming.lock().await.next().await.map(|v| (c.addr, v)) })
             .collect();
 
@@ -121,7 +118,7 @@ async fn check_connections(manager: Arc<WebSocketManager>) {
             }
         }
 
-        sleep(Duration::from_millis(100)).await
+        sleep(Duration::from_millis(10)).await
     }
 }
 
