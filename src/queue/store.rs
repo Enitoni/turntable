@@ -111,7 +111,8 @@ impl QueueStore {
 
         let sinks: Vec<_> = tracks
             .into_iter()
-            .map(|x| x.sink().unwrap().upgrade(&store))
+            .flat_map(|x| x.sink())
+            .map(|x| x.upgrade(&store))
             .collect();
 
         player.set_sinks(sinks);
