@@ -2,7 +2,7 @@ use std::{
     convert::Infallible,
     pin::Pin,
     sync::{Arc, Weak},
-    task::{Context, Poll},
+    task::{Context, Poll, Waker},
 };
 
 use axum::{
@@ -86,6 +86,7 @@ pub struct Connection {
     user: User,
     handle: ConnectionHandleId,
     pending_messages: Mutex<Vec<Message>>,
+    waker: Mutex<Option<Waker>>,
 }
 
 pub type ConnectionHandleId = u64;
@@ -131,6 +132,7 @@ impl SseManager {
         let connection = Arc::new(Connection {
             user,
             handle: handle_id,
+            waker: Default::default(),
             pending_messages: Default::default(),
         });
 
@@ -226,6 +228,10 @@ impl Handler<VinylEvent> for SseManagerHandler {
 impl Connection {
     fn send(&self, message: Message) {
         self.pending_messages.lock().push(message);
+
+        if let Some(waker) = self.waker.lock().take() {
+            waker.wake()
+        }
     }
 }
 
@@ -243,6 +249,7 @@ impl Stream for ConnectionHandle {
             return Poll::Ready(Some(Ok(Event::default().data(event))));
         }
 
+        *self.connection.waker.lock() = Some(cx.waker().clone());
         Poll::Pending
     }
 }
