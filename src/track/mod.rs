@@ -70,6 +70,11 @@ impl InternalTrack {
         }
     }
 
+    /// Returns true if the track is suitable in a playback context
+    pub fn suitable(&self) -> bool {
+        !matches!(self.state.load(), TrackState::Error)
+    }
+
     pub fn ensure_activation(&self, ingestion: &Ingestion) -> Result<(), InputError> {
         if let TrackState::Inactive = self.state.load() {
             return match self.activate(ingestion) {

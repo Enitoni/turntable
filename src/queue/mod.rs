@@ -87,6 +87,7 @@ impl Queue {
             .lock()
             .iter()
             .skip(current_index)
+            .filter(|t| t.track.suitable())
             .take(3)
             .map(|x| x.track.clone())
             .collect()
