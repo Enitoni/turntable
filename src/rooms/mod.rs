@@ -278,6 +278,7 @@ impl RoomManagerHandler {
         match event {
             QueueEvent::Update { queue, new_items } => self.handle_update(queue, new_items),
             QueueEvent::Advance { queue, item } => self.handle_next(queue, item),
+            _ => {}
         }
     }
 

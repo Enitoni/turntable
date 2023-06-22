@@ -47,6 +47,7 @@ pub struct Metadata {
 enum TrackState {
     Inactive,
     Active { sink_id: SinkId, probe: ProbeResult },
+    Error,
 }
 
 impl InternalTrack {
@@ -71,7 +72,13 @@ impl InternalTrack {
 
     pub fn ensure_activation(&self, ingestion: &Ingestion) -> Result<(), InputError> {
         if let TrackState::Inactive = self.state.load() {
-            return self.activate(ingestion);
+            return match self.activate(ingestion) {
+                Ok(_) => Ok(()),
+                Err(e) => {
+                    self.state.store(TrackState::Error);
+                    Err(e)
+                }
+            };
         }
 
         Ok(())

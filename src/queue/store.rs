@@ -8,6 +8,7 @@ use crate::{
     EventEmitter, VinylEvent,
 };
 use dashmap::DashMap;
+use log::{error, warn};
 use std::sync::{Arc, Weak};
 
 #[derive(Debug)]
@@ -98,10 +99,14 @@ impl QueueStore {
         let tracks = queue.tracks_to_play();
 
         for track in tracks.iter() {
-            // TODO: This expect should be remove in the future
-            track
-                .ensure_activation(&store.ingestion)
-                .expect("activates track")
+            let result = track.ensure_activation(&store.ingestion);
+
+            if result.is_err() {
+                self.emitter.dispatch(QueueEvent::ActivationError {
+                    queue: queue_id,
+                    track: track.id,
+                })
+            }
         }
 
         let sinks: Vec<_> = tracks
