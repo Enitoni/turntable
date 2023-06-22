@@ -7,7 +7,7 @@ use events::{Bus, Channel, Emitter, Events};
 use ingest::IngestionEvent;
 use log::{error, info};
 use queue::QueueEvent;
-use server::ws::WebSocketManager;
+use server::{sse::SseManager, ws::WebSocketManager};
 use store::Store;
 use thiserror::Error;
 use tokio::runtime::{self, Runtime};
@@ -37,6 +37,7 @@ pub struct Vinyl {
     event_bus: Arc<EventBus>,
     websockets: Arc<WebSocketManager>,
     rooms: Arc<RoomManager>,
+    sse: Arc<SseManager>,
     events: Events,
     runtime: Runtime,
 }
@@ -56,6 +57,7 @@ pub struct VinylContext {
     pub events: Events,
     pub db: Arc<Database>,
     pub rooms: Arc<RoomManager>,
+    pub sse: Arc<SseManager>,
     pub websockets: Arc<WebSocketManager>,
 }
 
@@ -87,18 +89,21 @@ impl Vinyl {
         let store = Store::new(event_bus.emitter());
 
         let rooms = RoomManager::new(Arc::downgrade(&store), events.clone());
+        let sse = SseManager::new(Arc::downgrade(&store));
 
         let database = main_runtime.block_on(db::connect())?;
 
         event_bus.register(EventLogger);
         event_bus.register(rooms.handler());
         event_bus.register(store.queue_store.handler());
+        event_bus.register(sse.handler());
 
         main_runtime
             .block_on(rooms.init(&database))
             .map_err(|e| VinylError::Fatal(e.to_string()))?;
 
         Ok(Self {
+            sse,
             rooms,
             store,
             events,
@@ -128,6 +133,7 @@ impl Vinyl {
         VinylContext {
             db: self.db.clone(),
             rooms: self.rooms.clone(),
+            sse: self.sse.clone(),
             events: self.events.clone(),
             websockets: self.websockets.clone(),
         }

@@ -17,7 +17,7 @@ use crate::{
     ingest::Input,
     queue::{QueueEvent, QueueId, QueueItem, SerializedQueue, SubQueueId},
     server::ws::Recipients,
-    store::Store,
+    store::{FromId, Store},
     track::InternalTrack,
     util::ApiError,
     VinylEvent,

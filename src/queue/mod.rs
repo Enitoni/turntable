@@ -273,7 +273,7 @@ impl Entry {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct SerializedQueue {
     id: QueueId,
