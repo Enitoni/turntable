@@ -5,9 +5,12 @@ use dashmap::DashMap;
 mod connection;
 mod room;
 mod router;
+mod store;
 
 pub use room::*;
 pub use router::router;
+
+pub use store::*;
 
 use crate::{
     audio::{AudioEvent, PlayerId, WaveStream, SAMPLE_RATE},

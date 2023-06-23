@@ -8,6 +8,7 @@ use serde::Serialize;
 use crate::audio::Playback;
 use crate::ingest::Ingestion;
 use crate::queue::QueueStore;
+use crate::rooms::RoomStore;
 use crate::track::TrackStore;
 use crate::util::ID_COUNTER;
 use crate::EventEmitter;
@@ -17,6 +18,7 @@ use crate::EventEmitter;
 pub struct Store {
     pub track_store: TrackStore,
     pub queue_store: QueueStore,
+    pub room_store: RoomStore,
     pub playback: Arc<Playback>,
     pub ingestion: Arc<Ingestion>,
 }
@@ -26,6 +28,7 @@ impl Store {
         Arc::new_cyclic(|me| Self {
             playback: Playback::new(me.clone(), emitter.clone()).into(),
             queue_store: QueueStore::new(me.clone(), emitter.clone()),
+            room_store: RoomStore::new(me.clone(), emitter.clone()),
             ingestion: Ingestion::new(emitter).into(),
             track_store: Default::default(),
         })
