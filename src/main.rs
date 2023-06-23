@@ -12,10 +12,7 @@ use store::Store;
 use thiserror::Error;
 use tokio::runtime::{self, Runtime};
 
-use crate::{
-    logging::{EventLogger, LogColor},
-    rooms::RoomManager,
-};
+use crate::logging::{EventLogger, LogColor};
 
 mod audio;
 mod auth;
@@ -36,7 +33,6 @@ pub struct Vinyl {
     store: Arc<Store>,
     event_bus: Arc<EventBus>,
     websockets: Arc<WebSocketManager>,
-    rooms: Arc<RoomManager>,
     sse: Arc<SseManager>,
     events: Events,
     runtime: Runtime,
@@ -56,7 +52,7 @@ pub type EventBus = Bus<Channel<VinylEvent>, VinylEvent>;
 pub struct VinylContext {
     pub events: Events,
     pub db: Arc<Database>,
-    pub rooms: Arc<RoomManager>,
+    pub store: Arc<Store>,
     pub sse: Arc<SseManager>,
     pub websockets: Arc<WebSocketManager>,
 }
@@ -87,24 +83,20 @@ impl Vinyl {
         let events = Events::default();
 
         let store = Store::new(event_bus.emitter());
-
-        let rooms = RoomManager::new(Arc::downgrade(&store), events.clone());
         let sse = SseManager::new(Arc::downgrade(&store));
 
         let database = main_runtime.block_on(db::connect())?;
 
         event_bus.register(EventLogger);
-        event_bus.register(rooms.handler());
         event_bus.register(store.queue_store.handler());
         event_bus.register(sse.handler());
 
         main_runtime
-            .block_on(rooms.init(&database))
+            .block_on(store.room_store.init(&database))
             .map_err(|e| VinylError::Fatal(e.to_string()))?;
 
         Ok(Self {
             sse,
-            rooms,
             store,
             events,
             event_bus,
@@ -132,8 +124,8 @@ impl Vinyl {
     fn context(&self) -> VinylContext {
         VinylContext {
             db: self.db.clone(),
-            rooms: self.rooms.clone(),
             sse: self.sse.clone(),
+            store: self.store.clone(),
             events: self.events.clone(),
             websockets: self.websockets.clone(),
         }

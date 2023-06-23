@@ -178,10 +178,7 @@ impl SseManagerHandler {
                 offset,
             } => {
                 // cannot get room here yet
-                let room = Thing {
-                    tb: "room".to_string(),
-                    id: "null".into(),
-                };
+                let room = player.upgrade_into::<RoomId>(&self.store());
 
                 let seconds = offset as f32 / (SAMPLE_RATE * 2) as f32;
                 let total_seconds = total_offset as f32 / (SAMPLE_RATE * 2) as f32;

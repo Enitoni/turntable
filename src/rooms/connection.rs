@@ -1,11 +1,11 @@
 use futures_util::{FutureExt, Stream};
 use parking_lot::Mutex;
+use tokio::runtime;
 use tokio::task;
-use tokio::{runtime, task::spawn_blocking};
 
-use super::{RoomId, RoomManager};
+use super::RoomId;
+use crate::store::Store;
 use crate::{audio::WaveStream, auth::User, util::ID_COUNTER};
-use std::future::Future;
 use std::{
     convert::Infallible,
     io::Read,
@@ -22,7 +22,7 @@ pub type ConnectionHandleId = u64;
 pub struct ConnectionHandle {
     pub id: ConnectionHandleId,
     stream: Arc<Mutex<WaveStream>>,
-    manager: Weak<RoomManager>,
+    store: Weak<Store>,
     rt: runtime::Handle,
     fut: Mutex<Option<task::JoinHandle<Vec<u8>>>>,
 }
@@ -39,22 +39,23 @@ pub struct Connection {
 }
 
 impl ConnectionHandle {
-    pub fn new(manager: Weak<RoomManager>, stream: WaveStream) -> Self {
+    pub fn new(store: Weak<Store>, stream: WaveStream) -> Self {
         Self {
             id: ID_COUNTER.fetch_add(1),
             rt: runtime::Handle::current(),
             stream: Arc::new(stream.into()),
             fut: None.into(),
-            manager,
+            store,
         }
     }
 }
 
 impl Drop for ConnectionHandle {
     fn drop(&mut self) {
-        self.manager
+        self.store
             .upgrade()
-            .expect("manager is never none")
+            .expect("store is never none")
+            .room_store
             .notify_disconnect(self.id)
     }
 }
