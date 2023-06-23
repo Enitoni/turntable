@@ -15,7 +15,7 @@ use crate::{
 
 use super::{
     connection::{Connection, ConnectionHandle, ConnectionHandleId},
-    RoomData, RoomId, SerializedRoom,
+    RoomData, RoomEvent, RoomId, SerializedRoom,
 };
 
 #[derive(Debug)]
@@ -85,15 +85,13 @@ impl RoomStore {
         let handle = ConnectionHandle::new(self.store.clone(), stream);
 
         let connection = Connection::new(handle.id, room.id.clone(), user.clone());
+
         self.connections.insert(handle.id, connection);
 
-        /*self.events.emit(
-            Event::UserEnteredRoom {
-                room: room.id.clone(),
-                user,
-            },
-            Recipients::Some(users_to_notify),
-        );*/
+        self.emitter.dispatch(RoomEvent::UserEnteredRoom {
+            room: room.id.clone(),
+            user,
+        });
 
         handle
     }
@@ -104,15 +102,17 @@ impl RoomStore {
             .remove(&id)
             .expect("connection exists upon notify");
 
-        /*if user_not_in_room {
-            self.events.emit(
-                Event::UserLeftRoom {
-                    room: connection.room,
-                    user: connection.user.id,
-                },
-                Recipients::Some(users_to_notify),
-            );
-        }*/
+        let user_not_in_room = self
+            .users_in_room(&connection.room)
+            .into_iter()
+            .all(|u| u.id != connection.user.id);
+
+        if user_not_in_room {
+            self.emitter.dispatch(RoomEvent::UserLeftRoom {
+                room: connection.room,
+                user: connection.user.id,
+            });
+        }
     }
 
     // TODO: Fix this code when implementing proper queuing later

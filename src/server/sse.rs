@@ -23,7 +23,7 @@ use crate::{
     auth::{Session, User, UserId},
     events::Handler,
     queue::{QueueEvent, QueueId, QueueItem, SerializedQueue},
-    rooms::RoomId,
+    rooms::{RoomEvent, RoomId},
     store::Store,
     track::TrackId,
     util::ID_COUNTER,
@@ -196,6 +196,17 @@ impl SseManagerHandler {
         }
     }
 
+    fn handle_room_event(&self, event: RoomEvent) -> Option<(Message, Recipients)> {
+        match event {
+            RoomEvent::UserEnteredRoom { user, room } => {
+                Some((Message::UserEnteredRoom { user, room }, Recipients::All))
+            }
+            RoomEvent::UserLeftRoom { user, room } => {
+                Some((Message::UserLeftRoom { user, room }, Recipients::All))
+            }
+        }
+    }
+
     fn store(&self) -> Arc<Store> {
         self.store.upgrade().expect("store")
     }
@@ -208,6 +219,7 @@ impl Handler<VinylEvent> for SseManagerHandler {
         let response = match incoming {
             VinylEvent::Queue(event) => self.handle_queue_event(event),
             VinylEvent::Audio(event) => self.handle_audio_event(event),
+            VinylEvent::Room(event) => self.handle_room_event(event),
             _ => {
                 return;
             }

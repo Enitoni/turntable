@@ -7,6 +7,7 @@ use events::{Bus, Channel, Emitter, Events};
 use ingest::IngestionEvent;
 use log::{error, info};
 use queue::QueueEvent;
+use rooms::RoomEvent;
 use server::{sse::SseManager, ws::WebSocketManager};
 use store::Store;
 use thiserror::Error;
@@ -40,9 +41,10 @@ pub struct Vinyl {
 
 #[derive(Debug, Clone)]
 pub enum VinylEvent {
-    Ingestion(IngestionEvent),
+    Room(RoomEvent),
     Audio(AudioEvent),
     Queue(QueueEvent),
+    Ingestion(IngestionEvent),
 }
 
 pub type EventEmitter = Emitter<Channel<VinylEvent>, VinylEvent>;
