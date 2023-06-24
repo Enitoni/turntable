@@ -2,7 +2,6 @@ use crate::{
     auth::User,
     db::{Database, Record},
     queue::QueueItem,
-    track::Track,
     util::ApiError,
 };
 

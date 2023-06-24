@@ -8,15 +8,12 @@ use tower_http::cors::{Any, CorsLayer};
 use crate::{auth, rooms, VinylContext};
 
 pub mod sse;
-pub mod ws;
 
 pub const DEFAULT_PORT: u16 = 9050;
 pub type Router = AxumRouter<VinylContext>;
 pub type Context = State<VinylContext>;
 
 pub async fn run_server(context: VinylContext) {
-    context.websockets.run().await;
-
     let port = env::var("VINYL_SERVER_PORT")
         .map(|x| x.parse::<u16>().expect("Port must be a number"))
         .unwrap_or(DEFAULT_PORT);
@@ -30,7 +27,6 @@ pub async fn run_server(context: VinylContext) {
 
     let version_one_router = AxumRouter::new()
         .nest("/auth", auth::router())
-        .nest("/gateway", ws::router())
         .nest("/events", sse::router())
         .nest("/rooms", rooms::router());
 

@@ -1,11 +1,10 @@
 use crate::{
     events::{Filter, IntoEvent},
-    ingest::InputError,
     track::TrackId,
     VinylEvent,
 };
 
-use super::{QueueId, QueueItem, QueueItemId};
+use super::{QueueId, QueueItem};
 
 #[derive(Debug, Clone)]
 pub enum QueueEvent {

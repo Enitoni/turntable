@@ -8,7 +8,6 @@ use crate::{
     EventEmitter, VinylEvent,
 };
 use dashmap::DashMap;
-use log::{error, warn};
 use std::sync::{Arc, Weak};
 
 #[derive(Debug)]

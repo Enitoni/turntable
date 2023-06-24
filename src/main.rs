@@ -3,12 +3,12 @@ use std::{sync::Arc, thread};
 use audio::AudioEvent;
 use colored::Colorize;
 use db::Database;
-use events::{Bus, Channel, Emitter, Events};
+use events::{Bus, Channel, Emitter};
 use ingest::IngestionEvent;
 use log::{error, info};
 use queue::QueueEvent;
 use rooms::RoomEvent;
-use server::{sse::SseManager, ws::WebSocketManager};
+use server::sse::SseManager;
 use store::Store;
 use thiserror::Error;
 use tokio::runtime::{self, Runtime};
@@ -33,9 +33,7 @@ pub struct Vinyl {
     db: Arc<Database>,
     store: Arc<Store>,
     event_bus: Arc<EventBus>,
-    websockets: Arc<WebSocketManager>,
     sse: Arc<SseManager>,
-    events: Events,
     runtime: Runtime,
 }
 
@@ -52,11 +50,9 @@ pub type EventBus = Bus<Channel<VinylEvent>, VinylEvent>;
 
 #[derive(Clone)]
 pub struct VinylContext {
-    pub events: Events,
     pub db: Arc<Database>,
     pub store: Arc<Store>,
     pub sse: Arc<SseManager>,
-    pub websockets: Arc<WebSocketManager>,
 }
 
 #[derive(Debug, Error)]
@@ -80,9 +76,7 @@ impl Vinyl {
         info!("Connecting to database...");
 
         let channel = Channel::new();
-
         let event_bus = EventBus::new(channel);
-        let events = Events::default();
 
         let store = Store::new(event_bus.emitter());
         let sse = SseManager::new(Arc::downgrade(&store));
@@ -100,10 +94,8 @@ impl Vinyl {
         Ok(Self {
             sse,
             store,
-            events,
             event_bus,
             db: database.into(),
-            websockets: WebSocketManager::new(),
             runtime: main_runtime,
         })
     }
@@ -117,10 +109,8 @@ impl Vinyl {
             event_bus.tick()
         });
 
-        self.runtime.block_on(async move {
-            tokio::spawn(events::check_events(self.context()));
-            server::run_server(self.context()).await
-        });
+        self.runtime
+            .block_on(async move { server::run_server(self.context()).await });
     }
 
     fn context(&self) -> VinylContext {
@@ -128,8 +118,6 @@ impl Vinyl {
             db: self.db.clone(),
             sse: self.sse.clone(),
             store: self.store.clone(),
-            events: self.events.clone(),
-            websockets: self.websockets.clone(),
         }
     }
 }

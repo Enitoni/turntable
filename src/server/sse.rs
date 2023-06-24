@@ -16,7 +16,6 @@ use axum::{
 use futures_util::Stream;
 use parking_lot::Mutex;
 use serde::Serialize;
-use surrealdb::sql::Thing;
 
 use crate::{
     audio::{AudioEvent, SAMPLE_RATE},
