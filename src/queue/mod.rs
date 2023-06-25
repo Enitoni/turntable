@@ -94,6 +94,9 @@ impl Queue {
 
         if self.current_item.load() == Id::none() {
             self.advance_index(0);
+
+            // To ensure the current track is always in the robin history
+            self.robin.next();
         }
 
         self.update();
