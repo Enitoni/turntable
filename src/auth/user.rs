@@ -60,4 +60,19 @@ impl User {
         let hashed = PasswordHash::new(&self.password).expect("create password hash");
         Scrypt.verify_password(incoming.as_bytes(), &hashed).is_ok()
     }
+
+    #[cfg(test)]
+    pub fn mock(name: &str) -> User {
+        let name = name.to_string();
+
+        User {
+            id: Thing {
+                tb: "user".to_string(),
+                id: name.clone().into(),
+            },
+            username: name.clone(),
+            password: "your mom".to_string(),
+            display_name: name,
+        }
+    }
 }

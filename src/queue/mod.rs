@@ -71,7 +71,7 @@ impl Queue {
         Self {
             id: Id::new(),
             current_item: Id::none().into(),
-            robin: Default::default(),
+            robin: RoundRobin::new(),
             items: Default::default(),
         }
     }
@@ -149,48 +149,6 @@ impl Queue {
     fn update(&self) {
         *self.items.lock() = self.robin.items();
     }
-
-    /// Gets the interleaved items from each interleaving sub-queue
-    fn collect_interleaved(queues: &[SubQueue]) -> Vec<QueueItem> {
-        let iterations: usize = queues
-            .iter()
-            .filter(|x| x.ordering == OrderStrategy::Interleave)
-            .map(|x| x.len())
-            .sum();
-
-        // We get iterators here so we can call next on each one
-        let iterators = queues
-            .iter()
-            .map(|x| RefCell::new(x.to_items().into_iter()))
-            .collect::<Vec<_>>();
-
-        iterators
-            .iter()
-            .cycle()
-            .take(iterations)
-            .flat_map(|i| i.borrow_mut().next())
-            .flatten()
-            .collect()
-    }
-
-    /// Gets the items from each fallback sub-queue
-    fn collect_fallback(queues: &[SubQueue]) -> Vec<QueueItem> {
-        queues
-            .iter()
-            .filter(|x| x.ordering == OrderStrategy::Fallback)
-            .flat_map(|x| x.to_items())
-            .flatten()
-            .collect()
-    }
-
-    /// Collects all sub-queues into a queue of items
-    fn collect(queues: &[SubQueue]) -> Vec<QueueItem> {
-        let mut interleaving = Self::collect_interleaved(queues);
-        let mut fallback = Self::collect_fallback(queues);
-
-        interleaving.append(&mut fallback);
-        interleaving
-    }
 }
 
 impl SubQueue {
@@ -221,7 +179,7 @@ impl SubQueue {
 
     fn next(&self) -> Option<QueueItem> {
         let mut entries = self.entries.lock();
-        let next = entries.drain(1..).next();
+        let next = entries.drain(..1).next();
 
         if let Some(next) = next {
             let (item, entry) = next.consume_one(self.owner.id.clone());
@@ -320,47 +278,78 @@ impl SerializedQueue {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct RoundRobin {
+    current_submitter: Mutex<UserId>,
     history: Mutex<Vec<QueueItem>>,
     queues: Mutex<Vec<SubQueue>>,
 }
 
 impl RoundRobin {
+    fn new() -> Self {
+        RoundRobin {
+            current_submitter: Thing {
+                tb: "empty".to_string(),
+                id: "".into(),
+            }
+            .into(),
+            history: Default::default(),
+            queues: Default::default(),
+        }
+    }
+
     fn next(&self) {
+        let next_submitter_index = self.next_submitter_index();
+        let current_submitter_index = self.current_submitter_index();
+
         let submitters = self.ordered_submitters();
-        let submitter = submitters.get(0);
+        let submitter = submitters.get(current_submitter_index);
         let queues = self.queues.lock();
 
         let queue_to_consume =
             submitter.and_then(|s| queues.iter().find(|q| q.owner.id == s.clone()));
 
         let next_item = queue_to_consume.and_then(|q| q.next());
+        let next_submitter = queues.get(next_submitter_index).expect("exists");
 
         if let Some(next_item) = next_item {
             self.history.lock().push(next_item);
         }
+
+        *self.current_submitter.lock() = next_submitter.owner.id.clone();
     }
 
     fn calculate(&self) -> Vec<QueueItem> {
-        let submitters = self.ordered_submitters();
+        let current_submitter_index = self.current_submitter_index();
         let queues = self.queues.lock();
-
-        let iterators = submitters
-            .into_iter()
-            .flat_map(|s| queues.iter().find(|q| q.owner.id == s))
-            .map(|x| RefCell::new(x.to_items().into_iter()))
-            .collect::<Vec<_>>();
 
         let iterations: usize = queues.iter().map(|x| x.len()).sum();
 
-        iterators
+        let mut iterators: Vec<_> = queues
             .iter()
-            .cycle()
-            .take(iterations)
-            .flat_map(|i| i.borrow_mut().next())
-            .flatten()
-            .collect()
+            .map(|i| (RefCell::new(i.to_items().into_iter().flatten())))
+            .collect();
+
+        iterators.rotate_left(current_submitter_index);
+
+        let mut result = vec![];
+        let mut current_iteration = 0usize;
+
+        while result.len() < iterations {
+            let iterator = iterators
+                .get(current_iteration.wrapping_rem(iterators.len()))
+                .expect("iterator is never none");
+
+            let item = iterator.borrow_mut().next();
+
+            current_iteration += 1;
+
+            if let Some(item) = item {
+                result.push(item)
+            }
+        }
+
+        result
     }
 
     /// Returns an ordered list of submitters based on priority
@@ -429,5 +418,76 @@ impl RoundRobin {
 
     fn submitters(&self) -> Vec<User> {
         self.queues.lock().iter().map(|q| q.owner.clone()).collect()
+    }
+
+    fn current_submitter_index(&self) -> usize {
+        let current_submitter = self.current_submitter.lock();
+        let queues = self.queues.lock();
+
+        queues
+            .iter()
+            .enumerate()
+            .find_map(|(i, q)| (q.owner.id == *current_submitter).then_some(i))
+            .unwrap_or_default()
+    }
+
+    fn next_submitter_index(&self) -> usize {
+        let current_submitter_index = self.current_submitter_index();
+        let queues = self.queues.lock();
+
+        dbg!((current_submitter_index + 1) % queues.len())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::{auth::User, queue::QueueItem, track::InternalTrack};
+
+    use super::RoundRobin;
+
+    #[test]
+    fn round_robin() {
+        let robin = RoundRobin::new();
+
+        let john = User::mock("john");
+        let mary = User::mock("mary");
+
+        fn titles_from_items(items: Vec<QueueItem>) -> Vec<String> {
+            items
+                .into_iter()
+                .map(|q| q.track.metadata.title.clone())
+                .collect()
+        }
+
+        robin.add(&john, vec![InternalTrack::mock("strawberries")]);
+        robin.add(&john, vec![InternalTrack::mock("bananas")]);
+        robin.add(&john, vec![InternalTrack::mock("apples")]);
+        robin.add(&mary, vec![InternalTrack::mock("windows")]);
+
+        assert_eq!(
+            titles_from_items(robin.items()),
+            vec![
+                "strawberries".to_string(),
+                "windows".to_string(),
+                "bananas".to_string(),
+                "apples".to_string()
+            ]
+        );
+
+        robin.next();
+        robin.next();
+        robin.next();
+        robin.add(&mary, vec![InternalTrack::mock("linux")]);
+
+        assert_eq!(
+            titles_from_items(robin.items()),
+            vec![
+                "strawberries".to_string(),
+                "windows".to_string(),
+                "bananas".to_string(),
+                "linux".to_string(),
+                "apples".to_string(),
+            ]
+        );
     }
 }

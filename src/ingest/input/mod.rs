@@ -13,6 +13,7 @@ mod youtube;
 pub enum Input {
     WaveDistrict(wavedistrict::Track),
     YouTube(youtube::YouTubeVideo),
+    Empty(Metadata),
 }
 
 #[derive(Debug, Error)]
@@ -46,6 +47,7 @@ impl Input {
         match self {
             Input::WaveDistrict(t) => t.fingerprint(),
             Input::YouTube(v) => v.fingerprint(),
+            Input::Empty(_) => "".to_string(),
         }
     }
 
@@ -69,6 +71,7 @@ impl Input {
         match self {
             Input::YouTube(video) => video.loader(),
             Input::WaveDistrict(track) => track.loader(),
+            Input::Empty(_) => Err(InputError::UnsupportedType),
         }
     }
 
@@ -76,6 +79,7 @@ impl Input {
         match self {
             Input::WaveDistrict(x) => x.metatada(),
             Input::YouTube(x) => x.metadata(),
+            Input::Empty(x) => x.clone(),
         }
     }
 }
@@ -85,6 +89,7 @@ impl Display for Input {
         match &self {
             Input::WaveDistrict(x) => x.fmt(f),
             Input::YouTube(x) => x.fmt(f),
+            Input::Empty(_) => write!(f, "Empty"),
         }
     }
 }

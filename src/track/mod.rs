@@ -102,6 +102,20 @@ impl InternalTrack {
 
         Ok(())
     }
+
+    #[cfg(test)]
+    pub fn mock(title: &str) -> Track {
+        let meta = Metadata {
+            title: title.to_string(),
+            artist: "artist".to_string(),
+            canonical: "".to_string(),
+            source: "mock".to_string(),
+            duration: 0.,
+            artwork: None,
+        };
+
+        InternalTrack::new(Input::Empty(meta)).into()
+    }
 }
 
 impl PartialEq for InternalTrack {
