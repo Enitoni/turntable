@@ -305,12 +305,8 @@ impl RoundRobin {
         let next_submitter_index = self.next_submitter_index();
         let current_submitter_index = self.current_submitter_index();
 
-        let submitters = self.ordered_submitters();
-        let submitter = submitters.get(current_submitter_index);
         let queues = self.queues.lock();
-
-        let queue_to_consume =
-            submitter.and_then(|s| queues.iter().find(|q| q.owner.id == s.clone()));
+        let queue_to_consume = queues.get(current_submitter_index);
 
         let next_item = queue_to_consume.and_then(|q| q.next());
         let next_submitter = queues.get(next_submitter_index).expect("exists");
@@ -353,37 +349,6 @@ impl RoundRobin {
         }
 
         result
-    }
-
-    /// Returns an ordered list of submitters based on priority
-    fn ordered_submitters(&self) -> Vec<Thing> {
-        let history = self.history.lock();
-        let queues = self.queues.lock();
-
-        let mut submitters: Vec<_> = queues.iter().map(|q| q.owner.id.clone()).collect();
-
-        let recent_submitters: Vec<_> = history
-            .get(..submitters.len())
-            .map(|slice| slice.iter().map(|s| &s.submitter).collect())
-            .unwrap_or_default();
-
-        let prioritized_submitter = submitters
-            .iter()
-            .find(|s| !recent_submitters.contains(s))
-            .or_else(|| recent_submitters.get(0).copied());
-
-        let starting_queue_index = queues
-            .iter()
-            .enumerate()
-            .find_map(|(i, q)| {
-                prioritized_submitter
-                    .filter(|x| *x == &q.owner.id)
-                    .map(|_| i)
-            })
-            .unwrap_or_default();
-
-        submitters.rotate_left(starting_queue_index);
-        submitters
     }
 
     fn items(&self) -> Vec<QueueItem> {
