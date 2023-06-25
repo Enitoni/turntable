@@ -462,5 +462,23 @@ mod test {
                 "apples".to_string(),
             ]
         );
+
+        robin.add(&john, vec![InternalTrack::mock("aubergines")]);
+        robin.add(&john, vec![InternalTrack::mock("cucumbers")]);
+        robin.add(&mary, vec![InternalTrack::mock("osx")]);
+
+        assert_eq!(
+            titles_from_items(robin.items()),
+            vec![
+                "strawberries".to_string(),
+                "windows".to_string(),
+                "bananas".to_string(),
+                "linux".to_string(),
+                "apples".to_string(),
+                "osx".to_string(),
+                "aubergines".to_string(),
+                "cucumbers".to_string(),
+            ]
+        );
     }
 }
