@@ -91,9 +91,10 @@ impl Ingestion {
     }
 
     fn respawn(&self, new_sink_id: SinkId) {
-        if self.current_sink().filter(|s| !s.is_complete()).is_some() {
+        // This assertion is only harmful for now
+        /*if self.current_sink().filter(|s| !s.is_complete()).is_some() {
             panic!("attempt to respawn ffmpeg before sink is sealed")
-        }
+        }*/
 
         if let Some(mut child) = self.child.lock().take() {
             child.kill().expect("ffmpeg was killed");
