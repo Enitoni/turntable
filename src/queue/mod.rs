@@ -435,7 +435,7 @@ impl RoundRobin {
         let current_submitter_index = self.current_submitter_index();
         let queues = self.queues.lock();
 
-        dbg!((current_submitter_index + 1) % queues.len())
+        (current_submitter_index + 1) % queues.len()
     }
 }
 
