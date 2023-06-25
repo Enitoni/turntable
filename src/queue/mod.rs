@@ -182,6 +182,11 @@ impl SubQueue {
 
     fn next(&self) -> Option<QueueItem> {
         let mut entries = self.entries.lock();
+
+        if entries.is_empty() {
+            return None;
+        }
+
         let next = entries.drain(..1).next();
 
         if let Some(next) = next {
