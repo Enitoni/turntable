@@ -3,6 +3,7 @@ use std::cell::RefCell;
 use crossbeam::atomic::AtomicCell;
 use parking_lot::Mutex;
 use serde::Serialize;
+use surrealdb::sql::Thing;
 
 use crate::{
     auth::{User, UserId},
@@ -24,7 +25,7 @@ pub use store::*;
 #[derive(Debug)]
 pub struct Queue {
     id: QueueId,
-    sub_queues: Mutex<Vec<SubQueue>>,
+    robin: RoundRobin,
 
     /// The current track playing
     current_item: AtomicCell<QueueItemId>,
@@ -45,7 +46,6 @@ pub struct QueueItem {
 #[derive(Debug)]
 pub struct SubQueue {
     id: SubQueueId,
-    parent: QueueId,
     owner: User,
     ordering: OrderStrategy,
     entries: Mutex<Vec<Entry>>,
@@ -71,13 +71,9 @@ impl Queue {
         Self {
             id: Id::new(),
             current_item: Id::none().into(),
-            sub_queues: Default::default(),
+            robin: Default::default(),
             items: Default::default(),
         }
-    }
-
-    pub(self) fn has_sub_queue(&self, sub_queue: SubQueueId) -> bool {
-        self.sub_queues.lock().iter().any(|s| s.id == sub_queue)
     }
 
     pub(self) fn tracks_to_play(&self) -> Vec<Track> {
@@ -93,33 +89,19 @@ impl Queue {
             .collect()
     }
 
-    pub fn create_sub_queue(&self, owner: User, ordering: OrderStrategy) -> SubQueueId {
-        let new_sub_queue = SubQueue::new(self.id, owner, ordering);
-        let id = new_sub_queue.id;
+    pub fn add(&self, submitter: &User, tracks: Vec<Track>) {
+        self.robin.add(submitter, tracks);
 
-        self.sub_queues.lock().push(new_sub_queue);
-        id
-    }
+        if self.current_item.load() == Id::none() {
+            self.advance_index(0);
+        }
 
-    pub fn add(&self, sub_queue: SubQueueId, tracks: Vec<Track>) {
-        let guard = self.sub_queues.lock();
-
-        let queue = guard
-            .iter()
-            .find(|q| q.id == sub_queue)
-            .expect("sub queue exists");
-
-        let item = QueueItem {
-            id: Id::new(),
-            submitter: queue.owner.id.clone(),
-            track: tracks.get(0).expect("first track").clone(),
-        };
-
-        self.items.lock().push(item);
+        self.update();
     }
 
     pub fn next(&self) -> Option<QueueItem> {
         self.advance_index(1);
+        self.update();
         self.current_item()
     }
 
@@ -164,10 +146,7 @@ impl Queue {
 
     /// Should be called whenever the queue changes
     fn update(&self) {
-        //let sub_queues = self.sub_queues.lock();
-        //let updated_items = Self::collect(&sub_queues);
-
-        //*self.items.lock() = updated_items;
+        *self.items.lock() = self.robin.items();
     }
 
     /// Gets the interleaved items from each interleaving sub-queue
@@ -214,10 +193,9 @@ impl Queue {
 }
 
 impl SubQueue {
-    fn new(parent: QueueId, owner: User, ordering: OrderStrategy) -> Self {
+    fn new(owner: User, ordering: OrderStrategy) -> Self {
         Self {
             id: Id::new(),
-            parent,
             owner,
             ordering,
             entries: Default::default(),
@@ -238,6 +216,23 @@ impl SubQueue {
             .iter()
             .map(|x| x.to_items(self.owner.id.clone()))
             .collect()
+    }
+
+    fn next(&self) -> Option<QueueItem> {
+        let mut entries = self.entries.lock();
+        let next = entries.drain(1..).next();
+
+        if let Some(next) = next {
+            let (item, entry) = next.consume_one(self.owner.id.clone());
+
+            if let Some(entry) = entry {
+                entries.push(entry);
+            }
+
+            return Some(item);
+        }
+
+        None
     }
 }
 
@@ -271,6 +266,37 @@ impl Entry {
                 .collect(),
         }
     }
+
+    /// Consumes one item from the entry, returning the item and entry if the entry has more items
+    fn consume_one(self, submitter: UserId) -> (QueueItem, Option<Entry>) {
+        match self {
+            Entry::Single(track, id) => (
+                QueueItem {
+                    id,
+                    submitter,
+                    track: track.clone(),
+                },
+                None,
+            ),
+            Entry::Multiple(mut items) => {
+                let item = items.drain(1..).next().expect("items is not empty");
+                let new_length = items.len();
+
+                let item = QueueItem {
+                    id: item.1,
+                    submitter,
+                    track: item.0,
+                };
+
+                if new_length > 1 {
+                    (item, Some(Entry::Multiple(items)))
+                } else {
+                    let last_item = items.into_iter().next().expect("items is not empty");
+                    (item, Some(Entry::Single(last_item.0, last_item.1)))
+                }
+            }
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -288,12 +314,119 @@ impl SerializedQueue {
             id: queue.id,
             current_item: queue.current_item.load(),
             items: queue.items(),
-            submitters: queue
-                .sub_queues
-                .lock()
-                .iter()
-                .map(|s| s.owner.clone())
-                .collect(),
+            submitters: queue.robin.submitters(),
         }
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct RoundRobin {
+    history: Mutex<Vec<QueueItem>>,
+    queues: Mutex<Vec<SubQueue>>,
+}
+
+impl RoundRobin {
+    fn next(&self) {
+        let submitters = self.ordered_submitters();
+        let submitter = submitters.get(0);
+        let queues = self.queues.lock();
+
+        let queue_to_consume =
+            submitter.and_then(|s| queues.iter().find(|q| q.owner.id == s.clone()));
+
+        let next_item = queue_to_consume.and_then(|q| q.next());
+
+        if let Some(next_item) = next_item {
+            self.history.lock().push(next_item);
+        }
+    }
+
+    fn calculate(&self) -> Vec<QueueItem> {
+        let submitters = self.ordered_submitters();
+        let queues = self.queues.lock();
+
+        let iterators = submitters
+            .into_iter()
+            .flat_map(|s| queues.iter().find(|q| q.owner.id == s))
+            .map(|x| RefCell::new(x.to_items().into_iter()))
+            .collect::<Vec<_>>();
+
+        let iterations: usize = queues.iter().map(|x| x.len()).sum();
+
+        iterators
+            .iter()
+            .cycle()
+            .take(iterations)
+            .flat_map(|i| i.borrow_mut().next())
+            .flatten()
+            .collect()
+    }
+
+    /// Returns an ordered list of submitters based on priority
+    fn ordered_submitters(&self) -> Vec<Thing> {
+        let history = self.history.lock();
+        let queues = self.queues.lock();
+
+        let mut submitters: Vec<_> = queues.iter().map(|q| q.owner.id.clone()).collect();
+
+        let recent_submitters: Vec<_> = history
+            .get(..submitters.len())
+            .map(|slice| slice.iter().map(|s| &s.submitter).collect())
+            .unwrap_or_default();
+
+        let prioritized_submitter = submitters
+            .iter()
+            .find(|s| !recent_submitters.contains(s))
+            .or_else(|| recent_submitters.get(0).copied());
+
+        let starting_queue_index = queues
+            .iter()
+            .enumerate()
+            .find_map(|(i, q)| {
+                prioritized_submitter
+                    .filter(|x| *x == &q.owner.id)
+                    .map(|_| i)
+            })
+            .unwrap_or_default();
+
+        submitters.rotate_left(starting_queue_index);
+        submitters
+    }
+
+    fn items(&self) -> Vec<QueueItem> {
+        let calculated = self.calculate();
+        let history = self.history.lock();
+        let mut result = vec![];
+
+        result.extend(history.iter().cloned());
+        result.extend(calculated);
+
+        result
+    }
+
+    fn add(&self, user: &User, tracks: Vec<Track>) {
+        self.ensure_sub_queue(user);
+
+        let queues = self.queues.lock();
+        let queue = queues
+            .iter()
+            .find(|q| q.owner.id == user.id)
+            .expect("queue exists after it was ensured");
+
+        queue.add(Entry::new(tracks));
+    }
+
+    fn ensure_sub_queue(&self, user: &User) {
+        let mut queues = self.queues.lock();
+        let queue_exists = queues.iter().any(|q| q.owner.id == user.id);
+
+        if !queue_exists {
+            let new_queue = SubQueue::new(user.clone(), OrderStrategy::Interleave);
+            queues.push(new_queue);
+        }
+    }
+
+    fn submitters(&self) -> Vec<User> {
+        self.queues.lock().iter().map(|q| q.owner.clone()).collect()
     }
 }

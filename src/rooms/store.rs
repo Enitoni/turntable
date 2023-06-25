@@ -26,7 +26,6 @@ pub struct RoomStore {
     pub(super) rooms: DashMap<RoomId, RoomData>,
     pub(super) queues: DashMap<RoomId, QueueId>,
     pub(super) players: DashMap<RoomId, PlayerId>,
-    pub(super) sub_queues: DashMap<(RoomId, UserId), SubQueueId>,
     pub(super) connections: DashMap<ConnectionHandleId, Connection>,
 }
 
@@ -38,7 +37,6 @@ impl RoomStore {
             rooms: Default::default(),
             queues: Default::default(),
             players: Default::default(),
-            sub_queues: Default::default(),
             connections: Default::default(),
         }
     }
@@ -117,16 +115,14 @@ impl RoomStore {
 
     // TODO: Fix this code when implementing proper queuing later
     pub fn add_input(&self, user: User, room: &RoomId, input: Input) {
-        self.ensure_sub_queue(user.clone(), room);
-
-        let sub_queue = self
-            .sub_queues
-            .get(&(room.clone(), user.id))
-            .expect("get queue");
+        let queue = self.queues.get(room).expect("queue exists");
 
         // TODO: Make this part of the track store
         let track = InternalTrack::new(input);
-        self.store().queue_store.add(*sub_queue, vec![track.into()]);
+
+        self.store()
+            .queue_store
+            .add(&queue, user, vec![track.into()]);
     }
 
     fn store(&self) -> Arc<Store> {
@@ -172,14 +168,6 @@ impl RoomStore {
             .filter(|c| c.room == id.clone())
             .map(|c| c.user.clone())
             .collect()
-    }
-
-    fn ensure_sub_queue(&self, user: User, room: &RoomId) {
-        let queue = self.queues.get(room).expect("queue exists");
-
-        self.sub_queues
-            .entry((room.clone(), user.id.clone()))
-            .or_insert_with(|| self.store().queue_store.create_sub_queue(*queue, user));
     }
 }
 

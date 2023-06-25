@@ -40,21 +40,10 @@ impl QueueStore {
         id
     }
 
-    pub fn create_sub_queue(&self, queue: QueueId, owner: User) -> SubQueueId {
-        self.queues
-            .get(&queue)
-            .expect("queue exists")
-            .create_sub_queue(owner, OrderStrategy::Interleave)
-    }
+    pub fn add(&self, queue: &QueueId, submitter: User, tracks: Vec<Track>) {
+        let queue = self.queues.get(queue).expect("queue exists");
 
-    pub fn add(&self, sub_queue: SubQueueId, tracks: Vec<Track>) {
-        let queue = self
-            .queues
-            .iter()
-            .find(|q| q.has_sub_queue(sub_queue))
-            .expect("queue exists");
-
-        queue.add(sub_queue, tracks);
+        queue.add(&submitter, tracks);
 
         self.apply_to_player(queue.id);
         self.emitter.dispatch(QueueEvent::Update {
