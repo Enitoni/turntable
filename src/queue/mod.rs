@@ -100,6 +100,7 @@ impl Queue {
     }
 
     pub fn next(&self) -> Option<QueueItem> {
+        self.robin.next();
         self.advance_index(1);
         self.update();
         self.current_item()
