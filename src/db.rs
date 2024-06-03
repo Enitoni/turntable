@@ -33,7 +33,7 @@ pub async fn connect() -> Result<Database, surrealdb::Error> {
     })
     .await?;
 
-    db.use_ns("vinyl").use_db("main").await?;
+    db.use_ns("turntable").use_db("main").await?;
 
     Ok(db)
 }

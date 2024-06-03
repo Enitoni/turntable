@@ -2510,6 +2510,39 @@ dependencies = [
 ]
 
 [[package]]
+name = "turntable"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "axum",
+ "chrono",
+ "colored 2.0.0",
+ "crossbeam",
+ "dashmap",
+ "fern",
+ "fundsp",
+ "futures",
+ "futures-util",
+ "hyper",
+ "lazy_static",
+ "log",
+ "parking_lot",
+ "rand",
+ "regex",
+ "reqwest",
+ "ringbuf",
+ "ron",
+ "scrypt",
+ "serde",
+ "serde_json",
+ "spin_sleep",
+ "surrealdb",
+ "thiserror",
+ "tokio",
+ "tower-http",
+]
+
+[[package]]
 name = "typenum"
 version = "1.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2604,39 +2637,6 @@ name = "version_check"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
-
-[[package]]
-name = "vinyl"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "axum",
- "chrono",
- "colored 2.0.0",
- "crossbeam",
- "dashmap",
- "fern",
- "fundsp",
- "futures",
- "futures-util",
- "hyper",
- "lazy_static",
- "log",
- "parking_lot",
- "rand",
- "regex",
- "reqwest",
- "ringbuf",
- "ron",
- "scrypt",
- "serde",
- "serde_json",
- "spin_sleep",
- "surrealdb",
- "thiserror",
- "tokio",
- "tower-http",
-]
 
 [[package]]
 name = "waker-fn"
