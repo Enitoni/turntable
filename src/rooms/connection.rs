@@ -71,7 +71,7 @@ impl Stream for ConnectionHandle {
 
             self.rt.spawn_blocking(move || {
                 let mut buf = vec![0; 2048];
-                stream.lock().read(&mut buf).ok();
+                let _ = stream.lock().read(&mut buf).ok();
 
                 buf
             })
