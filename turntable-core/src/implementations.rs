@@ -25,6 +25,7 @@ pub struct FfmpegProbe {
 #[derive(Debug, Deserialize)]
 pub struct FfmpegFormat {
     pub duration: String,
+    pub format_name: String,
     pub size: String,
 }
 
