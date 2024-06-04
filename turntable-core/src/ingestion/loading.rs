@@ -92,7 +92,7 @@ pub trait Loader {
     /// * `amount` - The amount of samples to load.
     ///
     /// The implementor is expected to do the following:
-    /// 1. When this is called, the sink's state is set to `Loading`.
+    /// 1. When this is called, the sink's state is set to `Loading`
     /// 2. On a successful load, the samples are written to the [Sink].
     /// 3. When the end is reached, the sink is sealed.
     /// 4. If there is an error, the sink's state is set to `Error` with the relevant error message.
