@@ -10,7 +10,6 @@ use crate::Sample;
 pub static ID_COUNTER: AtomicCell<u64> = AtomicCell::new(1);
 
 /// A unique identifier for any type.
-#[derive(Clone)]
 pub struct Id<T> {
     value: u64,
     kind: PhantomData<T>,
@@ -64,7 +63,16 @@ impl<T> Hash for Id<T> {
     }
 }
 
-impl<T> Copy for Id<T> where T: Clone {}
+impl<T> Clone for Id<T> {
+    fn clone(&self) -> Self {
+        Id {
+            kind: self.kind,
+            value: self.value,
+        }
+    }
+}
+
+impl<T> Copy for Id<T> {}
 impl<T> Eq for Id<T> {}
 
 /// A buffer that stores a single range of data. Used in [MultiRangeBuffer].
