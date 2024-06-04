@@ -57,6 +57,11 @@ impl Config {
     pub fn seconds_to_samples(&self, seconds: f32) -> usize {
         (seconds * self.samples_per_sec() as f32) as usize
     }
+
+    /// Returns the number of samples for any given number of bytes
+    pub fn bytes_to_samples(&self, bytes: usize) -> usize {
+        bytes / Self::SAMPLES_IN_BYTES
+    }
 }
 
 impl Default for Config {
