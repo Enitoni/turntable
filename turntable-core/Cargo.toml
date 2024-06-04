@@ -7,4 +7,5 @@ edition = "2021"
 
 [dependencies]
 async-trait = "0.1.80"
+parking_lot = "0.12.3"
 crossbeam = "0.8.4"
