@@ -19,12 +19,20 @@ use crate::{LoadResult, Loadable, ProbeResult};
 #[derive(Debug, Deserialize)]
 pub struct FfmpegProbe {
     pub format: FfmpegFormat,
+    pub streams: Vec<FfmpegStream>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct FfmpegFormat {
     pub duration: String,
+    pub size: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct FfmpegStream {
+    pub sample_rate: String,
     pub bit_rate: String,
+    pub channels: u32,
 }
 
 /// Probes the given path using ffprobe, returning the duration and bit rate.
@@ -38,8 +46,16 @@ where
         let mut child = StdCommand::new("ffprobe")
             .arg("-v")
             .arg("quiet")
+            // Show json output
             .arg("-print_format")
             .arg("json")
+            // Show stream entries
+            .arg("-show_entries")
+            .arg("stream=sample_rate,channels,bit_rate,size")
+            // Only select audio stream
+            .arg("-select_streams")
+            .arg("a:0")
+            // Show format information
             .arg("-show_format")
             .arg("--")
             .arg(path)
