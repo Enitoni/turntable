@@ -105,8 +105,7 @@ impl Loadable for LoadableFile {
 mod tests {
     use super::*;
 
-    #[tokio::test]
-    async fn test_ffmpeg_probe() {
+    fn test_file_path() -> PathBuf {
         let root = env!("CARGO_MANIFEST_DIR");
         let mut path = PathBuf::from(root);
 
@@ -114,7 +113,14 @@ mod tests {
         path.push("assets");
         path.push("musikk.mp3");
 
-        let probe = ffmpeg_probe(path).await.expect("probes successfully");
+        path
+    }
+
+    #[tokio::test]
+    async fn test_ffmpeg_probe() {
+        let probe = ffmpeg_probe(test_file_path())
+            .await
+            .expect("probes successfully");
 
         assert_eq!(probe.format.duration, "401.005700");
         assert_eq!(&probe.format.bit_rate[..3], "320");
