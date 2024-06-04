@@ -1,6 +1,7 @@
-use std::{marker::PhantomData, sync::RwLock, vec};
+use std::{marker::PhantomData, vec};
 
 use crossbeam::atomic::AtomicCell;
+use parking_lot::RwLock;
 
 use crate::Sample;
 
@@ -55,13 +56,13 @@ impl RangeBuffer {
     }
 
     fn write(&self, buf: &[Sample]) {
-        let mut data = self.data.write().unwrap();
+        let mut data = self.data.write();
         data.extend_from_slice(buf);
     }
 
     /// Reads samples to the provided slice at the given absolute offset.
     fn read(&self, offset: usize, buf: &mut [Sample]) -> usize {
-        let data = self.data.read().unwrap();
+        let data = self.data.read();
 
         let start = offset.saturating_sub(self.offset.load()).min(data.len());
         let end = start.saturating_add(buf.len()).min(data.len());
@@ -73,7 +74,7 @@ impl RangeBuffer {
 
     /// Clears all samples outside the given window.
     fn retain_range(&self, start: usize, end: usize) {
-        let mut data = self.data.write().unwrap();
+        let mut data = self.data.write();
 
         let offset = self.offset.load();
         let relative_start = start.saturating_sub(offset);
@@ -87,7 +88,7 @@ impl RangeBuffer {
 
     /// Returns the amount of samples in the buffer so far.
     fn length(&self) -> usize {
-        self.data.read().unwrap().len()
+        self.data.read().len()
     }
 
     /// Returns the start and end of the range.
@@ -124,8 +125,8 @@ impl RangeBuffer {
         let (start, end) = first.range();
         let (other_start, _) = second.range();
 
-        let first_data: Vec<_> = first.data.write().unwrap().drain(..).collect();
-        let second_data: Vec<_> = second.data.write().unwrap().drain(..).collect();
+        let first_data: Vec<_> = first.data.write().drain(..).collect();
+        let second_data: Vec<_> = second.data.write().drain(..).collect();
         let intersection = (end + 1).saturating_sub(other_start);
 
         new_data.extend_from_slice(&first_data[..first_data.len().saturating_sub(intersection)]);
@@ -139,7 +140,7 @@ impl RangeBuffer {
 
     #[cfg(test)]
     fn consume_to_vec(&self) -> Vec<Sample> {
-        let mut data = self.data.write().unwrap();
+        let mut data = self.data.write();
         data.drain(..).collect()
     }
 }
@@ -182,7 +183,7 @@ impl MultiRangeBuffer {
 
     /// Writes samples to the buffer at the given offset, creating a new range if necessary.
     pub fn write(&self, offset: usize, buf: &[Sample]) {
-        let mut ranges: Vec<_> = self.ranges.write().unwrap().drain(..).collect();
+        let mut ranges: Vec<_> = self.ranges.write().drain(..).collect();
 
         let range = ranges.iter_mut().find(|x| x.offset.load() == offset);
 
@@ -201,7 +202,7 @@ impl MultiRangeBuffer {
     /// - If the range has a gap after the requested amount, or there isn't any range at all, the end is set to `Gap`
     /// - If the requested amount is larger or equal to the expected size, the end is set to `End`
     pub fn read(&self, offset: usize, buf: &mut [Sample]) -> BufferReadResult {
-        let ranges = self.ranges.read().unwrap();
+        let ranges = self.ranges.read();
 
         let end_offset = offset + buf.len();
         let range = ranges.iter().find(|x| x.is_within(offset));
@@ -234,7 +235,7 @@ impl MultiRangeBuffer {
 
     /// Returns the distance in samples from the offset to the first gap or end of the buffer.
     pub fn distance_from_void(&self, offset: usize) -> usize {
-        let ranges = self.ranges.read().unwrap();
+        let ranges = self.ranges.read();
         let range = ranges.iter().find(|x| x.is_within(offset));
 
         if let Some(range) = range {
@@ -247,7 +248,7 @@ impl MultiRangeBuffer {
 
     /// Clears all samples outside the given window.
     pub fn retain_window(&self, offset: usize, window: usize) {
-        let mut ranges: Vec<_> = self.ranges.write().unwrap().drain(..).collect();
+        let mut ranges: Vec<_> = self.ranges.write().drain(..).collect();
 
         let halved_window = window / 2;
         let start = (offset - halved_window).max(0);
@@ -284,12 +285,12 @@ impl MultiRangeBuffer {
         }
 
         merged_ranges.push(current_range);
-        *self.ranges.write().unwrap() = merged_ranges;
+        *self.ranges.write() = merged_ranges;
     }
 
     #[cfg(test)]
     fn consume_to_vec(&self) -> Vec<Vec<Sample>> {
-        let mut ranges = self.ranges.write().unwrap();
+        let mut ranges = self.ranges.write();
         ranges.drain(..).map(|x| x.consume_to_vec()).collect()
     }
 }
