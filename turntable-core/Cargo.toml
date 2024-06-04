@@ -8,3 +8,4 @@ edition = "2021"
 async-trait = { workspace = true }
 parking_lot = { workspace = true }
 crossbeam = { workspace = true }
+dashmap = { workspace = true }
