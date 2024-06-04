@@ -14,7 +14,7 @@ pub struct Config {
     pub preload_size_in_seconds: f32,
     /// How many seconds can be left before more is preloaded
     pub preload_threshold_in_seconds: f32,
-    /// How many milliseconds of audio to buffer during playback
+    /// How many seconds of audio to buffer during playback
     pub buffer_size_in_seconds: f32,
     /// How much delay before playback starts, lower values increase chances of buffer underruns
     pub latency_in_seconds: f32,
@@ -56,5 +56,23 @@ impl Config {
     /// Returns the number of samples for any given number of seconds
     pub fn seconds_to_samples(&self, seconds: f32) -> usize {
         (seconds * self.samples_per_sec() as f32) as usize
+    }
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            // The most common sample rate
+            sample_rate: 44100,
+            // Stereo audio
+            channel_count: 2,
+            // Most tracks are around 5 minutes long
+            preload_size_in_seconds: 60.0 * 5.,
+            // Unless network/IO is slow, this should be enough
+            preload_threshold_in_seconds: 10.0,
+            // 100ms of should be enough to avoid buffer underruns
+            buffer_size_in_seconds: 0.1,
+            latency_in_seconds: 0.1,
+        }
     }
 }
