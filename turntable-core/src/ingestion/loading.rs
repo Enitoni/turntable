@@ -54,13 +54,57 @@ pub struct LoadResult {
 }
 
 /// The result of a probe operation triggered by a [Loadable].
+/// This is used for calculating offsets and length during loading.
 #[derive(Debug, Clone)]
-pub struct ProbeResult {
-    /// The length of the source in seconds.
-    ///
-    /// If this is `None`, the length is unknown.
-    /// For example, the source may be a live stream.
-    pub length: Option<f32>,
+pub enum ProbeResult {
+    /// The source is raw audio
+    Raw {
+        // The length of the source in bytes
+        length: usize,
+        // The sample rate of the source in Hz
+        sample_rate: usize,
+    },
+    /// The source is compressed audio
+    Compressed {
+        // The size of the compressed audio frame in bytes
+        // If this is None, bit_rate is used with length instead.
+        frame_size: Option<usize>,
+        // The bitrate of the audio
+        bit_rate: usize,
+        // The length of the source in bytes
+        length: usize,
+        // The sample rate of the source in Hz
+        sample_rate: usize,
+    },
+    /// The source is a live stream, or something else that is not seekable
+    Unseekable,
+}
+
+impl ProbeResult {
+    /// Returns the amount of samples, if applicable.
+    pub fn length_in_samples(&self, config: &Config) -> Option<usize> {
+        match self {
+            ProbeResult::Raw { length, .. } => Some(config.bytes_to_samples(*length)),
+            ProbeResult::Compressed {
+                length, bit_rate, ..
+            } => Some(length / (bit_rate / 8)),
+            ProbeResult::Unseekable => None,
+        }
+    }
+
+    // Returns the byte offset from a desired sample offset
+    pub fn byte_offset(&self, sample_offset: usize) -> usize {
+        match self {
+            ProbeResult::Raw { length, .. } => sample_offset,
+            ProbeResult::Compressed {
+                length,
+                bit_rate,
+                sample_rate,
+                ..
+            } => (sample_offset * bit_rate) / (8 * sample_rate),
+            ProbeResult::Unseekable => 0,
+        }
+    }
 }
 
 /// [Loadable] trait object.

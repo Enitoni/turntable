@@ -39,9 +39,7 @@ where
         LB: Loadable,
     {
         let probe_result = loadable.probe().await?;
-        let length_in_samples = probe_result
-            .length
-            .map(|sec| self.config.seconds_to_samples(sec));
+        let length_in_samples = probe_result.length_in_samples(&self.config);
 
         let sink: Arc<_> = Sink::new(length_in_samples).into();
         let loader = L::new(
