@@ -1,3 +1,5 @@
+use std::fmt::{Debug, Display};
+use std::hash::{Hash, Hasher};
 use std::{marker::PhantomData, vec};
 
 use crossbeam::atomic::AtomicCell;
@@ -8,7 +10,7 @@ use crate::Sample;
 pub static ID_COUNTER: AtomicCell<u64> = AtomicCell::new(1);
 
 /// A unique identifier for any type.
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[derive(Clone)]
 pub struct Id<T> {
     value: u64,
     kind: PhantomData<T>,
@@ -37,6 +39,33 @@ impl<T> Default for Id<T> {
         Self::none()
     }
 }
+
+impl<T> Debug for Id<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.value)
+    }
+}
+
+impl<T> Display for Id<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.value)
+    }
+}
+
+impl<T> PartialEq for Id<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.value == other.value
+    }
+}
+
+impl<T> Hash for Id<T> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.value.hash(state)
+    }
+}
+
+impl<T> Copy for Id<T> where T: Clone {}
+impl<T> Eq for Id<T> {}
 
 /// A buffer that stores a single range of data. Used in [MultiRangeBuffer].
 #[derive(Debug)]
