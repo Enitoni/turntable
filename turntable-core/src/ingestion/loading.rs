@@ -25,8 +25,7 @@ where
     /// * `amount` - The amount of bytes to load.
     async fn load(&self, offset: usize, amount: usize) -> Result<LoadResult, Box<dyn Error>>;
 
-    /// Attempts to probe the source for metadata.
-    /// For now, this is only used to determine the length of the source.
+    /// Attempts to probe the source for metadata needed for offset calculation.
     async fn probe(&self) -> Result<ProbeResult, Box<dyn Error>>;
 
     /// Shorthand for creating a [BoxedLoadable].
