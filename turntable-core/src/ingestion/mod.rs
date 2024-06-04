@@ -44,7 +44,12 @@ where
             .map(|sec| self.config.seconds_to_samples(sec));
 
         let sink: Arc<_> = Sink::new(length_in_samples).into();
-        let loader = L::new(self.config.clone(), loadable, sink.clone());
+        let loader = L::new(
+            self.config.clone(),
+            probe_result.clone(),
+            loadable,
+            sink.clone(),
+        );
 
         self.loaders.insert(sink.id, loader.into());
         self.sinks.insert(sink.id, sink.clone());

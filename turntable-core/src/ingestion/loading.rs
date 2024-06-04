@@ -54,7 +54,7 @@ pub struct LoadResult {
 }
 
 /// The result of a probe operation triggered by a [Loadable].
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ProbeResult {
     /// The length of the source in seconds.
     ///
@@ -83,8 +83,13 @@ impl Loadable for BoxedLoadable {
 #[async_trait]
 pub trait Loader {
     /// Instantiates the loader.
-    /// Implementors are expected to store the [Loadable] and [Sink] in the type.
-    fn new<L: Loadable>(config: Config, loadable: L, sink: Arc<Sink>) -> Self;
+    /// Implementors are expected to store the [Loadable], [ProbeResult], and [Sink] in the type.
+    fn new<L: Loadable>(
+        config: Config,
+        probe_result: ProbeResult,
+        loadable: L,
+        sink: Arc<Sink>,
+    ) -> Self;
 
     /// Loads samples from the [Loadable] into the [Sink].
     ///
