@@ -52,4 +52,9 @@ impl Config {
     pub fn latency_in_samples(&self) -> usize {
         (self.latency_in_seconds * self.samples_per_sec() as f32) as usize
     }
+
+    /// Returns the number of samples for any given number of seconds
+    pub fn seconds_to_samples(&self, seconds: f32) -> usize {
+        (seconds * self.samples_per_sec() as f32) as usize
+    }
 }
