@@ -1,5 +1,9 @@
 use async_trait::async_trait;
-use std::error::Error;
+use std::{error::Error, sync::Arc};
+
+use crate::Config;
+
+use super::sink::Sink;
 
 /// Represents a type that can load raw bytes from any source.
 /// Activated inputs typically implement this trait.
@@ -24,6 +28,14 @@ where
     /// Attempts to probe the source for metadata.
     /// For now, this is only used to determine the length of the source.
     async fn probe(&self) -> Result<ProbeResult, Box<dyn Error>>;
+
+    /// Shorthand for creating a [BoxedLoadable].
+    fn boxed(self) -> BoxedLoadable
+    where
+        Self: Sized,
+    {
+        BoxedLoadable(Box::new(self))
+    }
 }
 
 /// The result of a load operation triggered by a [Loadable].
@@ -65,8 +77,24 @@ impl Loadable for BoxedLoadable {
     }
 }
 
-impl From<Box<dyn Loadable>> for BoxedLoadable {
-    fn from(loadable: Box<dyn Loadable>) -> Self {
-        Self(loadable)
-    }
+/// Represents a type that loads samples from a [Loadable] into a [Sink].
+///
+/// Usually, this is just an implementation that uses ffmpeg, but it could be any other type of loader.
+#[async_trait]
+pub trait Loader {
+    /// Instantiates the loader.
+    /// Implementors are expected to store the [Loadable] and [Sink] in the type.
+    fn new<L: Loadable>(config: Config, loadable: L, sink: Arc<Sink>) -> Self;
+
+    /// Loads samples from the [Loadable] into the [Sink].
+    ///
+    /// * `offset` - The offset in samples to start loading from.
+    /// * `amount` - The amount of samples to load.
+    ///
+    /// The implementor is expected to do the following:
+    /// 1. When this is called, the sink's state is set to `Loading`.
+    /// 2. On a successful load, the samples are written to the [Sink].
+    /// 3. When the end is reached, the sink is sealed.
+    /// 4. If there is an error, the sink's state is set to `Error` with the relevant error message.
+    async fn load(&self, offset: usize, amount: usize);
 }
