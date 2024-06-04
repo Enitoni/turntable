@@ -5,4 +5,5 @@ mod util;
 
 pub use config::*;
 pub use implementations::*;
+pub use ingestion::*;
 pub use util::*;
