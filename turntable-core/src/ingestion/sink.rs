@@ -60,4 +60,9 @@ impl Sink {
     pub fn state(&self) -> SinkState {
         self.state.lock().clone()
     }
+
+    /// Writes samples to the sink at the given offset.
+    pub fn write(&self, offset: usize, samples: &[f32]) {
+        self.buffer.write(offset, samples);
+    }
 }
