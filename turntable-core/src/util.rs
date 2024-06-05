@@ -5,7 +5,7 @@ use std::{marker::PhantomData, vec};
 use crossbeam::atomic::AtomicCell;
 use parking_lot::RwLock;
 
-use crate::Sample;
+use crate::{Config, Sample};
 
 pub static ID_COUNTER: AtomicCell<u64> = AtomicCell::new(1);
 
@@ -330,6 +330,17 @@ impl MultiRangeBuffer {
         let mut ranges = self.ranges.write();
         ranges.drain(..).map(|x| x.consume_to_vec()).collect()
     }
+}
+
+/// Converts a slice of bytes into a vec of [Sample].
+pub fn raw_samples_from_bytes(bytes: &[u8]) -> Vec<Sample> {
+    bytes
+        .chunks_exact(Config::SAMPLES_IN_BYTES)
+        .map(|b| {
+            let arr: [u8; Config::SAMPLES_IN_BYTES] = [b[0], b[1], b[2], b[3]];
+            Sample::from_le_bytes(arr)
+        })
+        .collect()
 }
 
 #[cfg(test)]
