@@ -111,10 +111,30 @@ impl Loadable for LoadableFile {
 
     async fn probe(&self) -> Result<ProbeResult, Box<dyn Error>> {
         let probe = ffmpeg_probe(self.path.clone()).await?;
+        let stream = probe.streams.first().ok_or("audio stream not found")?;
 
-        Ok(ProbeResult {
-            length: probe.format.duration.parse::<f32>().ok(),
-        })
+        let format = probe.format.format_name;
+        let length = probe.format.size.parse::<usize>().unwrap_or_default();
+        let bit_rate = stream.bit_rate.parse::<usize>().unwrap_or_default();
+        let sample_rate = stream.sample_rate.parse::<usize>().unwrap_or_default();
+
+        let is_lossy = format == "mp3" || format == "aac" || format == "opus" || format == "vorbis";
+
+        let probe_result = if is_lossy {
+            ProbeResult::Compressed {
+                length,
+                bit_rate,
+                frame_size: None,
+                sample_rate,
+            }
+        } else {
+            ProbeResult::Raw {
+                length,
+                sample_rate,
+            }
+        };
+
+        Ok(probe_result)
     }
 }
 
