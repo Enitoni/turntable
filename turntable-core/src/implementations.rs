@@ -1,21 +1,19 @@
 use std::{
     error::Error,
     ffi::{OsStr, OsString},
-    io::SeekFrom,
+    io::{Read, SeekFrom, Write},
     path::PathBuf,
-    process::{Command as StdCommand, Stdio},
+    process::{Child, ChildStdin, ChildStdout, Command, Stdio},
     sync::Arc,
 };
 
 use async_trait::async_trait;
 use crossbeam::atomic::AtomicCell;
+use parking_lot::Mutex;
 use serde::Deserialize;
 use tokio::{
     fs::File,
-    io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt},
-    process::{Child, ChildStdin, ChildStdout, Command},
-    spawn,
-    sync::Mutex,
+    io::{AsyncReadExt, AsyncSeekExt},
     task::spawn_blocking,
 };
 
@@ -52,7 +50,7 @@ where
     let path = path.into();
 
     spawn_blocking(move || {
-        let mut child = StdCommand::new("ffprobe")
+        let mut child = Command::new("ffprobe")
             .arg("-v")
             .arg("quiet")
             // Show json output
@@ -150,6 +148,8 @@ impl Loadable for LoadableFile {
             }
         };
 
+        dbg!(&probe_result);
+
         Ok(probe_result)
     }
 }
@@ -171,43 +171,42 @@ pub struct FfmpegLoader {
 
 impl FfmpegLoader {
     async fn respawn(&self) {
-        let existing_child = {
-            let mut child = self.child.lock().await;
-            child.take()
-        };
+        let child = self.child.clone();
+        let stdin = self.stdin.clone();
+        let stdout = self.stdout.clone();
+        let config = self.config.clone();
 
-        if let Some(mut child) = existing_child {
-            child.kill().await.expect("child was killed");
-            child.wait().await.expect("child exited");
-        }
+        spawn_blocking(move || {
+            if let Some(child) = child.lock().as_mut() {
+                child.kill().expect("child was killed");
+                child.wait().expect("child exited");
+            }
 
-        let mut child = Command::new("ffmpeg")
-            .arg("-hide_banner")
-            .arg("-loglevel")
-            .arg("error")
-            .args(["-i", "pipe:"])
-            .args(["-c:a", "pcm_f32le"])
-            .args(["-f", "f32le"])
-            .args(["-fflags", "+discardcorrupt"])
-            .args(["-ar", &self.config.sample_rate.to_string()])
-            .args(["-ac", &self.config.channel_count.to_string()])
-            .args(["pipe:"])
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .spawn()
-            .expect("ffmpeg spawned");
+            let mut new_child = Command::new("ffmpeg")
+                .arg("-hide_banner")
+                .arg("-loglevel")
+                .arg("error")
+                .args(["-i", "pipe:"])
+                .args(["-c:a", "pcm_f32le"])
+                .args(["-f", "f32le"])
+                .args(["-ar", &config.sample_rate.to_string()])
+                .args(["-ac", &config.channel_count.to_string()])
+                .args(["pipe:"])
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .spawn()
+                .expect("ffmpeg spawned");
 
-        self.stdin.lock().await.replace(child.stdin.take().unwrap());
-        self.stdout
-            .lock()
-            .await
-            .replace(child.stdout.take().unwrap());
-
-        self.child.lock().await.replace(child);
+            stdin.lock().replace(new_child.stdin.take().unwrap());
+            stdout.lock().replace(new_child.stdout.take().unwrap());
+            child.lock().replace(new_child);
+        })
+        .await
+        .unwrap();
     }
 
     async fn ensure_spawned(&self) {
-        let child_is_none = self.child.lock().await.is_none();
+        let child_is_none = self.child.lock().is_none();
 
         if child_is_none {
             self.respawn().await;
@@ -251,25 +250,22 @@ impl Loader for FfmpegLoader {
 
         // Write the data to the stdin so ffmpeg can process it
         // This needs to be done in a spawned task otherwise we get a deadlock
-        spawn(async move {
+        spawn_blocking(move || {
             stdin
                 .lock()
-                .await
                 .as_mut()
                 .expect("stdin exists")
                 .write_all(&load.bytes)
-                .await
+                .unwrap()
         });
 
         let mut bytes = vec![0; amount];
         let amount_read = self
             .stdout
             .lock()
-            .await
             .as_mut()
             .expect("stdout exists")
             .read(&mut bytes)
-            .await
             .expect("read without issue");
 
         let samples = raw_samples_from_bytes(&bytes[..amount_read]);
@@ -284,10 +280,10 @@ impl Loader for FfmpegLoader {
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use super::*;
 
-    fn test_file_path() -> PathBuf {
+    pub fn test_file_path() -> PathBuf {
         let root = env!("CARGO_MANIFEST_DIR");
         let mut path = PathBuf::from(root);
 
