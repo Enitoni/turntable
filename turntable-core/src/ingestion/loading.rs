@@ -1,6 +1,8 @@
 use async_trait::async_trait;
 use std::{error::Error, io::SeekFrom};
 
+use crate::Config;
+
 /// Represents a type that can load raw audio bytes from any source.
 /// Activated inputs typically implement this trait.
 #[async_trait]
@@ -47,6 +49,19 @@ pub enum LoaderLength {
     Time(f32),
     /// The length is known in bytes.
     Bytes(usize),
+}
+
+impl LoaderLength {
+    /// Returns the sink length (amount of samples) if possible.
+    pub fn to_sink_length(&self, config: Config) -> Option<usize> {
+        match self {
+            Self::Time(seconds) => Some(config.seconds_to_samples(*seconds)),
+            // For now, length is unknown if we only know bytes. This is because it could be a lossy format, or any number of channels.
+            // So we can't make any assumptions about the length.
+            // In the future, this should be solved.
+            Self::Bytes(_) => None,
+        }
+    }
 }
 
 /// The result of a read operation triggered by a [Loadable].
