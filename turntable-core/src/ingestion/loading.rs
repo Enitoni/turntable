@@ -1,32 +1,35 @@
 use async_trait::async_trait;
-use std::{error::Error, sync::Arc};
+use std::{error::Error, io::SeekFrom};
 
-use crate::Config;
-
-use super::sink::Sink;
-
-/// Represents a type that can load raw bytes from any source.
+/// Represents a type that can load raw audio bytes from any source.
 /// Activated inputs typically implement this trait.
-///
-/// This is different from a _Loader_ which is responsible for loading data from a [Loadable] into a [Sink].
-///
-/// Note: Although an offset can be provided, there is no guarantee that the correct data will be loaded.
-/// Likewise, the amount of data may be less than the requested amount.
-///
-/// However, this depends on the implementation of the loadable.
 #[async_trait]
 pub trait Loadable
 where
     Self: 'static + Sync + Send,
 {
     /// Attempts to load raw bytes from the source.
+    /// If a seek was made, this reads from the seeked position.
     ///
-    /// * `offset` - The offset to start loading from.
-    /// * `amount` - The amount of bytes to load.
-    async fn load(&self, offset: usize, amount: usize) -> Result<LoadResult, Box<dyn Error>>;
+    /// * `buf` - The buffer to read into.
+    async fn read(&self, buf: &mut [u8]) -> Result<ReadResult, Box<dyn Error>>;
 
-    /// Attempts to probe the source for metadata needed for offset calculation.
-    async fn probe(&self) -> Result<ProbeResult, Box<dyn Error>>;
+    /// Returns the length of the source, if known.
+    /// If this is [None], it's assumed that the source is live.
+    async fn length(&self) -> Option<LoaderLength>;
+
+    /// Returns whether the source is seekable.
+    /// An assumption is made by default that the source is seekable if it has a length.
+    ///
+    /// Override this if you need to make a different assumption.
+    async fn seekable(&self) -> bool {
+        self.length().await.is_some()
+    }
+
+    /// Attempts to seek to a given position.
+    ///
+    /// * `seek` - The position to seek to.
+    async fn seek(&self, seek: SeekFrom) -> Result<(), Box<dyn Error>>;
 
     /// Shorthand for creating a [BoxedLoadable].
     fn boxed(self) -> BoxedLoadable
@@ -35,6 +38,24 @@ where
     {
         BoxedLoadable(Box::new(self))
     }
+}
+
+/// The medium of length that a loader is aware of.
+#[derive(Debug, Clone, Copy)]
+pub enum LoaderLength {
+    /// The length is known in seconds.
+    Time(f32),
+    /// The length is known in bytes.
+    Bytes(usize),
+}
+
+/// The result of a read operation triggered by a [Loadable].
+#[derive(Debug, Clone, Copy)]
+pub enum ReadResult {
+    // There is more data to read. Number is the number of bytes read.
+    More(usize),
+    // End of stream reached. Number is the number of bytes read.
+    End(usize),
 }
 
 /// The result of a load operation triggered by a [Loadable].
@@ -52,70 +73,24 @@ pub struct LoadResult {
     pub end_reached: bool,
 }
 
-/// The result of a probe operation triggered by a [Loadable].
-/// This is used for calculating offsets and length during loading.
-#[derive(Debug, Clone)]
-pub enum ProbeResult {
-    /// The source is raw audio
-    Raw {
-        // The length of the source in bytes
-        length: usize,
-        // The sample rate of the source in Hz
-        sample_rate: usize,
-    },
-    /// The source is compressed audio
-    Compressed {
-        // The size of the compressed audio frame in bytes
-        // If this is None, bit_rate is used with length instead.
-        frame_size: Option<usize>,
-        // The bitrate of the audio
-        bit_rate: usize,
-        // The length of the source in bytes
-        length: usize,
-        // The sample rate of the source in Hz
-        sample_rate: usize,
-    },
-    /// The source is a live stream, or something else that is not seekable
-    Unseekable,
-}
-
-impl ProbeResult {
-    /// Returns the amount of samples, if applicable.
-    pub fn length_in_samples(&self, config: &Config) -> Option<usize> {
-        match self {
-            ProbeResult::Raw { length, .. } => Some(config.bytes_to_samples(*length)),
-            ProbeResult::Compressed {
-                length, bit_rate, ..
-            } => Some(length / (bit_rate / 8)),
-            ProbeResult::Unseekable => None,
-        }
-    }
-
-    /// Returns the byte offset from a desired sample offset
-    pub fn byte_offset(&self, sample_offset: usize) -> usize {
-        match self {
-            ProbeResult::Raw { length, .. } => sample_offset,
-            ProbeResult::Compressed {
-                length,
-                bit_rate,
-                sample_rate,
-                ..
-            } => (sample_offset * bit_rate) / (8 * sample_rate),
-            ProbeResult::Unseekable => 0,
-        }
-    }
-}
-
 /// [Loadable] trait object.
 pub struct BoxedLoadable(Box<dyn Loadable>);
 
 #[async_trait]
 impl Loadable for BoxedLoadable {
-    async fn load(&self, offset: usize, amount: usize) -> Result<LoadResult, Box<dyn Error>> {
-        self.0.load(offset, amount).await
+    async fn read(&self, buf: &mut [u8]) -> Result<ReadResult, Box<dyn Error>> {
+        self.0.read(buf).await
     }
 
-    async fn probe(&self) -> Result<ProbeResult, Box<dyn Error>> {
-        self.0.probe().await
+    async fn length(&self) -> Option<LoaderLength> {
+        self.0.length().await
+    }
+
+    async fn seekable(&self) -> bool {
+        self.0.seekable().await
+    }
+
+    async fn seek(&self, seek: SeekFrom) -> Result<(), Box<dyn Error>> {
+        self.0.seek(seek).await
     }
 }
