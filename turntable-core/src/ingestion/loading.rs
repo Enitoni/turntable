@@ -58,21 +58,6 @@ pub enum ReadResult {
     End(usize),
 }
 
-/// The result of a load operation triggered by a [Loadable].
-///
-/// Note: This is not clonable, because the data could be too inefficient to clone.
-#[derive(Debug)]
-pub struct LoadResult {
-    /// The offset in bytes where the data was loaded from.
-    ///
-    /// Note: This may be slightly different from the offset provided.
-    pub at_offset: usize,
-    /// The data that was loaded.
-    pub bytes: Vec<u8>,
-    /// Whether this is the last chunk of data.
-    pub end_reached: bool,
-}
-
 /// [Loadable] trait object.
 pub struct BoxedLoadable(Box<dyn Loadable>);
 
