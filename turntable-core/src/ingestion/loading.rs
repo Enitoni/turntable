@@ -29,7 +29,7 @@ where
     /// Attempts to seek to a given position.
     ///
     /// * `seek` - The position to seek to.
-    async fn seek(&self, seek: SeekFrom) -> Result<(), Box<dyn Error>>;
+    async fn seek(&self, seek: SeekFrom) -> Result<usize, Box<dyn Error>>;
 
     /// Shorthand for creating a [BoxedLoadable].
     fn boxed(self) -> BoxedLoadable
@@ -90,7 +90,7 @@ impl Loadable for BoxedLoadable {
         self.0.seekable().await
     }
 
-    async fn seek(&self, seek: SeekFrom) -> Result<(), Box<dyn Error>> {
+    async fn seek(&self, seek: SeekFrom) -> Result<usize, Box<dyn Error>> {
         self.0.seek(seek).await
     }
 }
