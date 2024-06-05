@@ -26,6 +26,10 @@ pub trait Ingestion {
 
     /// Requests the pipeline to start loading samples into a sink.
     ///
+    /// * `sink_id` - The id of the sink to load into.
+    /// * `offset` - The offset in samples to start loading from.
+    /// * `amount` - The amount of samples to load.
+    ///
     /// Note: This function must not be called on the playback thread.
     async fn request_load(&self, sink_id: SinkId, offset: usize, amount: usize);
 }
