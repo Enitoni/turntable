@@ -91,7 +91,7 @@ impl ProbeResult {
         }
     }
 
-    // Returns the byte offset from a desired sample offset
+    /// Returns the byte offset from a desired sample offset
     pub fn byte_offset(&self, sample_offset: usize) -> usize {
         match self {
             ProbeResult::Raw { length, .. } => sample_offset,
