@@ -107,13 +107,21 @@ impl Loadable for LoadableFile {
         let mut buf = vec![0; amount];
 
         let at_offset = file.seek(SeekFrom::Start(offset as u64)).await?;
-        let bytes_read = file.read_exact(&mut buf).await?;
-        let bytes = buf[0..bytes_read].to_vec();
+        let mut bytes_read = 0;
+
+        while bytes_read < amount {
+            let amount_read = file.read(&mut buf[bytes_read..]).await?;
+            bytes_read += amount_read;
+
+            if amount_read == 0 {
+                break;
+            }
+        }
 
         Ok(LoadResult {
             end_reached: bytes_read < amount,
             at_offset: at_offset as usize,
-            bytes,
+            bytes: buf[0..bytes_read].to_vec(),
         })
     }
 
