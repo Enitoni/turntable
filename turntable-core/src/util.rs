@@ -65,10 +65,7 @@ impl<T> Hash for Id<T> {
 
 impl<T> Clone for Id<T> {
     fn clone(&self) -> Self {
-        Id {
-            kind: self.kind,
-            value: self.value,
-        }
+        *self
     }
 }
 
