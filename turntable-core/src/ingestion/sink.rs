@@ -52,4 +52,12 @@ impl Sink {
             buffer: MultiRangeBuffer::new(buffer_expected_length),
         }
     }
+
+    pub fn set_state(&self, state: SinkState) {
+        *self.state.lock() = state;
+    }
+
+    pub fn state(&self) -> SinkState {
+        self.state.lock().clone()
+    }
 }
