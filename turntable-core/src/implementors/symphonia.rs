@@ -354,7 +354,7 @@ mod tests {
         // Load some samples.
         ingestion.request_load(sink.id, 0, 8192 * 4).await;
 
-        // Load some samples at and offset.
+        // Load some samples at an offset.
         ingestion.request_load(sink.id, 91000, 8192 * 4).await;
 
         // If successful, the sink should be in the `Idle` state.
