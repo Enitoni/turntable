@@ -20,8 +20,8 @@ use symphonia::core::{
 use tokio::runtime::{self, Runtime};
 
 use crate::{
-    BoxedLoadable, Config, Ingestion, Loadable, LoaderLength, ReadResult, Sample, Sink, SinkId,
-    SinkState,
+    BoxedLoadable, Config, Ingestion, IntoLoadable, Loadable, LoaderLength, ReadResult, Sample,
+    Sink, SinkId, SinkState,
 };
 
 /// An ingestion implementation for Symphonia.
@@ -56,8 +56,10 @@ impl Ingestion for SymphoniaIngestion {
 
     async fn ingest<L>(&self, input: L) -> Result<Arc<Sink>, Box<dyn Error>>
     where
-        L: Loadable,
+        L: IntoLoadable + Send + Sync,
     {
+        let input = input.into_loadable();
+
         let potential_sink_length = input
             .length()
             .await

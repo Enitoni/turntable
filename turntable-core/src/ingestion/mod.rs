@@ -22,7 +22,7 @@ pub trait Ingestion {
     /// Ingests a new source, returning a sink that can be used to play the source.
     async fn ingest<L>(&self, input: L) -> Result<Arc<Sink>, Box<dyn Error>>
     where
-        L: Loadable;
+        L: IntoLoadable + Send + Sync;
 
     /// Requests the pipeline to start loading samples into a sink.
     ///
