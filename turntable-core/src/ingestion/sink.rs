@@ -20,7 +20,7 @@ pub struct Sink {
 }
 
 /// Represents the lifecycle of a [Sink].
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub enum SinkState {
     /// Nothing is happening with the sink right now.
     /// It may still be read from during this state.
