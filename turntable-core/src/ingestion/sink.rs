@@ -5,9 +5,7 @@ use parking_lot::Mutex;
 
 pub type SinkId = Id<Sink>;
 
-/// Represents a source of samples that can be played.
-///
-/// This is what a [Loader] will load into.
+/// Represents a source of samples that can be played by a [Player].
 #[derive(Debug)]
 pub struct Sink {
     pub id: SinkId,
