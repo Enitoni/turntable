@@ -24,13 +24,13 @@ pub enum SinkState {
     /// It may still be read from during this state.
     #[default]
     Idle,
-    /// A loader is loading [Sample] into the sink.
+    /// The [Ingestion] is loading samples into the sink.
     Loading,
     /// The sink will not receive any more samples.
     Sealed,
     /// The sink has been consumed and is ready to be dropped from memory.
     Consumed,
-    /// Something went wrong with the sink, or the [Loader] loading into it.
+    /// Something went wrong with the sink, or the [Ingestion] loading into it.
     /// If the sink is in this state, it will be skipped by the player.
     ///
     /// Note: This is a string because the error may not be clonable.
@@ -51,6 +51,11 @@ impl Sink {
         }
     }
 
+    /// Writes samples to the sink at the given offset.
+    pub fn write(&self, offset: usize, samples: &[f32]) {
+        self.buffer.write(offset, samples);
+    }
+
     pub fn set_state(&self, state: SinkState) {
         *self.state.lock() = state;
     }
@@ -59,8 +64,21 @@ impl Sink {
         self.state.lock().clone()
     }
 
-    /// Writes samples to the sink at the given offset.
-    pub fn write(&self, offset: usize, samples: &[f32]) {
-        self.buffer.write(offset, samples);
+    /// Returns true if the sink is idle, loading, or sealed.
+    /// That means it can be played by a [Player].
+    pub fn is_playable(&self) -> bool {
+        matches!(
+            self.state(),
+            SinkState::Idle | SinkState::Loading | SinkState::Sealed
+        )
+    }
+
+    /// Returns true if the sink can still be loaded into.
+    /// If this is false, the sink should be advanced past once the last loaded samples have been played.
+    pub fn is_loadable(&self) -> bool {
+        !matches!(
+            self.state(),
+            SinkState::Error(_) | SinkState::Sealed | SinkState::Consumed
+        )
     }
 }
