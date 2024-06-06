@@ -7,7 +7,7 @@ use tokio::{
     sync::Mutex,
 };
 
-use crate::{Loadable, LoaderLength, ReadResult};
+use crate::{IntoLoadable, Loadable, LoaderLength, ReadResult};
 pub struct LoadableFile(Mutex<File>);
 
 #[async_trait]
@@ -38,5 +38,13 @@ impl Loadable for LoadableFile {
         let result = file.seek(seek).await?;
 
         Ok(result as usize)
+    }
+}
+
+impl IntoLoadable for File {
+    type Output = LoadableFile;
+
+    fn into_loadable(self) -> Self::Output {
+        LoadableFile(Mutex::new(self))
     }
 }
