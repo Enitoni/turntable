@@ -17,7 +17,7 @@ use symphonia::core::{
     probe::Hint,
     units::Time,
 };
-use tokio::runtime::{self, Runtime};
+use tokio::runtime::{self, Handle};
 
 use crate::{
     BoxedLoadable, Config, Ingestion, IntoLoadable, Loadable, LoaderLength, ReadResult, Sample,
@@ -27,7 +27,7 @@ use crate::{
 /// An ingestion implementation for Symphonia.
 pub struct SymphoniaIngestion {
     /// A runtime is needed to bridge synchronous Symphonia with asynchronous turntable.
-    rt: Arc<Runtime>,
+    rt: Handle,
     config: Config,
     sinks: DashMap<SinkId, Arc<Sink>>,
     loaders: DashMap<SinkId, Arc<Loader>>,
@@ -38,11 +38,7 @@ pub struct SymphoniaIngestion {
 impl Ingestion for SymphoniaIngestion {
     async fn new(config: Config) -> Self {
         Self {
-            rt: runtime::Builder::new_multi_thread()
-                .thread_name("symphonia-ingestion")
-                .build()
-                .expect("runtime is created for symphonia ingestion")
-                .into(),
+            rt: runtime::Handle::current(),
             config,
             sinks: DashMap::new(),
             loaders: DashMap::new(),
@@ -300,7 +296,7 @@ struct LoadResult {
 
 /// Bridges an async [Loadable] with a synchronous [MediaSource].
 struct LoadableMediaSource {
-    rt: Arc<Runtime>,
+    rt: Handle,
     loadable: BoxedLoadable,
 }
 
