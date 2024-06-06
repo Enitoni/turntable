@@ -340,6 +340,21 @@ pub fn raw_samples_from_bytes(bytes: &[u8]) -> Vec<Sample> {
         .collect()
 }
 
+/// A utility function to safely assign a slice to a mutable slice.
+/// Returns the amount of elements that were assigned.
+pub fn assign_slice<T: Copy>(from: &[T], to: &mut [T]) -> usize {
+    let safe_end = from.len().min(to.len());
+    to[..safe_end].copy_from_slice(&from[..safe_end]);
+    safe_end
+}
+
+/// Same as `assign_slice`, but with an offset.
+/// If the offset is larger than the length of the slice, data is truncated.
+pub fn assign_slice_with_offset<T: Copy>(offset: usize, from: &[T], to: &mut [T]) -> usize {
+    let offset = offset.min(to.len());
+    assign_slice(from, &mut to[offset..])
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -532,6 +547,41 @@ mod test {
             buffer.consume_to_vec(),
             vec![vec![8., 9., 10.], vec![20., 21., 22.]],
             "ranges are correctly retained"
+        );
+    }
+
+    #[test]
+    fn test_assign_slice() {
+        let mut buf = vec![0.; 10];
+
+        let amount = assign_slice(&[1., 2., 3., 4.], &mut buf);
+        dbg!(&buf);
+
+        assert_eq!(amount, 4, "amount is correct");
+        assert_eq!(
+            buf,
+            &[1.0, 2.0, 3.0, 4.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,],
+            "buf is assigned correctly"
+        );
+    }
+
+    #[test]
+    fn test_assign_slice_with_offset() {
+        let mut buf = vec![0.; 10];
+
+        let amount = assign_slice_with_offset(2, &[1., 2., 3., 4.], &mut buf);
+        assert_eq!(amount, 4, "amount is correct");
+
+        let amount = assign_slice_with_offset(6, &[1., 2., 3., 4., 5.], &mut buf);
+        assert_eq!(amount, 4, "amount is correct");
+
+        let amount = assign_slice_with_offset(10, &[1., 2., 3.], &mut buf);
+        assert_eq!(amount, 0, "amount is correct");
+
+        assert_eq!(
+            &buf,
+            &[0.0, 0.0, 1.0, 2.0, 3.0, 4.0, 1.0, 2.0, 3.0, 4.0,],
+            "buf is assigned correctly"
         );
     }
 }
