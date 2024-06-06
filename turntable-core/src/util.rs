@@ -135,7 +135,7 @@ impl RangeBuffer {
     /// Returns true if the given offset is within the range of this buffer.
     fn is_within(&self, offset: usize) -> bool {
         let (start, end) = self.range();
-        offset >= start && offset < end
+        offset >= start && offset <= end
     }
 
     /// Returns true if the given range is intersecting or adjacent to this range.
@@ -482,6 +482,17 @@ mod test {
     }
 
     #[test]
+    fn test_is_within() {
+        let buffer = RangeBuffer::new(0);
+        buffer.write(&[1., 2., 3., 4., 5., 6., 7., 8., 9., 10.]);
+
+        // Remember, offset starts at 0.
+        assert!(buffer.is_within(0), "start is within");
+        assert!(buffer.is_within(4), "middle is within");
+        assert!(buffer.is_within(9), "end is within");
+    }
+
+    #[test]
     fn test_merge_multi_ranges() {
         let buffer = MultiRangeBuffer::new(0);
 
@@ -555,6 +566,9 @@ mod test {
             at_end.is_end,
             "void after second range is the end/last void"
         );
+
+        let at_last_sample = buffer.distance_from_void(29);
+        assert!(at_last_sample.is_end, "void after last sample is the end");
     }
 
     #[test]
