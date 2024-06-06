@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+mod timeline;
+
 use crate::Ingestion;
 
 /// The playback type is responsible for managing players, processing playback, and preloading sinks as needed.
