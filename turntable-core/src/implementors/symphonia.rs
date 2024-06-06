@@ -273,7 +273,7 @@ impl Loader {
 
                     // Copy the samples into the buffer.
                     samples_written += samples.len();
-                    buf_to_copy.copy_from_slice(&samples[..safe_end]);
+                    buf_to_copy[..safe_end].copy_from_slice(&samples[..safe_end]);
                 }
                 Err(SymphoniaError::IoError(err)) => match err.kind() {
                     // Assume the end of the stream.
