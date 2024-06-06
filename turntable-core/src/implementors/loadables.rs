@@ -48,3 +48,25 @@ impl IntoLoadable for File {
         LoadableFile(Mutex::new(self))
     }
 }
+
+#[cfg(test)]
+pub mod tests {
+    use std::path::PathBuf;
+
+    use tokio::fs::File;
+
+    pub fn test_file_path() -> PathBuf {
+        let root = env!("CARGO_MANIFEST_DIR");
+        let mut path = PathBuf::from(root);
+
+        path.pop();
+        path.push("assets");
+        path.push("deep_blue.flac");
+
+        path
+    }
+
+    pub async fn test_file() -> File {
+        File::open(test_file_path()).await.unwrap()
+    }
+}
