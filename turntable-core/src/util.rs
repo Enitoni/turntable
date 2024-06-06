@@ -555,7 +555,6 @@ mod test {
         let mut buf = vec![0.; 10];
 
         let amount = assign_slice(&[1., 2., 3., 4.], &mut buf);
-        dbg!(&buf);
 
         assert_eq!(amount, 4, "amount is correct");
         assert_eq!(
