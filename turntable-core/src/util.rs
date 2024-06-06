@@ -200,11 +200,19 @@ pub enum BufferReadEnd {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct BufferReadResult {
+pub struct BufferRead {
     /// The amount of samples read.
     pub amount: usize,
     /// The end of the read operation.
     pub end: BufferReadEnd,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct BufferVoidDistance {
+    /// The distance from the void in the buffer.
+    pub distance: usize,
+    /// Determines if the void is the end of the buffer.
+    pub is_end: bool,
 }
 
 impl MultiRangeBuffer {
@@ -235,7 +243,7 @@ impl MultiRangeBuffer {
     /// - If the range has more data after the requested amount, the end is set to `More`
     /// - If the range has a gap after the requested amount, or there isn't any range at all, the end is set to `Gap`
     /// - If the requested amount is larger or equal to the expected size, the end is set to `End`
-    pub fn read(&self, offset: usize, buf: &mut [Sample]) -> BufferReadResult {
+    pub fn read(&self, offset: usize, buf: &mut [Sample]) -> BufferRead {
         let ranges = self.ranges.read();
 
         let end_offset = offset + buf.len();
@@ -261,22 +269,31 @@ impl MultiRangeBuffer {
             end = BufferReadEnd::End;
         }
 
-        BufferReadResult {
+        BufferRead {
             amount: amount_read,
             end,
         }
     }
 
     /// Returns the distance in samples from the offset to the first gap or end of the buffer.
-    pub fn distance_from_void(&self, offset: usize) -> usize {
+    pub fn distance_from_void(&self, offset: usize) -> BufferVoidDistance {
         let ranges = self.ranges.read();
-        let range = ranges.iter().find(|x| x.is_within(offset));
+        let range = ranges.iter().enumerate().find(|(_, x)| x.is_within(offset));
 
-        if let Some(range) = range {
+        if let Some((i, range)) = range {
+            let has_more = ranges.get(i + 1).is_some();
             let (_, end) = range.range();
-            end + 1 - offset
+
+            BufferVoidDistance {
+                distance: end + 1 - offset,
+                is_end: !has_more,
+            }
         } else {
-            0
+            BufferVoidDistance {
+                distance: 0,
+                // This should be ignored, we're at the void no matter what.
+                is_end: false,
+            }
         }
     }
 
@@ -521,15 +538,22 @@ mod test {
         buffer.write(0, &[1., 2., 3., 4., 5., 6., 7., 8., 9., 10.]);
         buffer.write(20, &[1., 2., 3., 4., 5., 6., 7., 8., 9., 10.]);
 
+        let in_middle = buffer.distance_from_void(0);
+        let at_end = buffer.distance_from_void(25);
+
         assert_eq!(
-            buffer.distance_from_void(0),
-            10,
+            in_middle.distance, 10,
             "distance from void in first range is correct"
         );
+        assert!(!in_middle.is_end, "void after first range is not end");
+
         assert_eq!(
-            buffer.distance_from_void(25),
-            5,
+            at_end.distance, 5,
             "distance from void in second range is correct"
+        );
+        assert!(
+            at_end.is_end,
+            "void after second range is the end/last void"
         );
     }
 
