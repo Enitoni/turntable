@@ -94,3 +94,13 @@ impl Loadable for BoxedLoadable {
         self.0.seek(seek).await
     }
 }
+
+pub trait IntoLoadable {
+    fn into_loadable(self) -> BoxedLoadable;
+}
+
+impl<T: Loadable> IntoLoadable for T {
+    fn into_loadable(self) -> BoxedLoadable {
+        BoxedLoadable(Box::new(self))
+    }
+}
