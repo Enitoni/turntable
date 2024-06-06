@@ -59,7 +59,7 @@ impl Timeline {
             .collect();
 
         let mut remaining = amount;
-        let mut offset = self.offset.load();
+        let mut playback_offset = self.offset.load();
 
         for sink in playable_sinks {
             // We've satisified the amount of samples the player wants to play
@@ -67,15 +67,15 @@ impl Timeline {
                 break;
             }
 
-            let available_until_void = sink.distance_from_void(offset);
+            let available_until_void = sink.distance_from_void(playback_offset);
             let amount_to_read = available_until_void.distance.min(remaining);
-            let new_offset = offset + amount_to_read;
+            let new_offset = playback_offset + amount_to_read;
 
             // There are samples to read from this sink.
             if amount_to_read > 0 {
                 remaining -= amount_to_read;
                 result.push(TimelineRead {
-                    offset,
+                    offset: playback_offset,
                     sink: sink.clone(),
                     amount: amount_to_read,
                 });
@@ -85,7 +85,7 @@ impl Timeline {
             }
 
             // Reset offset for the next sink.
-            offset = 0;
+            playback_offset = 0;
 
             // Let's break down the conditions for moving on to the next sink.
             // 1. We've reached the end of the last loaded range of samples, and
@@ -99,44 +99,44 @@ impl Timeline {
             if !should_move_on {
                 break;
             }
+
+            // Otherwise, remove the sink from the list.
+            self.sinks.lock().retain(|s| s.id != sink.id);
         }
 
         result
     }
 
-    /// Returns what sinks to preload, if any.
+    /// Returns what sink to preload, if any.
     ///
     /// This should never be called while a sink is being loaded.
-    pub fn preload(&self) -> Vec<TimelinePreload> {
+    pub fn preload(&self) -> Option<TimelinePreload> {
         let sinks: Vec<_> = self.sinks.lock().iter().cloned().collect();
 
         let threshold = self.config.preload_threshold_in_samples();
         let mut offset = self.offset.load();
 
-        let mut result = vec![];
-
         for sink in sinks {
             let available_until_void = sink.distance_from_void(offset);
 
-            if available_until_void.distance < threshold && sink.is_loadable() {
-                result.push({
-                    TimelinePreload {
-                        sink_id: sink.id,
-                        offset,
-                    }
-                });
+            // No need to preload if we're under the threshold.
+            if available_until_void.distance >= threshold {
+                break;
             }
 
-            // If we're not at the end of the sink, we should stop here.
-            if !available_until_void.is_end {
-                break;
+            // Only try to preload if the sink is loadable.
+            if sink.is_loadable() {
+                return Some(TimelinePreload {
+                    sink_id: sink.id,
+                    offset,
+                });
             }
 
             // Set the preload offset to the start for the next sink.
             offset = 0;
         }
 
-        result
+        None
     }
 
     /// Returns the offset of the current sink.
@@ -166,4 +166,117 @@ pub struct TimelinePreload {
     pub sink_id: SinkId,
     // The offset in samples to start preloading from.
     pub offset: usize,
+}
+
+#[cfg(test)]
+mod tests {
+    use core::time;
+
+    use crate::SinkState;
+
+    use super::*;
+
+    #[test]
+    fn test_advancement() {
+        let config = Config::default();
+        let timeline = Timeline::new(config);
+
+        // Set up our sinks.
+        let first = Arc::new(Sink::new(Some(10)));
+        let second = Arc::new(Sink::new(Some(10)));
+        timeline.set_sinks(vec![first.clone(), second.clone()]);
+
+        // First is fully loaded.
+        first.write(0, &[1., 2., 3., 4., 5., 6., 7., 8., 9., 10.]);
+        first.set_state(SinkState::Sealed);
+
+        // Second has a gap after first range.
+        second.write(0, &[1., 2., 3., 4., 5.]);
+
+        // Request 5 samples from the timeline.
+        let reads = timeline.advance(5);
+
+        assert_eq!(reads.len(), 1, "only one sink needs to be read");
+        assert_eq!(reads[0].offset, 0, "we are at the start of the first sink");
+        assert_eq!(reads[0].amount, 5, "five samples should be read");
+
+        // Request 4 samples from the timeline.
+        // Next offset should be 5 since we requested 5 samples prior.
+        let reads = timeline.advance(4);
+        assert_eq!(reads.len(), 1, "only one sink needs to be read");
+        assert_eq!(reads[0].offset, 5, "we are at offset 5 of the first sink");
+
+        // Request 5 samples from the timeline.
+        // Next offset should be 9 since we requested a total of 9 samples from the first sink.
+        // The second sink's offset should start at 0 since we're now at the beginning of the second sink,
+        // Due to the remaining samples in the first sink being only 1, meaning we need 4 more samples from the second sink.
+        let reads = timeline.advance(5);
+        assert_eq!(reads.len(), 2, "returns reads for both sinks");
+        assert_eq!(reads[0].offset, 9, "offset for first is correct");
+        assert_eq!(reads[1].offset, 0, "next should start at the beginning");
+
+        // We requested 5 samples total, and we had one sample left in the first sink.
+        // Therefore, the second sink should be read for the remaining 4 samples.
+        assert_eq!(reads[1].amount, 4, "samples requested is correct");
+
+        // Swallow the last sample from the second sink.
+        timeline.advance(1);
+
+        // Should return no reads since we're at the end of the timeline.
+        let read = timeline.advance(5);
+        assert_eq!(read.len(), 0, "no reads should be returned");
+    }
+
+    #[test]
+    fn test_preload() {
+        let config = Config {
+            // Makes the threshold amount in samples 3.
+            sample_rate: 1,
+            channel_count: 1,
+            preload_threshold_in_seconds: 3.,
+            ..Default::default()
+        };
+
+        let timeline = Timeline::new(config);
+
+        // Set up our sinks.
+        let first = Arc::new(Sink::new(Some(10)));
+        let second = Arc::new(Sink::new(Some(10)));
+        timeline.set_sinks(vec![first.clone(), second.clone()]);
+
+        // Should return the first sink to preload.
+        let preload = timeline.preload();
+        assert_eq!(
+            preload.map(|p| p.sink_id),
+            Some(first.id),
+            "returns the first sink"
+        );
+
+        // We have 3 samples ahead, so we shouldn't need to preload anything.
+        first.write(0, &[0., 0., 0.]);
+        let preload = timeline.preload();
+        assert!(preload.is_none());
+
+        // Advance by 2 samples.
+        timeline.offset.store(2);
+
+        // We don't have any samples, and the offset is now 2, so we need to preload again.
+        let preload = timeline.preload();
+        assert_eq!(
+            preload.map(|p| p.offset),
+            Some(2),
+            "returns the correct offset"
+        );
+
+        // Seal the first sink, so we have to preload the second sink.
+        first.set_state(SinkState::Sealed);
+
+        // Should return the second sink to preload.
+        let preload = timeline.preload();
+        assert_eq!(
+            preload.map(|p| p.sink_id),
+            Some(second.id),
+            "returns the second sink"
+        );
+    }
 }
