@@ -337,6 +337,7 @@ impl Read for LoadableMediaSource {
             })
     }
 }
+
 #[cfg(test)]
 mod tests {
     use crate::implementors::tests::test_file;
