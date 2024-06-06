@@ -9,7 +9,7 @@ use tokio::{
     sync::Mutex,
 };
 
-use crate::{IntoLoadable, Loadable, LoaderLength, ReadResult};
+use crate::{assign_slice, IntoLoadable, Loadable, LoaderLength, ReadResult};
 pub struct LoadableFile(Mutex<File>);
 
 #[async_trait]
@@ -64,7 +64,11 @@ pub struct LoadableNetworkStream {
 impl LoadableNetworkStream {
     const MAX_CHUNK_SIZE: usize = 500000;
 
-    pub async fn new(url: String) -> Result<Self, reqwest::Error> {
+    pub async fn new<S>(url: S) -> Result<Self, reqwest::Error>
+    where
+        S: Into<String>,
+    {
+        let url = url.into();
         let client = Client::new();
 
         let response = client.head(&url).send().await?;
@@ -100,24 +104,24 @@ impl Loadable for LoadableNetworkStream {
         let mut request = self.client.get(&self.url);
 
         if self.supports_byte_ranges {
-            let range = format!("bytes={start}-{end}");
+            let safe_end = end.saturating_sub(1);
+            let range = format!("bytes={start}-{safe_end}");
             request = request.header("Range", range);
         }
 
-        let mut response = request.send().await?;
-        let mut amount_read = 0;
+        let response = request.send().await?;
 
-        while let Some(chunk) = response.chunk().await? {
-            let buf_to_write = &mut buf[amount_read..];
-            buf_to_write.copy_from_slice(&chunk[..buf_to_write.len()]);
-
-            amount_read += chunk.len();
+        if !response.status().is_success() {
+            return Err(format!("Request failed with status code {}", response.status()).into());
         }
 
-        let result = if amount_read == amount {
-            ReadResult::More(amount_read)
+        let bytes = response.bytes().await?;
+        let amount_written = assign_slice(&bytes, buf);
+
+        let result = if amount_written == amount {
+            ReadResult::More(amount_written)
         } else {
-            ReadResult::End(amount_read)
+            ReadResult::End(amount_written)
         };
 
         Ok(result)
@@ -133,8 +137,8 @@ impl Loadable for LoadableNetworkStream {
         let new_offset = match seek {
             SeekFrom::Current(increment) => (increment + offset as i64) as usize,
             SeekFrom::Start(offset) => offset as usize,
-            SeekFrom::End(_) => {
-                return Err("Seeking from the end is not supported".into());
+            SeekFrom::End(increment) => {
+                (self.length.unwrap_or(usize::MAX) as i64 + increment) as usize
             }
         };
 
