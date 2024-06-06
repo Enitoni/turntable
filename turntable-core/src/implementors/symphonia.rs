@@ -337,3 +337,26 @@ impl Read for LoadableMediaSource {
             })
     }
 }
+#[cfg(test)]
+mod tests {
+    use crate::implementors::tests::test_file;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn test_symphonia_ingestion() {
+        let file = test_file().await;
+        let config = Config::default();
+        let ingestion = SymphoniaIngestion::new(config).await;
+        let sink = ingestion.ingest(file).await.unwrap();
+
+        // Load some samples.
+        ingestion.request_load(sink.id, 0, 8192 * 4).await;
+
+        // Load some samples at and offset.
+        ingestion.request_load(sink.id, 91000, 8192 * 4).await;
+
+        // If successful, the sink should be in the `Idle` state.
+        assert_eq!(sink.state(), SinkState::Idle);
+    }
+}
