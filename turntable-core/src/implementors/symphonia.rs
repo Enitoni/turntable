@@ -188,6 +188,8 @@ impl Loader {
         let result = self.decode_until_filled(&mut buf)?;
 
         self.sink.write(offset, &buf[..result.samples_written]);
+        self.offset.store(offset + result.samples_written);
+
         Ok(result)
     }
 
@@ -218,6 +220,8 @@ impl Loader {
 
         let seeked_to_seconds = time.seconds as f32 + time.frac as f32;
         let seeked_to_offset = self.config.seconds_to_samples(seeked_to_seconds);
+
+        dbg!(seeked_to_offset, offset);
 
         self.offset.store(seeked_to_offset);
         Ok(seeked_to_offset)
@@ -262,6 +266,9 @@ impl Loader {
                     // Acquire the samples from the decoder.
                     sample_buffer.copy_interleaved_ref(decoded);
                     let samples = sample_buffer.samples();
+
+                    dbg!(&samples.len());
+                    dbg!(&samples[..20]);
 
                     // Set up safe copying of the samples.
                     let buf_to_copy = &mut buf[samples_written..];
