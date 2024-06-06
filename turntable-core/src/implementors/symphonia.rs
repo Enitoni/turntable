@@ -20,8 +20,8 @@ use symphonia::core::{
 use tokio::runtime::{self, Handle};
 
 use crate::{
-    BoxedLoadable, Config, Ingestion, IntoLoadable, Loadable, LoaderLength, ReadResult, Sample,
-    Sink, SinkId, SinkState,
+    assign_slice_with_offset, BoxedLoadable, Config, Ingestion, IntoLoadable, Loadable,
+    LoaderLength, ReadResult, Sample, Sink, SinkId, SinkState,
 };
 
 /// An ingestion implementation for Symphonia.
@@ -159,9 +159,9 @@ impl Loader {
             Ok(result) => {
                 if result.end_reached {
                     self.sink.set_state(SinkState::Sealed);
+                } else {
+                    self.sink.set_state(SinkState::Idle);
                 }
-
-                self.sink.set_state(SinkState::Idle);
             }
             Err(e) => {
                 self.sink.set_state(SinkState::Error(format!("{:?}", e)));
@@ -194,6 +194,7 @@ impl Loader {
     }
 
     // Attempts to seek to the given offset.
+    #[allow(dead_code)]
     fn seek(&self, offset: usize) -> Result<usize, Box<dyn Error>> {
         let mut format_reader = self.format_reader.lock();
 
@@ -221,8 +222,6 @@ impl Loader {
         let seeked_to_seconds = time.seconds as f32 + time.frac as f32;
         let seeked_to_offset = self.config.seconds_to_samples(seeked_to_seconds);
 
-        dbg!(seeked_to_offset, offset);
-
         self.offset.store(seeked_to_offset);
         Ok(seeked_to_offset)
     }
@@ -230,26 +229,28 @@ impl Loader {
     // Decode as many samples as possible into the buffer.
     fn decode_until_filled(&self, buf: &mut [Sample]) -> Result<LoadResult, Box<dyn Error>> {
         let mut samples_written = 0;
+        let mut last_samples_written_was_zero = false;
+
+        let mut end_reached = false;
 
         let mut decoder = self.decoder.lock();
         let mut format_reader = self.format_reader.lock();
 
         loop {
             if samples_written == buf.len() {
-                return Ok(LoadResult {
-                    samples_written,
-                    end_reached: false,
-                });
+                break;
             }
 
             let packet = match format_reader.next_packet() {
                 Ok(packet) => Ok(packet),
                 // Assume the end of the stream.
-                Err(SymphoniaError::ResetRequired) => {
-                    return Ok(LoadResult {
-                        samples_written,
-                        end_reached: true,
-                    })
+                Err(SymphoniaError::IoError(err)) => {
+                    if err.kind() == IoErrorKind::UnexpectedEof {
+                        end_reached = true;
+                        break;
+                    }
+
+                    return Err(err.into());
                 }
                 Err(e) => Err(e),
             }?;
@@ -267,35 +268,42 @@ impl Loader {
                     sample_buffer.copy_interleaved_ref(decoded);
                     let samples = sample_buffer.samples();
 
-                    dbg!(&samples.len());
-                    dbg!(&samples[..20]);
-
-                    // Set up safe copying of the samples.
-                    let buf_to_copy = &mut buf[samples_written..];
-                    let safe_end = buf_to_copy.len().min(samples.len());
+                    // Sometimes Symphonia does not err with UnexpectedEof, but instead returns no samples.
+                    // This is a workaround to avoid an infinite loop.
+                    if last_samples_written_was_zero && samples.is_empty() {
+                        end_reached = true;
+                        break;
+                    }
 
                     // Copy the samples into the buffer.
-                    samples_written += samples.len();
-                    buf_to_copy[..safe_end].copy_from_slice(&samples[..safe_end]);
+                    samples_written += assign_slice_with_offset(samples_written, samples, buf);
+                    last_samples_written_was_zero = samples.is_empty();
                 }
-                Err(SymphoniaError::IoError(err)) => match err.kind() {
-                    // Assume the end of the stream.
-                    IoErrorKind::UnexpectedEof => {
-                        return Ok(LoadResult {
-                            samples_written,
-                            end_reached: true,
-                        })
+                Err(SymphoniaError::IoError(err)) => {
+                    if err.kind() == IoErrorKind::UnexpectedEof {
+                        end_reached = true;
+                        break;
                     }
-                    // Handle unknown errors.
-                    _ => return Err(err.into()),
-                },
+
+                    return Err(err.into());
+                }
+                Err(SymphoniaError::DecodeError(_)) => {
+                    // The packet failed to decode due to invalid data, skip the packet.
+                    continue;
+                }
                 // Handle unknown errors.
                 Err(err) => return Err(err.into()),
             }
         }
+
+        Ok(LoadResult {
+            samples_written,
+            end_reached,
+        })
     }
 }
 
+#[derive(Debug)]
 struct LoadResult {
     samples_written: usize,
     end_reached: bool,
@@ -347,24 +355,45 @@ impl Read for LoadableMediaSource {
 
 #[cfg(test)]
 mod tests {
-    use crate::implementors::tests::test_file;
+
+    use crate::implementors::{tests::test_file, LoadableNetworkStream};
 
     use super::*;
 
     #[tokio::test]
-    async fn test_symphonia_ingestion() {
+    async fn test_symphonia_ingestion_with_local_file() {
         let file = test_file().await;
         let config = Config::default();
-        let ingestion = SymphoniaIngestion::new(config).await;
+        let ingestion = SymphoniaIngestion::new(config.clone()).await;
         let sink = ingestion.ingest(file).await.unwrap();
 
-        // Load some samples.
-        ingestion.request_load(sink.id, 0, 8192 * 4).await;
+        // Load all samples.
+        ingestion
+            .request_load(sink.id, 0, config.seconds_to_samples(60. * 5.))
+            .await;
 
-        // Load some samples at an offset.
-        ingestion.request_load(sink.id, 91000, 8192 * 4).await;
+        // If successful, the sink should be in the `Sealed` state.
+        assert_eq!(sink.state(), SinkState::Sealed);
+    }
 
-        // If successful, the sink should be in the `Idle` state.
-        assert_eq!(sink.state(), SinkState::Idle);
+    #[tokio::test]
+    async fn test_symphonia_ingestion_with_remote_stream() {
+        let stream = LoadableNetworkStream::new(
+            "https://cdn.freesound.org/previews/618/618063_1956076-lq.mp3
+        ",
+        )
+        .await
+        .unwrap();
+
+        let config = Config::default();
+        let ingestion = SymphoniaIngestion::new(config.clone()).await;
+        let sink = ingestion.ingest(stream).await.unwrap();
+
+        for i in 0..50 {
+            ingestion.request_load(sink.id, i * 8192, 8192).await;
+        }
+
+        // If successful, the sink should be in the `Sealed` state.
+        assert_eq!(sink.state(), SinkState::Sealed);
     }
 }
