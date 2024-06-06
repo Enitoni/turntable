@@ -96,11 +96,15 @@ impl Loadable for BoxedLoadable {
 }
 
 pub trait IntoLoadable {
-    fn into_loadable(self) -> BoxedLoadable;
+    type Output: Loadable;
+
+    fn into_loadable(self) -> Self::Output;
 }
 
 impl<T: Loadable> IntoLoadable for T {
-    fn into_loadable(self) -> BoxedLoadable {
+    type Output = BoxedLoadable;
+
+    fn into_loadable(self) -> Self::Output {
         BoxedLoadable(Box::new(self))
     }
 }
