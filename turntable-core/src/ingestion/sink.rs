@@ -1,6 +1,6 @@
 use std::default;
 
-use crate::{Id, MultiRangeBuffer};
+use crate::{BufferVoidDistance, Id, MultiRangeBuffer};
 use parking_lot::Mutex;
 
 pub type SinkId = Id<Sink>;
@@ -62,6 +62,11 @@ impl Sink {
 
     pub fn state(&self) -> SinkState {
         self.state.lock().clone()
+    }
+
+    /// Returns how many samples are left in the sink until a void at the current offset.
+    pub fn distance_from_void(&self, offset: usize) -> BufferVoidDistance {
+        self.buffer.distance_from_void(offset)
     }
 
     /// Returns true if the sink is idle, loading, or sealed.
