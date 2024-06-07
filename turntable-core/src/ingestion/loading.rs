@@ -95,7 +95,10 @@ impl Loadable for BoxedLoadable {
     }
 }
 
-pub trait IntoLoadable {
+pub trait IntoLoadable
+where
+    Self: Sync + Send,
+{
     type Output: Loadable;
 
     fn into_loadable(self) -> Self::Output;
