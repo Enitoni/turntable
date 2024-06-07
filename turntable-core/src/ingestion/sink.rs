@@ -1,6 +1,6 @@
 use std::default;
 
-use crate::{BufferVoidDistance, Id, MultiRangeBuffer};
+use crate::{BufferVoidDistance, Id, MultiRangeBuffer, Sample};
 use parking_lot::Mutex;
 
 pub type SinkId = Id<Sink>;
@@ -51,8 +51,12 @@ impl Sink {
         }
     }
 
+    pub fn read(&self, offset: usize, buf: &mut [Sample]) {
+        self.buffer.read(offset, buf);
+    }
+
     /// Writes samples to the sink at the given offset.
-    pub fn write(&self, offset: usize, samples: &[f32]) {
+    pub fn write(&self, offset: usize, samples: &[Sample]) {
         self.buffer.write(offset, samples);
     }
 
