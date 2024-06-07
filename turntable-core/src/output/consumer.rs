@@ -40,10 +40,9 @@ impl Consumer {
     pub fn content_type(&self) -> String {
         self.encoder.lock().content_type()
     }
-}
 
-impl Read for Consumer {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+    /// Reads the encoded data from the consumer.
+    pub fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         let mut encoder = self.encoder.lock();
         encoder.read(buf)
     }
