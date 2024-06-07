@@ -100,7 +100,7 @@ impl Sink {
     pub fn is_loadable(&self) -> bool {
         !matches!(
             self.state(),
-            SinkState::Error(_) | SinkState::Sealed | SinkState::Active
+            SinkState::Error(_) | SinkState::Sealed | SinkState::Idle
         )
     }
 
