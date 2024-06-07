@@ -38,6 +38,14 @@ impl Playback {
             players,
         }
     }
+
+    /// Creates a new player, registers it with the output, and returns its id.
+    pub fn create_player(&self) -> PlayerId {
+        let player = Player::new(self.config.clone(), self.output.clone());
+        self.output.register_player(player.id);
+
+        player.id
+    }
 }
 
 fn spawn_procesing_thread(config: Config, players: Arc<DashMap<PlayerId, Player>>) {
