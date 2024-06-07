@@ -22,12 +22,12 @@ pub enum SinkState {
     /// It may still be read from during this state.
     #[default]
     Idle,
+    /// The sink is idle, but in use by a [Player].
+    Active,
     /// The [Ingestion] is loading samples into the sink.
     Loading,
     /// The sink will not receive any more samples.
     Sealed,
-    /// The sink has been consumed and is ready to be dropped from memory.
-    Consumed,
     /// Something went wrong with the sink, or the [Ingestion] loading into it.
     /// If the sink is in this state, it will be skipped by the player.
     ///
@@ -76,9 +76,14 @@ impl Sink {
         self.buffer.retain_window(offset, window)
     }
 
-    /// Marks the sink as consumed
-    pub fn consume(&self) {
-        self.set_state(SinkState::Consumed);
+    /// Marks the sink as idle, meaning it can be dropped from memory.
+    pub fn deactivate(&self) {
+        self.set_state(SinkState::Idle);
+    }
+
+    /// Marks the sink as active, meaning it is in use and cannot be dropped.
+    pub fn activate(&self) {
+        self.set_state(SinkState::Active);
     }
 
     /// Returns true if the sink is idle, loading, or sealed.
@@ -86,7 +91,7 @@ impl Sink {
     pub fn is_playable(&self) -> bool {
         matches!(
             self.state(),
-            SinkState::Idle | SinkState::Loading | SinkState::Sealed
+            SinkState::Active | SinkState::Loading | SinkState::Sealed
         )
     }
 
@@ -95,7 +100,7 @@ impl Sink {
     pub fn is_loadable(&self) -> bool {
         !matches!(
             self.state(),
-            SinkState::Error(_) | SinkState::Sealed | SinkState::Consumed
+            SinkState::Error(_) | SinkState::Sealed | SinkState::Active
         )
     }
 }

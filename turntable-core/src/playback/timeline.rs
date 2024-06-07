@@ -34,7 +34,19 @@ impl Timeline {
     ///
     /// Instead, this function is meant to be called when we advance to the next sink, so that future sinks in a queue can be preloaded.
     pub fn set_sinks(&self, sinks: Vec<Arc<Sink>>) {
-        *self.sinks.lock() = sinks;
+        let mut current_sinks = self.sinks.lock();
+
+        // Deactivate all sinks that are no longer in the new list.
+        for sink in current_sinks.iter() {
+            sink.deactivate();
+        }
+
+        // Activate all sinks that are in the new list.
+        for sink in sinks.iter() {
+            sink.activate();
+        }
+
+        *current_sinks = sinks;
     }
 
     /// Advances the playback offset and returns the sinks that the player should read from.
@@ -101,7 +113,7 @@ impl Timeline {
             }
 
             // Otherwise, remove the sink from the list and mark it as consumed..
-            sink.consume();
+            sink.deactivate();
             self.sinks.lock().retain(|s| s.id != sink.id);
         }
 
