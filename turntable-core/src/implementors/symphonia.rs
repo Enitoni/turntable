@@ -138,6 +138,10 @@ impl Ingestion for SymphoniaIngestion {
             .spawn_blocking(move || loader.load(offset, amount))
             .await;
     }
+
+    fn clear_inactive(&self) {
+        self.sinks.retain(|_, s| !s.is_clearable());
+    }
 }
 
 /// Loads the samples from a [Decoder] into a [Sink].

@@ -103,4 +103,9 @@ impl Sink {
             SinkState::Error(_) | SinkState::Sealed | SinkState::Active
         )
     }
+
+    /// Returns true if the sink can be cleared from memory.
+    pub fn is_clearable(&self) -> bool {
+        self.state() == SinkState::Idle
+    }
 }

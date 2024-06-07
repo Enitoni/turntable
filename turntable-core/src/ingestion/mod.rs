@@ -34,4 +34,7 @@ where
     ///
     /// Note: This function must not be called on the playback thread.
     async fn request_load(&self, sink_id: SinkId, offset: usize, amount: usize);
+
+    /// Clears all inactive sinks from memory.
+    fn clear_inactive(&self);
 }
