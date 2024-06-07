@@ -1,6 +1,10 @@
 use std::sync::Arc;
 
+mod player;
 mod timeline;
+
+pub use player::*;
+pub use timeline::*;
 
 use crate::Ingestion;
 
