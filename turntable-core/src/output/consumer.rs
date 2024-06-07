@@ -42,7 +42,7 @@ impl Consumer {
     }
 
     /// Reads the encoded data from the consumer.
-    pub fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+    pub fn read(&self, buf: &mut [u8]) -> std::io::Result<usize> {
         let mut encoder = self.encoder.lock();
         encoder.read(buf)
     }
