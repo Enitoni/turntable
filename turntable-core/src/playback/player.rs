@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{Config, Id, Output, Timeline, TimelinePreload};
+use crate::{Config, Id, Output, Sink, Timeline, TimelinePreload};
 
 pub type PlayerId = Id<Player>;
 
@@ -25,6 +25,10 @@ impl Player {
 
     pub fn preload(&self) -> Option<TimelinePreload> {
         self.timeline.preload()
+    }
+
+    pub fn set_sinks(&self, sinks: Vec<Arc<Sink>>) {
+        self.timeline.set_sinks(sinks);
     }
 
     /// Processes the timeline and pushes the samples to the output stream.

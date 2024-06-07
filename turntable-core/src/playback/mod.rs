@@ -12,7 +12,7 @@ mod timeline;
 pub use player::*;
 pub use timeline::*;
 
-use crate::{Config, Ingestion, Output};
+use crate::{Config, Ingestion, Output, Sink};
 
 /// The playback type is responsible for managing players, processing playback, and preloading sinks as needed.
 pub struct Playback {
@@ -36,6 +36,12 @@ impl Playback {
             output,
             config,
             players,
+        }
+    }
+
+    pub fn set_sinks(&self, player_id: PlayerId, sinks: Vec<Arc<Sink>>) {
+        if let Some(player) = self.players.get(&player_id) {
+            player.set_sinks(sinks);
         }
     }
 
