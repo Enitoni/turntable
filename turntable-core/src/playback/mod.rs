@@ -4,7 +4,7 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
-use tokio::runtime::Handle;
+use tokio::{runtime::Handle, time::sleep};
 
 mod player;
 mod timeline;
@@ -48,9 +48,12 @@ impl Playback {
     /// Creates a new player, registers it with the output, and returns its id.
     pub fn create_player(&self) -> PlayerId {
         let player = Player::new(self.config.clone(), self.output.clone());
-        self.output.register_player(player.id);
+        let player_id = player.id;
 
-        player.id
+        self.output.register_player(player.id);
+        self.players.insert(player.id, player);
+
+        player_id
     }
 }
 
@@ -77,18 +80,22 @@ fn spawn_preloading_task<I>(
     I: Ingestion + 'static,
 {
     handle.spawn(async move {
-        for player in players.iter() {
-            let preload = player.preload();
+        loop {
+            for player in players.iter() {
+                let preload = player.preload();
 
-            if let Some(preload) = preload {
-                ingestion
-                    .request_load(
-                        preload.sink_id,
-                        preload.offset,
-                        config.preload_size_in_samples(),
-                    )
-                    .await;
+                if let Some(preload) = preload {
+                    ingestion
+                        .request_load(
+                            preload.sink_id,
+                            preload.offset,
+                            config.preload_size_in_samples(),
+                        )
+                        .await;
+                }
             }
+
+            sleep(Duration::from_secs(1)).await;
         }
     });
 }
