@@ -16,7 +16,10 @@ pub use sink::*;
 /// This is used for the creation of sinks and loading of external sources.
 #[async_trait]
 // Todo: Rename this to just Ingestion
-pub trait Ingestion {
+pub trait Ingestion
+where
+    Self: Sync + Send,
+{
     async fn new(config: Config) -> Self;
 
     /// Ingests a new source, returning a sink that can be used to play the source.
