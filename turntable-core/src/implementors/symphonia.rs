@@ -36,7 +36,7 @@ pub struct SymphoniaIngestion {
 
 #[async_trait]
 impl Ingestion for SymphoniaIngestion {
-    async fn new(config: Config) -> Self {
+    fn new(config: Config) -> Self {
         Self {
             rt: runtime::Handle::current(),
             config,
@@ -364,7 +364,7 @@ mod tests {
     async fn test_symphonia_ingestion_with_local_file() {
         let file = test_file().await;
         let config = Config::default();
-        let ingestion = SymphoniaIngestion::new(config.clone()).await;
+        let ingestion = SymphoniaIngestion::new(config.clone());
         let sink = ingestion.ingest(file).await.unwrap();
 
         // Load all samples.
@@ -386,7 +386,7 @@ mod tests {
         .unwrap();
 
         let config = Config::default();
-        let ingestion = SymphoniaIngestion::new(config.clone()).await;
+        let ingestion = SymphoniaIngestion::new(config.clone());
         let sink = ingestion.ingest(stream).await.unwrap();
 
         for i in 0..50 {

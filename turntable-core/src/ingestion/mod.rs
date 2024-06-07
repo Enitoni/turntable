@@ -20,7 +20,7 @@ pub trait Ingestion
 where
     Self: Sync + Send,
 {
-    async fn new(config: Config) -> Self;
+    fn new(config: Config) -> Self;
 
     /// Ingests a new source, returning a sink that can be used to play the source.
     async fn ingest<L>(&self, input: L) -> Result<Arc<Sink>, Box<dyn Error>>
