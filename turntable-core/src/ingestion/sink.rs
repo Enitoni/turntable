@@ -76,6 +76,11 @@ impl Sink {
         self.buffer.retain_window(offset, window)
     }
 
+    /// Marks the sink as consumed
+    pub fn consume(&self) {
+        self.set_state(SinkState::Consumed);
+    }
+
     /// Returns true if the sink is idle, loading, or sealed.
     /// That means it can be played by a [Player].
     pub fn is_playable(&self) -> bool {
