@@ -4,7 +4,7 @@ use std::{io::Read, sync::Weak};
 use super::{Encoder, Stream};
 use crate::{Config, Id, Sample};
 
-type ConsumerId = Id<Consumer>;
+pub type ConsumerId = Id<Consumer>;
 
 /// Represents a type that consumes audio data from a [Stream],
 /// then provides the encoded data to the end-user.
