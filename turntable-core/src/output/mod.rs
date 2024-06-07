@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, thread};
 
 use crate::{Config, PlayerId, Sample};
 use crossbeam::channel::{unbounded, Receiver, Sender};
@@ -69,11 +69,13 @@ fn spawn_output_thread(
     receiver: Receiver<ProcessedSamples>,
     streams: Arc<DashMap<PlayerId, Arc<Stream>>>,
 ) {
-    loop {
+    let run = move || loop {
         let processed_samples = receiver.recv().expect("processed samples are received");
 
         if let Some(stream) = streams.get(&processed_samples.player_id) {
             stream.push(&processed_samples.samples);
         }
-    }
+    };
+
+    thread::spawn(run);
 }
