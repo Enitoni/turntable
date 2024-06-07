@@ -71,6 +71,13 @@ impl Sink {
         self.buffer.distance_from_void(offset)
     }
 
+    /// Returns how many expected samples are left from the given offset.
+    pub fn distance_from_end(&self, offset: usize) -> usize {
+        self.expected_length
+            .unwrap_or(usize::MAX)
+            .saturating_sub(offset)
+    }
+
     /// Clears the samples in the sink outside the given window.
     pub fn clear_outside(&self, offset: usize, window: usize) {
         self.buffer.retain_window(offset, window)
