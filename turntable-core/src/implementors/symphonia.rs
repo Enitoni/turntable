@@ -362,7 +362,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_symphonia_ingestion_with_local_file() {
-        let file = test_file().await;
+        let file = test_file("submersion.flac").await;
         let config = Config::default();
         let ingestion = SymphoniaIngestion::new(config.clone());
         let sink = ingestion.ingest(file).await.unwrap();

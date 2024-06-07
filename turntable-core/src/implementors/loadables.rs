@@ -153,18 +153,18 @@ pub mod tests {
 
     use tokio::fs::File;
 
-    pub fn test_file_path() -> PathBuf {
+    pub fn test_file_path(file: &str) -> PathBuf {
         let root = env!("CARGO_MANIFEST_DIR");
         let mut path = PathBuf::from(root);
 
         path.pop();
         path.push("assets");
-        path.push("deep_blue.flac");
+        path.push(file);
 
         path
     }
 
-    pub async fn test_file() -> File {
-        File::open(test_file_path()).await.unwrap()
+    pub async fn test_file(file: &str) -> File {
+        File::open(test_file_path(file)).await.unwrap()
     }
 }
