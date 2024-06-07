@@ -82,9 +82,9 @@ fn spawn_preloading_task<I>(
     handle.spawn(async move {
         loop {
             for player in players.iter() {
-                let preload = player.preload();
+                let preloads = player.preload();
 
-                if let Some(preload) = preload {
+                for preload in preloads {
                     ingestion
                         .request_load(
                             preload.sink_id,

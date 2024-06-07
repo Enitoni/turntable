@@ -23,7 +23,7 @@ impl Player {
         }
     }
 
-    pub fn preload(&self) -> Option<TimelinePreload> {
+    pub fn preload(&self) -> Vec<TimelinePreload> {
         self.timeline.preload()
     }
 
