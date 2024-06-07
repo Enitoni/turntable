@@ -170,11 +170,8 @@ pub struct TimelinePreload {
 
 #[cfg(test)]
 mod tests {
-    use core::time;
-
-    use crate::SinkState;
-
     use super::*;
+    use crate::SinkState;
 
     #[test]
     fn test_advancement() {
