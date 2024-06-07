@@ -93,6 +93,8 @@ fn spawn_preloading_task<I>(
                         )
                         .await;
                 }
+
+                player.clear_superflous()
             }
 
             sleep(Duration::from_secs(1)).await;

@@ -71,6 +71,11 @@ impl Sink {
         self.buffer.distance_from_void(offset)
     }
 
+    /// Clears the samples in the sink outside the given window.
+    pub fn clear_outside(&self, offset: usize, window: usize) {
+        self.buffer.retain_window(offset, window)
+    }
+
     /// Returns true if the sink is idle, loading, or sealed.
     /// That means it can be played by a [Player].
     pub fn is_playable(&self) -> bool {

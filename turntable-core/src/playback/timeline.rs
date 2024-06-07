@@ -139,6 +139,16 @@ impl Timeline {
         None
     }
 
+    /// Clears samples that are not needed, to save memory.
+    pub fn clear_superflous(&self) {
+        let first_sink = self.sinks.lock();
+        let offset = self.offset.load();
+
+        if let Some(first_sink) = first_sink.first() {
+            first_sink.clear_outside(offset, self.config.preload_size_in_samples() * 2);
+        }
+    }
+
     /// Returns the offset of the current sink.
     pub fn current_offset(&self) -> usize {
         self.offset.load()

@@ -47,4 +47,9 @@ impl Player {
 
         self.output.push(self.id, samples);
     }
+
+    /// Clears samples that are not needed, to save memory.
+    pub fn clear_superflous(&self) {
+        self.timeline.clear_superflous();
+    }
 }
