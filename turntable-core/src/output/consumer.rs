@@ -50,6 +50,9 @@ impl Consumer {
 
 impl Drop for Consumer {
     fn drop(&mut self) {
-        todo!("Consumers should be dropped by the Stream");
+        // Remove the consumer from the stream, if it still exists.
+        if let Some(s) = self.stream.upgrade() {
+            s.remove(self.id)
+        }
     }
 }
