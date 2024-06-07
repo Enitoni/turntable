@@ -2,8 +2,13 @@ use crate::{Config, Sample};
 use std::io::Read;
 
 /// Represents a type that encodes [Sample]s into a desired audio format to be consumed by the end-user.
-pub trait Encoder: Read {
-    fn new(config: Config) -> Self;
+pub trait Encoder: Read
+where
+    Self: 'static + Send + Sync,
+{
+    fn new(config: Config) -> Self
+    where
+        Self: Sized;
 
     /// Encodes the provided samples.
     ///
