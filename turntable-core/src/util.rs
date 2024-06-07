@@ -4,6 +4,7 @@ use std::{marker::PhantomData, vec};
 
 use crossbeam::atomic::AtomicCell;
 use parking_lot::RwLock;
+use tokio::runtime::{Handle, Runtime};
 
 use crate::{Config, Sample};
 
@@ -370,6 +371,13 @@ pub fn assign_slice<T: Copy>(from: &[T], to: &mut [T]) -> usize {
 pub fn assign_slice_with_offset<T: Copy>(offset: usize, from: &[T], to: &mut [T]) -> usize {
     let offset = offset.min(to.len());
     assign_slice(from, &mut to[offset..])
+}
+
+/// Returns the current tokio handle, or creates a new one if none exists.
+pub fn get_or_create_handle() -> Handle {
+    Handle::try_current()
+        .ok()
+        .unwrap_or_else(|| Runtime::new().unwrap().handle().clone())
 }
 
 #[cfg(test)]
