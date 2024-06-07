@@ -15,7 +15,6 @@ pub use sink::*;
 ///
 /// This is used for the creation of sinks and loading of external sources.
 #[async_trait]
-// Todo: Rename this to just Ingestion
 pub trait Ingestion
 where
     Self: Sync + Send,
