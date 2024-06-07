@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crossbeam::atomic::AtomicCell;
 use parking_lot::Mutex;
 
-use crate::{Config, Sink, SinkId, SinkState};
+use crate::{Config, Sink, SinkId};
 
 /// The timeline keeps track of a sequence of sinks, manages advancement of playback, and returns what sinks to preload.
 #[derive(Debug, Default)]
@@ -112,8 +112,9 @@ impl Timeline {
                 break;
             }
 
-            // Otherwise, remove the sink from the list and mark it as consumed..
+            // Otherwise, remove the sink from the list and mark it as consumed.
             sink.deactivate();
+            self.offset.store(0);
             self.sinks.lock().retain(|s| s.id != sink.id);
         }
 
