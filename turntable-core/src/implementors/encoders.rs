@@ -129,9 +129,11 @@ impl Read for WaveEncoder {
         }
 
         let body_buf = &mut buf[bytes_written..];
-        let amount_to_read = body_buf.len() / (Config::SAMPLES_IN_BYTES / 2);
 
-        let samples_in_bytes: Vec<_> = self.samples[..amount_to_read]
+        let amount_to_read = body_buf.len() / (Config::SAMPLES_IN_BYTES / 2);
+        let safe_end = self.samples.len().min(amount_to_read);
+
+        let samples_in_bytes: Vec<_> = self.samples[..safe_end]
             .iter()
             .map(|s| (s * i16::MAX as Sample) as i16)
             .flat_map(|s| s.to_le_bytes())
