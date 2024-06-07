@@ -16,8 +16,11 @@ pub struct Config {
     pub preload_threshold_in_seconds: f32,
     /// How many seconds of audio to buffer during playback
     pub buffer_size_in_seconds: f32,
-    /// How much delay before playback starts, lower values increase chances of buffer underruns
-    pub latency_in_seconds: f32,
+    /// How many seconds of audio to preload into a consumer of a playback stream.
+    ///
+    /// Lower values increase chance of buffer underruns,
+    /// whilst higher values increase latency.
+    pub stream_preload_cache_size_in_seconds: f32,
 }
 
 impl Config {
@@ -48,9 +51,9 @@ impl Config {
         self.buffer_size_in_seconds
     }
 
-    /// How many samples to pad the start of playback with
-    pub fn latency_in_samples(&self) -> usize {
-        (self.latency_in_seconds * self.samples_per_sec() as f32) as usize
+    /// How many samples are stored in a stream's preload cache
+    pub fn stream_preload_cache_size(&self) -> usize {
+        (self.stream_preload_cache_size_in_seconds * self.samples_per_sec() as f32) as usize
     }
 
     /// Returns the number of samples for any given number of seconds
@@ -82,7 +85,8 @@ impl Default for Config {
             preload_threshold_in_seconds: 10.0,
             // 100ms of should be enough to avoid buffer underruns
             buffer_size_in_seconds: 0.1,
-            latency_in_seconds: 0.1,
+            // Assuming the user's network is fast, this should be enough
+            stream_preload_cache_size_in_seconds: 0.5,
         }
     }
 }
