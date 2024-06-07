@@ -86,6 +86,11 @@ impl Sink {
         self.set_state(SinkState::Active);
     }
 
+    /// Returns the expected length of the sink. [None] if unknown.
+    pub fn expected_length(&self) -> Option<usize> {
+        self.expected_length
+    }
+
     /// Returns true if the sink is idle, loading, or sealed.
     /// That means it can be played by a [Player].
     pub fn is_playable(&self) -> bool {
