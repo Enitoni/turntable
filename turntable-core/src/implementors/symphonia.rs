@@ -20,8 +20,8 @@ use symphonia::core::{
 use tokio::runtime::{self, Handle};
 
 use crate::{
-    assign_slice_with_offset, BoxedLoadable, Config, Ingestion, IntoLoadable, Loadable,
-    LoaderLength, ReadResult, Sample, Sink, SinkId, SinkState,
+    BoxedLoadable, Config, Ingestion, IntoLoadable, Loadable, LoaderLength, ReadResult, Sample,
+    Sink, SinkId, SinkState,
 };
 
 /// An ingestion implementation for Symphonia.
@@ -190,11 +190,10 @@ impl Loader {
             offset = self.seek(offset)?;
         }
 
-        let mut buf = vec![Sample::default(); amount];
-        let result = self.decode_until_filled(&mut buf)?;
+        let result = self.decode_until_filled(amount)?;
 
-        self.sink.write(offset, &buf[..result.samples_written]);
-        self.offset.store(offset + result.samples_written);
+        self.sink.write(offset, &result.samples);
+        self.offset.store(offset + result.samples.len());
 
         Ok(result)
     }
@@ -232,18 +231,19 @@ impl Loader {
         Ok(seeked_to_offset)
     }
 
-    // Decode as many samples as possible into the buffer.
-    fn decode_until_filled(&self, buf: &mut [Sample]) -> Result<LoadResult, Box<dyn Error>> {
-        let mut samples_written = 0;
+    // Decode the amount of samples requested.
+    // Note: More samples may be returned than requested.
+    fn decode_until_filled(&self, amount: usize) -> Result<LoadResult, Box<dyn Error>> {
         let mut last_samples_written_was_zero = false;
-
         let mut end_reached = false;
 
         let mut decoder = self.decoder.lock();
         let mut format_reader = self.format_reader.lock();
 
+        let mut samples = vec![];
+
         loop {
-            if samples_written == buf.len() {
+            if samples.len() >= amount {
                 break;
             }
 
@@ -272,7 +272,7 @@ impl Loader {
 
                     // Acquire the samples from the decoder.
                     sample_buffer.copy_interleaved_ref(decoded);
-                    let samples = sample_buffer.samples();
+                    let decoded_samples = sample_buffer.samples();
 
                     // Sometimes Symphonia does not err with UnexpectedEof, but instead returns no samples.
                     // This is a workaround to avoid an infinite loop.
@@ -282,7 +282,7 @@ impl Loader {
                     }
 
                     // Copy the samples into the buffer.
-                    samples_written += assign_slice_with_offset(samples_written, samples, buf);
+                    samples.extend_from_slice(decoded_samples);
                     last_samples_written_was_zero = samples.is_empty();
                 }
                 Err(SymphoniaError::IoError(err)) => {
@@ -303,7 +303,7 @@ impl Loader {
         }
 
         Ok(LoadResult {
-            samples_written,
+            samples,
             end_reached,
         })
     }
@@ -311,7 +311,7 @@ impl Loader {
 
 #[derive(Debug)]
 struct LoadResult {
-    samples_written: usize,
+    samples: Vec<Sample>,
     end_reached: bool,
 }
 
