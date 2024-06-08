@@ -179,21 +179,22 @@ impl Loader {
     }
 
     // Loads the samples into the sink.
-    fn load_into_sink(
-        &self,
-        mut offset: usize,
-        amount: usize,
-    ) -> Result<LoadResult, Box<dyn Error>> {
+    fn load_into_sink(&self, offset: usize, amount: usize) -> Result<LoadResult, Box<dyn Error>> {
         let old_offset = self.offset.load();
+        let mut seeked_offset = offset;
 
         if old_offset != offset {
-            offset = self.seek(offset)?;
+            seeked_offset = self.seek(offset)?;
         }
 
         let result = self.decode_until_filled(amount)?;
 
-        self.sink.write(offset, &result.samples);
-        self.offset.store(offset + result.samples.len());
+        // Skip the seek difference, to avoid artifacts.
+        let start = offset.saturating_sub(seeked_offset);
+        let samples = &result.samples[start..];
+
+        self.sink.write(offset, samples);
+        self.offset.store(old_offset + result.samples.len());
 
         Ok(result)
     }
