@@ -226,7 +226,8 @@ impl MultiRangeBuffer {
 
     /// Writes samples to the buffer at the given offset, creating a new range if necessary.
     pub fn write(&self, offset: usize, buf: &[Sample]) {
-        let mut ranges: Vec<_> = self.ranges.write().drain(..).collect();
+        let mut guard = self.ranges.write();
+        let mut ranges: Vec<_> = guard.drain(..).collect();
 
         let range = ranges.iter_mut().find(|x| x.offset.load() == offset);
 
@@ -237,7 +238,7 @@ impl MultiRangeBuffer {
             ranges.last_mut().unwrap().write(buf);
         }
 
-        self.merge_ranges(ranges);
+        *guard = Self::merge_ranges(ranges);
     }
 
     /// Reads samples from the buffer at the given offset. Returns a [BufferReadResult], which describes the result of the read operation.
@@ -300,7 +301,8 @@ impl MultiRangeBuffer {
 
     /// Clears all samples outside the given window.
     pub fn retain_window(&self, offset: usize, window: usize) {
-        let mut ranges: Vec<_> = self.ranges.write().drain(..).collect();
+        let mut guard = self.ranges.write();
+        let mut ranges: Vec<_> = guard.drain(..).collect();
 
         let halved_window = window / 2;
         let start = (offset.saturating_sub(halved_window)).max(0);
@@ -312,14 +314,14 @@ impl MultiRangeBuffer {
             range.retain_range(start, end);
         }
 
-        self.merge_ranges(ranges);
+        *guard = Self::merge_ranges(ranges);
     }
 
     /// Merges all ranges that are intersecting or adjacent to each other.
-    fn merge_ranges(&self, mut ranges: Vec<RangeBuffer>) {
+    fn merge_ranges(mut ranges: Vec<RangeBuffer>) -> Vec<RangeBuffer> {
         // Avoid a panic caused by the remove(0) call later on.
         if ranges.is_empty() {
-            return;
+            return vec![];
         }
 
         ranges.sort_by(|a, b| a.offset.load().cmp(&b.offset.load()));
@@ -337,7 +339,7 @@ impl MultiRangeBuffer {
         }
 
         merged_ranges.push(current_range);
-        *self.ranges.write() = merged_ranges;
+        merged_ranges
     }
 
     #[cfg(test)]
