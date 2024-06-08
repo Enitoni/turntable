@@ -108,17 +108,23 @@ impl RangeBuffer {
     }
 
     /// Clears all samples outside the given window.
-    fn retain_range(&self, start: usize, end: usize) {
+    /// Todo: Fix the bugs where offsets cause channel shifts. Write more tests?
+    fn retain_range(&self, start: usize, end: usize, chunk_size: usize) {
         let mut data = self.data.write();
 
         let offset = self.offset.load();
-        let relative_start = start.saturating_sub(offset);
-        let relative_end = end.saturating_sub(offset).min(data.len().saturating_sub(1));
+        let safe_start = start.saturating_div(chunk_size);
+        let safe_end = end.saturating_div(chunk_size);
+
+        let relative_start = safe_start.saturating_sub(offset);
+        let relative_end = safe_end
+            .saturating_sub(safe_start)
+            .min(data.len().saturating_sub(1));
 
         let remainder: Vec<_> = data.drain(relative_start..=relative_end).collect();
 
         *data = remainder;
-        self.offset.store(start.max(offset));
+        self.offset.store(start.max(safe_start));
     }
 
     /// Returns the amount of samples in the buffer so far.
@@ -300,18 +306,19 @@ impl MultiRangeBuffer {
     }
 
     /// Clears all samples outside the given window.
-    pub fn retain_window(&self, offset: usize, window: usize) {
+    pub fn retain_window(&self, offset: usize, window: usize, chunk_size: usize) {
         let mut guard = self.ranges.write();
         let mut ranges: Vec<_> = guard.drain(..).collect();
 
-        let halved_window = window / 2;
-        let start = (offset.saturating_sub(halved_window)).max(0);
-        let end = offset + halved_window;
+        let start = (offset.saturating_sub(window)).max(0);
+        let end = offset + window;
+
+        // println!("{}, {}", start.rem_euclid(2), end.rem_euclid(2));
 
         ranges.retain(|x| x.is_within(start) || x.is_within(end));
 
         for range in ranges.iter() {
-            range.retain_range(start, end);
+            range.retain_range(start, end, chunk_size);
         }
 
         *guard = Self::merge_ranges(ranges);
@@ -469,7 +476,7 @@ mod test {
     fn test_retain_range() {
         let buffer = RangeBuffer::new(20);
         buffer.write(&[1., 2., 3., 4., 5., 6., 7., 8., 9., 10.]);
-        buffer.retain_range(22, 25);
+        buffer.retain_range(22, 25, 2);
 
         let new_offset = buffer.offset.load();
 
@@ -482,7 +489,7 @@ mod test {
 
         let buffer = RangeBuffer::new(20);
         buffer.write(&[1., 2., 3., 4., 5., 6., 7., 8., 9., 10.]);
-        buffer.retain_range(27, 100);
+        buffer.retain_range(27, 100, 2);
 
         assert_eq!(
             buffer.consume_to_vec(),
@@ -589,7 +596,7 @@ mod test {
         buffer.write(11, &[20., 21., 22., 23., 24., 25., 26., 27., 28., 29.]);
 
         // 10 is a gap
-        buffer.retain_window(10, 6);
+        buffer.retain_window(10, 6, 2);
 
         assert_eq!(
             buffer.consume_to_vec(),
