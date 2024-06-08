@@ -79,8 +79,8 @@ impl Sink {
     }
 
     /// Clears the samples in the sink outside the given window.
-    pub fn clear_outside(&self, offset: usize, window: usize) {
-        self.buffer.retain_window(offset, window)
+    pub fn clear_outside(&self, offset: usize, window: usize, chunk_size: usize) {
+        self.buffer.retain_window(offset, window, chunk_size)
     }
 
     /// Marks the sink as idle, meaning it can be dropped from memory.

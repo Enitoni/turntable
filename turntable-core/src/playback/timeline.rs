@@ -168,7 +168,11 @@ impl Timeline {
         let offset = self.offset.load();
 
         if let Some(first_sink) = first_sink.first() {
-            first_sink.clear_outside(offset, self.config.preload_size_in_samples() * 2);
+            first_sink.clear_outside(
+                offset,
+                self.config.preload_size_in_samples() * 4,
+                self.config.channel_count,
+            );
         }
     }
 
