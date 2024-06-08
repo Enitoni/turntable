@@ -303,7 +303,7 @@ impl MultiRangeBuffer {
         let mut ranges: Vec<_> = self.ranges.write().drain(..).collect();
 
         let halved_window = window / 2;
-        let start = (offset - halved_window).max(0);
+        let start = (offset.saturating_sub(halved_window)).max(0);
         let end = offset + halved_window;
 
         ranges.retain(|x| x.is_within(start) || x.is_within(end));
