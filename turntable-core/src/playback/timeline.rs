@@ -145,10 +145,11 @@ impl Timeline {
             // Only try to preload if the sink is loadable.
             if sink.is_loadable() {
                 let how_much_can_preload = available_until_end.min(remaining_to_load);
+                let preload_offset = available_until_void.distance + offset;
 
                 result.push(TimelinePreload {
                     sink_id: sink.id,
-                    offset,
+                    offset: preload_offset,
                 });
 
                 remaining_to_load -= how_much_can_preload;
