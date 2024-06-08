@@ -164,7 +164,9 @@ impl Loader {
                 if result.end_reached {
                     self.sink.set_state(SinkState::Sealed);
                 } else {
-                    self.sink.set_state(SinkState::Idle);
+                    // Todo: Deal with this in a better way. This has to be set to `Active` to avoid the player skipping it.
+                    // It is a bad implementation detail that the implementor of an Ingestion has to account for this.
+                    self.sink.set_state(SinkState::Active);
                 }
             }
             Err(e) => {
