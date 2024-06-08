@@ -92,13 +92,14 @@ fn spawn_preloading_task<I>(
                             config.preload_size_in_samples(),
                         )
                         .await;
+
+                    player.clear_superflous();
                 }
 
-                player.clear_superflous();
                 ingestion.clear_inactive();
             }
 
-            sleep(Duration::from_secs(1)).await;
+            sleep(Duration::from_secs(5)).await;
         }
     });
 }
@@ -113,6 +114,10 @@ fn wait_for_next(now: Instant, config: Config) {
 
     if elapsed_millis > config.samples_per_sec() as u128 / 10000 {
         // Todo: Warn if it took too long to process samples
+        println!(
+            "Warning: Took too long to process samples: {}ms",
+            elapsed_millis
+        );
     }
 
     let corrected = duration_micros
