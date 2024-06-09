@@ -200,7 +200,6 @@ impl Loader {
     }
 
     // Attempts to seek to the given offset.
-    #[allow(dead_code)]
     fn seek(&self, offset: usize) -> Result<usize, Box<dyn Error>> {
         let mut format_reader = self.format_reader.lock();
 
