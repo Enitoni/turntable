@@ -99,8 +99,12 @@ impl RangeBuffer {
     fn read(&self, offset: usize, buf: &mut [Sample]) -> usize {
         let data = self.data.read();
 
-        let start = offset.saturating_sub(self.offset.load()).min(data.len());
-        let end = start.saturating_add(buf.len()).min(data.len());
+        let absolute_start = self.offset.load();
+        let absolute_end = absolute_start + data.len();
+        let requested_length = buf.len();
+
+        let start = offset.saturating_sub(absolute_start);
+        let end = start.saturating_add(requested_length).min(absolute_end);
         let amount = end.saturating_sub(start);
 
         buf[..amount].copy_from_slice(&data[start..end]);
