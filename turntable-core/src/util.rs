@@ -1,5 +1,6 @@
 use std::fmt::{Debug, Display};
 use std::hash::{Hash, Hasher};
+use std::ops::{Add, Div, Mul};
 use std::{marker::PhantomData, vec};
 
 use crossbeam::atomic::AtomicCell;
@@ -112,23 +113,31 @@ impl RangeBuffer {
     }
 
     /// Clears all samples outside the given window.
-    /// Todo: Fix the bugs where offsets cause channel shifts. Write more tests?
+    /// End and start are clamped to chunk_size's start and end.
     fn retain_range(&self, start: usize, end: usize, chunk_size: usize) {
         let mut data = self.data.write();
+        let total_length = data.len();
 
-        let offset = self.offset.load();
-        let safe_start = start.saturating_div(chunk_size);
-        let safe_end = end.saturating_div(chunk_size);
+        let absolute_start = self.offset.load();
+        let absolute_end = (absolute_start + total_length).saturating_sub(1);
 
-        let relative_start = safe_start.saturating_sub(offset);
-        let relative_end = safe_end
-            .saturating_sub(safe_start)
-            .min(data.len().saturating_sub(1));
+        let absolute_chunk_start = (absolute_start + 1).saturating_div(chunk_size);
+        let absolute_chunk_end =
+            (absolute_end.add(1).saturating_sub(chunk_size)).saturating_div(chunk_size);
 
+        let safe_start = start.saturating_div(chunk_size).max(absolute_chunk_start) * chunk_size;
+        let safe_end = end
+            .saturating_div(chunk_size)
+            .min(absolute_chunk_end)
+            .mul(chunk_size)
+            .saturating_add(chunk_size.saturating_sub(1));
+
+        let relative_start = safe_start.saturating_sub(absolute_start);
+        let relative_end = safe_end.saturating_sub(absolute_start);
         let remainder: Vec<_> = data.drain(relative_start..=relative_end).collect();
 
         *data = remainder;
-        self.offset.store(start.max(safe_start));
+        self.offset.store(relative_start + absolute_start);
     }
 
     /// Returns the amount of samples in the buffer so far.
@@ -314,10 +323,8 @@ impl MultiRangeBuffer {
         let mut guard = self.ranges.write();
         let mut ranges: Vec<_> = guard.drain(..).collect();
 
-        let start = (offset.saturating_sub(window)).max(0);
+        let start = offset.saturating_sub(window);
         let end = offset + window;
-
-        // println!("{}, {}", start.rem_euclid(2), end.rem_euclid(2));
 
         ranges.retain(|x| x.is_within(start) || x.is_within(end));
 
@@ -478,26 +485,83 @@ mod test {
 
     #[test]
     fn test_retain_range() {
-        let buffer = RangeBuffer::new(20);
+        // Two channels, L and R.
+        // Note that this could be any number of channels, but we're only testing with two.
+        let chunk_size = 2;
+        let absolute_offset = 6;
+
+        // Create the buffer at the specified offset.
+        let buffer = RangeBuffer::new(absolute_offset);
+
+        // Write some initial samples
+        // Since we start at 6, which is an even offset (odd since arrays starts at 0), the first sample is left channel, followed by right channel, and so on.
+        // In other words: Odd offsets are L, even offsets are R, if arrays were to start at 1.
+        // For convenience, the "samples" (numbers we're using here) follow this pattern:
+        //             L   R   L   R   L   R   L   R   L   R
         buffer.write(&[1., 2., 3., 4., 5., 6., 7., 8., 9., 10.]);
-        buffer.retain_range(22, 25, 2);
 
-        let new_offset = buffer.offset.load();
+        let get_samples = || {
+            let mut buf = vec![0.; 2];
 
-        assert_eq!(new_offset, 22, "offset is changed accordingly");
+            // Get the fifth and sixth sample
+            buffer.read(absolute_offset + 4, &mut buf);
+            buf
+        };
+
+        let expected_samples = get_samples();
+        assert_eq!(&expected_samples, &[5., 6.], "sample is correct");
+
+        // Define our offsets. Odd/and even are swapped because arrays start at 0.
+        // Specifies sample 4. (even, R). Should get normalized to 3. (odd, L).
+        let odd_start_offset = absolute_offset + 3;
+        // Specifies sample 7. (odd, L). Should get normalized to 8. (even, R).
+        let even_end_offset = absolute_offset + 6;
+
+        // Test the function.
+        buffer.retain_range(odd_start_offset, even_end_offset, chunk_size);
+
+        // A channel shift due to an incorrect new absolute offset should not happen, so we get the same samples.
+        assert_eq!(
+            get_samples(),
+            expected_samples,
+            "received samples are correct"
+        );
+        // New absolute offset should be rounded down to the odd (L) sample 3.
+        assert_eq!(
+            buffer.offset.load(),
+            odd_start_offset - 1,
+            "offset is changed accordingly"
+        );
+        // The remaining samples must follow the pattern, so first is odd, last is even.
         assert_eq!(
             buffer.consume_to_vec(),
-            vec![3., 4., 5., 6.],
+            //   L   R   L   R   L   R
+            vec![3., 4., 5., 6., 7., 8.],
             "samples within window are retained"
         );
 
-        let buffer = RangeBuffer::new(20);
+        // Check the overflowing, and check that it handles off-by-one offset.
+        let absolute_offset = absolute_offset + 1;
+        let buffer = RangeBuffer::new(absolute_offset);
+
+        // Samples are shifted a channel because we added one to the offset.
+        //             R   L   R   L   R   L   R   L   R   L
         buffer.write(&[1., 2., 3., 4., 5., 6., 7., 8., 9., 10.]);
-        buffer.retain_range(27, 100, 2);
+
+        let start = absolute_offset - 1;
+        let end = absolute_offset + 10;
+
+        buffer.retain_range(start, end, chunk_size);
 
         assert_eq!(
+            buffer.offset.load(),
+            absolute_offset + 1,
+            "offset is changed accordingly"
+        );
+        assert_eq!(
             buffer.consume_to_vec(),
-            vec![8., 9., 10.],
+            //   L   R   L   R   L   R   L   R
+            vec![2., 3., 4., 5., 6., 7., 8., 9.],
             "overflowing end is handled correctly"
         );
     }
@@ -596,15 +660,18 @@ mod test {
     fn test_retain_window() {
         let buffer = MultiRangeBuffer::new(0);
 
+        //                L   R   L   R   L   R   L   R   L   R
         buffer.write(0, &[1., 2., 3., 4., 5., 6., 7., 8., 9., 10.]);
+        //                 R    L    R    L    R    L    R    L    R    L
         buffer.write(11, &[20., 21., 22., 23., 24., 25., 26., 27., 28., 29.]);
 
         // 10 is a gap
-        buffer.retain_window(10, 6, 2);
+        buffer.retain_window(10, 3, 2);
 
         assert_eq!(
             buffer.consume_to_vec(),
-            vec![vec![8., 9., 10.], vec![20., 21., 22.]],
+            //        L   R   L   R          L    R
+            vec![vec![7., 8., 9., 10.], vec![21., 22.]],
             "ranges are correctly retained"
         );
     }
