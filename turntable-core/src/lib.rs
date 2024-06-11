@@ -1,6 +1,5 @@
 use implementors::SymphoniaIngestion;
 use std::{error::Error, sync::Arc};
-use tokio::runtime::{Handle, Runtime};
 
 mod config;
 mod ingestion;

@@ -1,6 +1,6 @@
 use std::fmt::{Debug, Display};
 use std::hash::{Hash, Hasher};
-use std::ops::{Add, Div, Mul};
+use std::ops::{Add, Mul};
 use std::{marker::PhantomData, vec};
 
 use crossbeam::atomic::AtomicCell;
