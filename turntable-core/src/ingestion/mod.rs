@@ -3,7 +3,7 @@
 use async_trait::async_trait;
 use std::{error::Error, sync::Arc};
 
-use crate::Config;
+use crate::PipelineContext;
 
 mod loading;
 mod sink;
@@ -19,7 +19,7 @@ pub trait Ingestion
 where
     Self: Sync + Send,
 {
-    fn new(config: Config) -> Self;
+    fn new(context: &PipelineContext) -> Self;
 
     /// Ingests a new source, returning a sink that can be used to play the source.
     async fn ingest<L>(&self, input: L) -> Result<Arc<Sink>, Box<dyn Error>>

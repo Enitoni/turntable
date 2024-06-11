@@ -1,6 +1,6 @@
 use std::{sync::Arc, thread};
 
-use crate::{Config, PlayerId, Sample};
+use crate::{Config, PipelineContext, PlayerId, Sample};
 use crossbeam::channel::{unbounded, Receiver, Sender};
 use dashmap::DashMap;
 
@@ -25,14 +25,14 @@ struct ProcessedSamples {
 }
 
 impl Output {
-    pub fn new(config: Config) -> Self {
+    pub fn new(context: &PipelineContext) -> Self {
         let (sample_sender, sample_receiver) = unbounded();
         let streams = Arc::new(DashMap::new());
 
         spawn_output_thread(sample_receiver, streams.clone());
 
         Self {
-            config,
+            config: context.config.clone(),
             streams,
             sample_sender,
         }

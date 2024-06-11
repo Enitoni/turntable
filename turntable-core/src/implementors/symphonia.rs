@@ -20,8 +20,8 @@ use symphonia::core::{
 use tokio::runtime::{self, Handle};
 
 use crate::{
-    BoxedLoadable, Config, Ingestion, IntoLoadable, Loadable, LoaderLength, ReadResult, Sample,
-    Sink, SinkId, SinkState,
+    BoxedLoadable, Config, Ingestion, IntoLoadable, Loadable, LoaderLength, PipelineContext,
+    ReadResult, Sample, Sink, SinkId, SinkState,
 };
 
 /// An ingestion implementation for Symphonia.
@@ -36,10 +36,10 @@ pub struct SymphoniaIngestion {
 
 #[async_trait]
 impl Ingestion for SymphoniaIngestion {
-    fn new(config: Config) -> Self {
+    fn new(context: &PipelineContext) -> Self {
         Self {
             rt: runtime::Handle::current(),
-            config,
+            config: context.config.clone(),
             sinks: DashMap::new(),
             loaders: DashMap::new(),
             format_options: FormatOptions {
@@ -361,16 +361,17 @@ impl Read for LoadableMediaSource {
 
 #[cfg(test)]
 mod tests {
-
-    use crate::implementors::{tests::test_file, LoadableNetworkStream};
-
     use super::*;
+    use crate::implementors::{tests::test_file, LoadableNetworkStream};
 
     #[tokio::test]
     async fn test_symphonia_ingestion_with_local_file() {
         let file = test_file("submersion.flac").await;
-        let config = Config::default();
-        let ingestion = SymphoniaIngestion::new(config.clone());
+
+        let context = PipelineContext::default();
+        let config = context.config.clone();
+
+        let ingestion = SymphoniaIngestion::new(&context);
         let sink = ingestion.ingest(file).await.unwrap();
 
         // Load all samples.
@@ -391,8 +392,8 @@ mod tests {
         .await
         .unwrap();
 
-        let config = Config::default();
-        let ingestion = SymphoniaIngestion::new(config.clone());
+        let context = PipelineContext::default();
+        let ingestion = SymphoniaIngestion::new(&context);
         let sink = ingestion.ingest(stream).await.unwrap();
 
         for i in 0..50 {

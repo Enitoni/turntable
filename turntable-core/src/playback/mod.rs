@@ -4,7 +4,7 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
-use tokio::{runtime::Handle, time::sleep};
+use tokio::time::sleep;
 
 mod player;
 mod timeline;
@@ -12,25 +12,26 @@ mod timeline;
 pub use player::*;
 pub use timeline::*;
 
-use crate::{Config, Ingestion, Output, Sink};
+use crate::{get_or_create_handle, Config, Ingestion, Output, PipelineContext, Sink};
 
 /// The playback type is responsible for managing players, processing playback, and preloading sinks as needed.
 pub struct Playback {
     config: Config,
     output: Arc<Output>,
-    /// All the players that eixst in the playback.
+    /// All the players that exist in the playback.
     players: Arc<DashMap<PlayerId, Player>>,
 }
 
 impl Playback {
-    pub fn new<I>(rt: Handle, config: Config, ingestion: Arc<I>, output: Arc<Output>) -> Self
+    pub fn new<I>(context: &PipelineContext, ingestion: Arc<I>, output: Arc<Output>) -> Self
     where
         I: Ingestion + 'static,
     {
+        let config = context.config.clone();
         let players = Arc::new(DashMap::new());
 
-        spawn_procesing_thread(config.clone(), players.clone());
-        spawn_preloading_task(rt, config.clone(), ingestion, players.clone());
+        spawn_processing_thread(config.clone(), players.clone());
+        spawn_preloading_task(config.clone(), ingestion, players.clone());
 
         Self {
             output,
@@ -57,7 +58,7 @@ impl Playback {
     }
 }
 
-fn spawn_procesing_thread(config: Config, players: Arc<DashMap<PlayerId, Player>>) {
+fn spawn_processing_thread(config: Config, players: Arc<DashMap<PlayerId, Player>>) {
     let run = move || loop {
         let now = Instant::now();
 
@@ -72,13 +73,14 @@ fn spawn_procesing_thread(config: Config, players: Arc<DashMap<PlayerId, Player>
 }
 
 fn spawn_preloading_task<I>(
-    handle: Handle,
     config: Config,
     ingestion: Arc<I>,
     players: Arc<DashMap<PlayerId, Player>>,
 ) where
     I: Ingestion + 'static,
 {
+    let handle = get_or_create_handle();
+
     handle.spawn(async move {
         loop {
             for player in players.iter() {

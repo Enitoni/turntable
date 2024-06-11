@@ -1,7 +1,9 @@
+use crossbeam::channel::unbounded;
 use implementors::SymphoniaIngestion;
 use std::{error::Error, sync::Arc};
 
 mod config;
+mod events;
 mod ingestion;
 mod output;
 mod playback;
@@ -9,6 +11,7 @@ mod util;
 
 pub mod implementors;
 pub use config::*;
+pub use events::*;
 pub use ingestion::*;
 pub use output::*;
 pub use playback::*;
@@ -19,6 +22,18 @@ pub struct Pipeline<I> {
     ingestion: Arc<I>,
     playback: Playback,
     output: Arc<Output>,
+
+    action_receiver: ActionReceiver,
+    event_receiver: EventReceiver,
+}
+
+/// A type passed to various components of the pipeline, to access state and emit events and actions.
+#[derive(Clone)]
+pub struct PipelineContext {
+    pub config: Config,
+
+    action_sender: ActionSender,
+    event_sender: EventSender,
 }
 
 impl<I> Pipeline<I>
@@ -26,16 +41,25 @@ where
     I: Ingestion + 'static,
 {
     pub fn new(config: Config) -> Pipeline<I> {
-        let rt = get_or_create_handle();
+        let (action_sender, action_receiver) = unbounded();
+        let (event_sender, event_receiver) = unbounded();
 
-        let ingestion = Arc::new(I::new(config.clone()));
-        let output = Arc::new(Output::new(config.clone()));
-        let playback = Playback::new(rt, config.clone(), ingestion.clone(), output.clone());
+        let context = PipelineContext {
+            config: config.clone(),
+            action_sender,
+            event_sender,
+        };
+
+        let ingestion = Arc::new(I::new(&context));
+        let output = Arc::new(Output::new(&context));
+        let playback = Playback::new(&context, ingestion.clone(), output.clone());
 
         Pipeline {
             output,
             ingestion,
             playback,
+            action_receiver,
+            event_receiver,
         }
     }
 
@@ -69,5 +93,31 @@ where
 impl Default for Pipeline<SymphoniaIngestion> {
     fn default() -> Self {
         Self::new(Config::default())
+    }
+}
+
+impl PipelineContext {
+    pub fn dispatch(&self, action: PipelineAction) {
+        self.action_sender.send(action).expect("action is sent");
+    }
+
+    pub fn emit(&self, event: PipelineEvent) {
+        self.event_sender.send(event).expect("event is sent");
+    }
+}
+
+// Realistically, the context should always be created by the pipeline.
+// However, in a test, this may not be possible.
+#[cfg(test)]
+impl Default for PipelineContext {
+    fn default() -> Self {
+        let (action_sender, _) = unbounded();
+        let (event_sender, _) = unbounded();
+
+        Self {
+            config: Config::default(),
+            action_sender,
+            event_sender,
+        }
     }
 }
