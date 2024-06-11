@@ -99,6 +99,13 @@ where
     {
         self.output.consume_player::<E>(player_id)
     }
+
+    /// Receive events from the pipeline.
+    pub fn wait_for_event(&self) -> PipelineEvent {
+        self.event_receiver
+            .recv()
+            .expect("event is received without error")
+    }
 }
 
 impl Default for Pipeline<SymphoniaIngestion> {
