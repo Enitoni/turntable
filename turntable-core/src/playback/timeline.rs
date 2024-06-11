@@ -181,6 +181,11 @@ impl Timeline {
         self.offset.store(0);
     }
 
+    /// Seeks to a specific offset in the timeline.
+    pub fn seek(&self, offset: usize) {
+        self.offset.store(offset);
+    }
+
     /// Returns the offset of the current sink.
     pub fn current_offset(&self) -> usize {
         self.offset.load()

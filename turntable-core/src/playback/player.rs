@@ -14,6 +14,7 @@ pub struct Player {
     timeline: Timeline,
     output: Arc<Output>,
     state: AtomicCell<PlayerState>,
+    should_play: AtomicCell<bool>,
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -32,6 +33,7 @@ impl Player {
     pub fn new(config: Config, output: Arc<Output>) -> Self {
         Self {
             timeline: Timeline::new(config.clone()),
+            should_play: Default::default(),
             state: Default::default(),
             id: PlayerId::new(),
             output,
@@ -52,6 +54,14 @@ impl Player {
     pub fn process(&self) {
         let mut samples = vec![0.; self.config.buffer_size_in_samples()];
         let mut amount_read = 0;
+
+        // If the player is not supposed to play, we just push silence.
+        if !self.should_play.load() {
+            self.output.push(self.id, samples);
+            self.set_state_if_different(PlayerState::Idle);
+
+            return;
+        }
 
         let reads = self.timeline.advance(samples.len());
 
@@ -78,6 +88,21 @@ impl Player {
     /// Clears samples that are not needed, to save memory.
     pub fn clear_superflous(&self) {
         self.timeline.clear_superflous();
+    }
+
+    /// Starts playback if possible.
+    pub fn play(&self) {
+        self.should_play.store(true);
+    }
+
+    /// Pauses playback.
+    pub fn pause(&self) {
+        self.should_play.store(false);
+    }
+
+    /// Seeks to a specific offset.
+    pub fn seek(&self, offset: usize) {
+        self.timeline.seek(offset);
     }
 
     fn set_state_if_different(&self, state: PlayerState) {
