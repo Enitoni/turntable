@@ -34,6 +34,6 @@ pub enum PipelineAction {
     SeekPlayer {
         player_id: PlayerId,
         /// The position to seek to, in seconds.
-        position: f64,
+        position: f32,
     },
 }
