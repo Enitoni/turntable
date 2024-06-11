@@ -190,6 +190,11 @@ impl Timeline {
     pub fn total_offset(&self) -> usize {
         self.total_offset.load()
     }
+
+    /// Returns true if the timeline is empty.
+    pub fn is_empty(&self) -> bool {
+        self.sinks.lock().is_empty()
+    }
 }
 
 /// Instructs a [Player] what sink to read from, and where to start reading from.
