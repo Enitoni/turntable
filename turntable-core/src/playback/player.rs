@@ -2,7 +2,10 @@ use std::sync::Arc;
 
 use crossbeam::atomic::AtomicCell;
 
-use crate::{Id, Output, PipelineContext, PipelineEvent, Sink, Timeline, TimelinePreload};
+use crate::{
+    Id, Output, PipelineAction, PipelineContext, PipelineEvent, Sink, SinkId, Timeline,
+    TimelinePreload,
+};
 
 pub type PlayerId = Id<Player>;
 
@@ -11,10 +14,17 @@ pub type PlayerId = Id<Player>;
 pub struct Player {
     pub id: PlayerId,
     context: PipelineContext,
-    timeline: Timeline,
+    timeline: Arc<Timeline>,
     output: Arc<Output>,
     state: AtomicCell<PlayerState>,
     should_play: AtomicCell<bool>,
+}
+
+/// A type used to control a player and read its state.
+pub struct PlayerContext {
+    pub id: PlayerId,
+    context: PipelineContext,
+    timeline: Arc<Timeline>,
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -34,7 +44,7 @@ impl Player {
         let config = context.config.clone();
 
         Self {
-            timeline: Timeline::new(config.clone()),
+            timeline: Timeline::new(config.clone()).into(),
             should_play: true.into(),
             context: context.clone(),
             state: Default::default(),
@@ -107,6 +117,15 @@ impl Player {
         self.timeline.seek(offset);
     }
 
+    /// Returns the context for this player.
+    pub fn context(&self) -> PlayerContext {
+        PlayerContext {
+            id: self.id,
+            context: self.context.clone(),
+            timeline: self.timeline.clone(),
+        }
+    }
+
     fn set_state_if_different(&self, state: PlayerState) {
         if self.state.load() != state {
             self.context.emit(PipelineEvent::PlayerStateUpdate {
@@ -116,5 +135,48 @@ impl Player {
 
             self.state.store(state);
         }
+    }
+}
+
+impl PlayerContext {
+    /// Starts playback if possible.
+    pub fn play(&self) {
+        self.context
+            .dispatch(PipelineAction::PlayPlayer { player_id: self.id });
+    }
+
+    /// Pauses playback.
+    pub fn pause(&self) {
+        self.context
+            .dispatch(PipelineAction::PausePlayer { player_id: self.id });
+    }
+
+    /// Seeks to a specific time.
+    /// * `position` is the time in seconds.
+    pub fn seek(&self, position: f32) {
+        self.context.dispatch(PipelineAction::SeekPlayer {
+            player_id: self.id,
+            position,
+        });
+    }
+
+    /// Returns the current position in seconds.
+    pub fn current_time(&self) -> f32 {
+        self.context
+            .config
+            .samples_to_seconds(self.timeline.current_offset())
+    }
+
+    /// Returns the current total position in seconds.
+    /// This is how long the player has been playing for.
+    pub fn current_total_time(&self) -> f32 {
+        self.context
+            .config
+            .samples_to_seconds(self.timeline.total_offset())
+    }
+
+    /// Returns the currently playing sink.
+    pub fn current_sink(&self) -> Option<SinkId> {
+        self.timeline.current_sink()
     }
 }
