@@ -75,7 +75,7 @@ where
     }
 
     /// Creates a new player and returns its id.
-    pub fn create_player(&self) -> PlayerId {
+    pub fn create_player(&self) -> PlayerContext {
         self.playback.create_player()
     }
 

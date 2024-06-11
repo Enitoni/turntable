@@ -40,14 +40,14 @@ impl Playback {
     }
 
     /// Creates a new player, registers it with the output, and returns its id.
-    pub fn create_player(&self) -> PlayerId {
+    pub fn create_player(&self) -> PlayerContext {
         let player = Player::new(&self.context, self.output.clone());
-        let player_id = player.id;
+        let context = player.context();
 
         self.output.register_player(player.id);
         self.context.players.insert(player.id, player.into());
 
-        player_id
+        context
     }
 }
 
