@@ -21,6 +21,14 @@ pub enum PipelineEvent {
         player_id: PlayerId,
         new_state: PlayerState,
     },
+    /// A player's playback offset has changed.
+    PlayerTimeUpdate {
+        player_id: PlayerId,
+        /// The current position of the player, in seconds.
+        position: f32,
+        /// The total position of the player, in seconds.
+        total_position: f32,
+    },
 }
 
 /// Describes an action to be performed on the pipeline.

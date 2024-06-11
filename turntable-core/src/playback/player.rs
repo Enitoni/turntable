@@ -76,11 +76,15 @@ impl Player {
         }
 
         let reads = self.timeline.advance(samples.len());
+        let was_empty = reads.is_empty();
 
-        if reads.is_empty() {
+        // Update state according to the result of the reads.
+        if was_empty {
+            // If the timeline is empty, we reached the end of the playback.
             if self.timeline.is_empty() {
                 self.set_state_if_different(PlayerState::Idle);
             } else {
+                // Otherwise, a sink is buffering at this point.
                 self.set_state_if_different(PlayerState::Buffering);
             }
         } else {
@@ -92,6 +96,18 @@ impl Player {
             let result = read.sink.read(read.offset, slice);
 
             amount_read += result.amount;
+        }
+
+        // Emit the current time and total time.
+        if !was_empty {
+            let current_time = self.timeline.current_offset();
+            let current_total_time = self.timeline.total_offset();
+
+            self.context.emit(PipelineEvent::PlayerTimeUpdate {
+                player_id: self.id,
+                position: self.context.config.samples_to_seconds(current_time),
+                total_position: self.context.config.samples_to_seconds(current_total_time),
+            })
         }
 
         self.output.push(self.id, samples);
