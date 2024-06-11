@@ -196,6 +196,11 @@ impl Timeline {
         self.total_offset.load()
     }
 
+    /// Returns the id of the currently playing sink.
+    pub fn current_sink(&self) -> Option<SinkId> {
+        self.sinks.lock().first().map(|s| s.id)
+    }
+
     /// Returns true if the timeline is empty.
     pub fn is_empty(&self) -> bool {
         self.sinks.lock().is_empty()
