@@ -104,6 +104,20 @@ impl PipelineContext {
     pub fn emit(&self, event: PipelineEvent) {
         self.event_sender.send(event).expect("event is sent");
     }
+
+    /// Creates a new context with the given config.
+    /// Only used in tests.
+    #[cfg(test)]
+    pub fn with_config(config: &Config) -> Self {
+        let (action_sender, _) = unbounded();
+        let (event_sender, _) = unbounded();
+
+        Self {
+            config: config.clone(),
+            action_sender,
+            event_sender,
+        }
+    }
 }
 
 // Realistically, the context should always be created by the pipeline.

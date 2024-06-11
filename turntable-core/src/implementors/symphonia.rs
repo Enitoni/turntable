@@ -17,18 +17,18 @@ use symphonia::core::{
     probe::Hint,
     units::Time,
 };
-use tokio::runtime::{self, Handle};
+use tokio::runtime::Handle;
 
 use crate::{
-    BoxedLoadable, Config, Ingestion, IntoLoadable, Loadable, LoaderLength, PipelineContext,
-    ReadResult, Sample, Sink, SinkId, SinkState,
+    get_or_create_handle, BoxedLoadable, Config, Ingestion, IntoLoadable, Loadable, LoaderLength,
+    PipelineContext, ReadResult, Sample, Sink, SinkId, SinkState,
 };
 
 /// An ingestion implementation for Symphonia.
 pub struct SymphoniaIngestion {
     /// A runtime is needed to bridge synchronous Symphonia with asynchronous turntable.
     rt: Handle,
-    config: Config,
+    context: PipelineContext,
     sinks: DashMap<SinkId, Arc<Sink>>,
     loaders: DashMap<SinkId, Arc<Loader>>,
     format_options: FormatOptions,
@@ -38,8 +38,8 @@ pub struct SymphoniaIngestion {
 impl Ingestion for SymphoniaIngestion {
     fn new(context: &PipelineContext) -> Self {
         Self {
-            rt: runtime::Handle::current(),
-            config: context.config.clone(),
+            rt: get_or_create_handle(),
+            context: context.clone(),
             sinks: DashMap::new(),
             loaders: DashMap::new(),
             format_options: FormatOptions {
@@ -59,7 +59,7 @@ impl Ingestion for SymphoniaIngestion {
         let potential_sink_length = input
             .length()
             .await
-            .and_then(|l| l.to_sink_length(self.config.clone()));
+            .and_then(|l| l.to_sink_length(self.context.config.clone()));
 
         let loadable = LoadableMediaSource {
             rt: self.rt.clone(),
@@ -110,17 +110,17 @@ impl Ingestion for SymphoniaIngestion {
         // Prefer symphonia's decoded length over the sink length.
         // If neither is available, the sink will be treated as infinite.
         let sink_length = potential_decoded_seconds
-            .map(|s| self.config.seconds_to_samples(s))
+            .map(|s| self.context.config.seconds_to_samples(s))
             .or(potential_sink_length);
 
-        let sink: Arc<_> = Sink::new(sink_length).into();
+        let sink: Arc<_> = Sink::new(&self.context, sink_length).into();
 
         let loader = Loader {
             sink: sink.clone(),
             decoder: decoder.into(),
             track: audio_track.clone(),
             offset: Default::default(),
-            config: self.config.clone(),
+            config: self.context.config.clone(),
             format_reader: format_reader.into(),
         };
 

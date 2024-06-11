@@ -6,7 +6,7 @@ use parking_lot::Mutex;
 use crate::{Config, Sink, SinkId};
 
 /// The timeline keeps track of a sequence of sinks, manages advancement of playback, and returns what sinks to preload.
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct Timeline {
     config: Config,
     /// A sequence of sinks. The first one is the currently playing one.
@@ -203,7 +203,6 @@ impl Timeline {
 }
 
 /// Instructs a [Player] what sink to read from, and where to start reading from.
-#[derive(Debug)]
 pub struct TimelineRead {
     pub sink: Arc<Sink>,
     /// The offset of the first sample to read from the sink.
@@ -223,16 +222,16 @@ pub struct TimelinePreload {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::SinkState;
+    use crate::{PipelineContext, SinkState};
 
     #[test]
     fn test_advancement() {
-        let config = Config::default();
-        let timeline = Timeline::new(config);
+        let context = PipelineContext::default();
+        let timeline = Timeline::new(context.config.clone());
 
         // Set up our sinks.
-        let first = Arc::new(Sink::new(Some(10)));
-        let second = Arc::new(Sink::new(Some(10)));
+        let first = Arc::new(Sink::new(&context, Some(10)));
+        let second = Arc::new(Sink::new(&context, Some(10)));
         timeline.set_sinks(vec![first.clone(), second.clone()]);
 
         // First is fully loaded.
@@ -286,11 +285,12 @@ mod tests {
             ..Default::default()
         };
 
+        let context = PipelineContext::with_config(&config);
         let timeline = Timeline::new(config);
 
         // Set up our sinks.
-        let first = Arc::new(Sink::new(Some(10)));
-        let second = Arc::new(Sink::new(Some(10)));
+        let first = Arc::new(Sink::new(&context, Some(10)));
+        let second = Arc::new(Sink::new(&context, Some(10)));
         timeline.set_sinks(vec![first.clone(), second.clone()]);
 
         // Should return the first sink to preload.
@@ -317,8 +317,8 @@ mod tests {
         assert_eq!(preload[0].sink_id, second.id, "returns the second sink");
 
         // Set up case where two should be preloaded at once, since they are below the threshold.
-        let first = Arc::new(Sink::new(Some(2)));
-        let second = Arc::new(Sink::new(Some(2)));
+        let first = Arc::new(Sink::new(&context, Some(2)));
+        let second = Arc::new(Sink::new(&context, Some(2)));
 
         timeline.reset();
         timeline.set_sinks(vec![first.clone(), second.clone()]);

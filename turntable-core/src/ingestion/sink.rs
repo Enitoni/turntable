@@ -1,12 +1,14 @@
-use crate::{BufferRead, BufferVoidDistance, Id, MultiRangeBuffer, Sample};
+use crate::{
+    BufferRead, BufferVoidDistance, Id, MultiRangeBuffer, PipelineContext, PipelineEvent, Sample,
+};
 use parking_lot::Mutex;
 
 pub type SinkId = Id<Sink>;
 
 /// Represents a source of samples that can be played by a [Player].
-#[derive(Debug)]
 pub struct Sink {
     pub id: SinkId,
+    context: PipelineContext,
     /// The samples stored in this sink.
     buffer: MultiRangeBuffer,
     /// The expected length of the samples. If this is `None`, the length is unknown.
@@ -36,13 +38,14 @@ pub enum SinkState {
 }
 
 impl Sink {
-    pub fn new(expected_length: Option<usize>) -> Self {
+    pub fn new(context: &PipelineContext, expected_length: Option<usize>) -> Self {
         // If we don't have the length, this is probably a live stream.
         // In that case, allow the buffer to be as big as possible, and allow the [Loadable] to report when the end has been reached instead.
         let buffer_expected_length = expected_length.unwrap_or(usize::MAX);
 
         Self {
             expected_length,
+            context: context.clone(),
             id: SinkId::new(),
             state: Default::default(),
             buffer: MultiRangeBuffer::new(buffer_expected_length),
@@ -59,6 +62,11 @@ impl Sink {
     }
 
     pub fn set_state(&self, state: SinkState) {
+        self.context.emit(PipelineEvent::SinkStateUpdate {
+            sink_id: self.id,
+            new_state: state.clone(),
+        });
+
         *self.state.lock() = state;
     }
 
