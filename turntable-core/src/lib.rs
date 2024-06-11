@@ -17,6 +17,9 @@ pub use output::*;
 pub use playback::*;
 pub use util::*;
 
+// Reduces verbosity
+type Store<Id, T> = Arc<DashMap<Id, Arc<T>>>;
+
 /// The turntable pipeline, facilitating ingestion, playback, and output.
 pub struct Pipeline<I> {
     ingestion: Arc<I>,
@@ -27,13 +30,16 @@ pub struct Pipeline<I> {
     event_receiver: EventReceiver,
 }
 
-/// A type passed to various components of the pipeline, to access state and emit events and actions.
+/// A type passed to various components of the pipeline, to access state, emit events, and dispatch actions.
 #[derive(Clone)]
 pub struct PipelineContext {
     pub config: Config,
 
     action_sender: ActionSender,
     event_sender: EventSender,
+
+    pub sinks: Store<SinkId, Sink>,
+    pub players: Store<PlayerId, Player>,
 }
 
 impl<I> Pipeline<I>
@@ -46,8 +52,12 @@ where
 
         let context = PipelineContext {
             config: config.clone(),
+
             action_sender,
             event_sender,
+
+            sinks: Default::default(),
+            players: Default::default(),
         };
 
         let ingestion = Arc::new(I::new(&context));
@@ -116,6 +126,7 @@ impl PipelineContext {
             config: config.clone(),
             action_sender,
             event_sender,
+            ..Default::default()
         }
     }
 }
@@ -132,6 +143,11 @@ impl Default for PipelineContext {
             config: Config::default(),
             action_sender,
             event_sender,
+
+            sinks: Default::default(),
+            players: Default::default(),
         }
+    }
+}
     }
 }

@@ -1,4 +1,3 @@
-use dashmap::DashMap;
 use std::{
     sync::Arc,
     thread,
@@ -18,8 +17,6 @@ use crate::{get_or_create_handle, Config, Ingestion, Output, PipelineContext, Si
 pub struct Playback {
     context: PipelineContext,
     output: Arc<Output>,
-    /// All the players that exist in the playback.
-    players: Arc<DashMap<PlayerId, Player>>,
 }
 
 impl Playback {
@@ -27,21 +24,17 @@ impl Playback {
     where
         I: Ingestion + 'static,
     {
-        let config = context.config.clone();
-        let players = Arc::new(DashMap::new());
-
-        spawn_processing_thread(config.clone(), players.clone());
-        spawn_preloading_task(config.clone(), ingestion, players.clone());
+        spawn_processing_thread(context);
+        spawn_preloading_task(context, ingestion);
 
         Self {
             context: context.clone(),
-            players,
             output,
         }
     }
 
     pub fn set_sinks(&self, player_id: PlayerId, sinks: Vec<Arc<Sink>>) {
-        if let Some(player) = self.players.get(&player_id) {
+        if let Some(player) = self.context.players.get(&player_id) {
             player.set_sinks(sinks);
         }
     }
@@ -52,13 +45,16 @@ impl Playback {
         let player_id = player.id;
 
         self.output.register_player(player.id);
-        self.players.insert(player.id, player);
+        self.context.players.insert(player.id, player.into());
 
         player_id
     }
 }
 
-fn spawn_processing_thread(config: Config, players: Arc<DashMap<PlayerId, Player>>) {
+fn spawn_processing_thread(context: &PipelineContext) {
+    let players = context.players.clone();
+    let config = context.config.clone();
+
     let run = move || loop {
         let now = Instant::now();
 
@@ -72,14 +68,13 @@ fn spawn_processing_thread(config: Config, players: Arc<DashMap<PlayerId, Player
     thread::spawn(run);
 }
 
-fn spawn_preloading_task<I>(
-    config: Config,
-    ingestion: Arc<I>,
-    players: Arc<DashMap<PlayerId, Player>>,
-) where
+fn spawn_preloading_task<I>(context: &PipelineContext, ingestion: Arc<I>)
+where
     I: Ingestion + 'static,
 {
     let handle = get_or_create_handle();
+    let players = context.players.clone();
+    let config = context.config.clone();
 
     handle.spawn(async move {
         loop {

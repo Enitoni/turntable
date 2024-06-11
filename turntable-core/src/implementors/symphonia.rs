@@ -29,7 +29,6 @@ pub struct SymphoniaIngestion {
     /// A runtime is needed to bridge synchronous Symphonia with asynchronous turntable.
     rt: Handle,
     context: PipelineContext,
-    sinks: DashMap<SinkId, Arc<Sink>>,
     loaders: DashMap<SinkId, Arc<Loader>>,
     format_options: FormatOptions,
 }
@@ -40,7 +39,6 @@ impl Ingestion for SymphoniaIngestion {
         Self {
             rt: get_or_create_handle(),
             context: context.clone(),
-            sinks: DashMap::new(),
             loaders: DashMap::new(),
             format_options: FormatOptions {
                 enable_gapless: true,
@@ -125,7 +123,7 @@ impl Ingestion for SymphoniaIngestion {
         };
 
         self.loaders.insert(sink.id, loader.into());
-        self.sinks.insert(sink.id, sink.clone());
+        self.context.sinks.insert(sink.id, sink.clone());
 
         Ok(sink)
     }
@@ -140,7 +138,7 @@ impl Ingestion for SymphoniaIngestion {
     }
 
     fn clear_inactive(&self) {
-        self.sinks.retain(|_, s| !s.is_clearable());
+        self.context.sinks.retain(|_, s| !s.is_clearable());
     }
 }
 
