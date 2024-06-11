@@ -3,17 +3,13 @@ use std::sync::{Arc, Weak};
 use dashmap::DashMap;
 use parking_lot::Mutex;
 
-use crate::{Config, Id, Sample};
-
 use super::{Consumer, ConsumerId, Encoder};
-
-pub type StreamId = Id<Stream>;
+use crate::{Config, Sample};
 
 /// A stream is the destination of a [Player], and manages consumers for said player.
 ///
 /// Consumers provide encoded audio data to the end-user.
 pub struct Stream {
-    id: StreamId,
     config: Config,
     /// A weak reference is required because dropped consumers need to be removed.
     me: Weak<Stream>,
@@ -29,7 +25,6 @@ impl Stream {
         Arc::new_cyclic(|me| Self {
             config,
             me: me.clone(),
-            id: StreamId::new(),
             consumers: Default::default(),
             preload_cache: Default::default(),
         })
