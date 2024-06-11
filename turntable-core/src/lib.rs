@@ -1,6 +1,7 @@
 use crossbeam::channel::unbounded;
+use dashmap::DashMap;
 use implementors::SymphoniaIngestion;
-use std::{error::Error, sync::Arc};
+use std::{error::Error, sync::Arc, thread};
 
 mod config;
 mod events;
@@ -26,7 +27,6 @@ pub struct Pipeline<I> {
     playback: Playback,
     output: Arc<Output>,
 
-    action_receiver: ActionReceiver,
     event_receiver: EventReceiver,
 }
 
@@ -64,11 +64,12 @@ where
         let output = Arc::new(Output::new(&context));
         let playback = Playback::new(&context, ingestion.clone(), output.clone());
 
+        spawn_action_handler_thread(&context, action_receiver);
+
         Pipeline {
             output,
             ingestion,
             playback,
-            action_receiver,
             event_receiver,
         }
     }
@@ -129,6 +130,37 @@ impl PipelineContext {
             ..Default::default()
         }
     }
+}
+
+fn spawn_action_handler_thread(context: &PipelineContext, action_receiver: ActionReceiver) {
+    let players = context.players.clone();
+    let config = context.config.clone();
+
+    let run = move || loop {
+        let action = action_receiver.recv().unwrap();
+
+        match action {
+            PipelineAction::PlayPlayer { player_id } => {
+                let player = players.get(&player_id).expect("player exists");
+                player.play();
+            }
+            PipelineAction::PausePlayer { player_id } => {
+                let player = players.get(&player_id).expect("player exists");
+                player.pause();
+            }
+            PipelineAction::SeekPlayer {
+                player_id,
+                position,
+            } => {
+                let player = players.get(&player_id).expect("player exists");
+                let position_in_samples = config.seconds_to_samples(position);
+
+                player.seek(position_in_samples);
+            }
+        }
+    };
+
+    thread::spawn(run);
 }
 
 // Realistically, the context should always be created by the pipeline.
