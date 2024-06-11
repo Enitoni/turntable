@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crossbeam::atomic::AtomicCell;
 
-use crate::{Config, Id, Output, Sink, Timeline, TimelinePreload};
+use crate::{Id, Output, PipelineContext, PipelineEvent, Sink, Timeline, TimelinePreload};
 
 pub type PlayerId = Id<Player>;
 
@@ -10,7 +10,7 @@ pub type PlayerId = Id<Player>;
 /// and writing the played samples to an output buffer.
 pub struct Player {
     pub id: PlayerId,
-    config: Config,
+    context: PipelineContext,
     timeline: Timeline,
     output: Arc<Output>,
     state: AtomicCell<PlayerState>,
@@ -30,14 +30,16 @@ pub enum PlayerState {
 }
 
 impl Player {
-    pub fn new(config: Config, output: Arc<Output>) -> Self {
+    pub fn new(context: &PipelineContext, output: Arc<Output>) -> Self {
+        let config = context.config.clone();
+
         Self {
             timeline: Timeline::new(config.clone()),
-            should_play: Default::default(),
+            should_play: true.into(),
+            context: context.clone(),
             state: Default::default(),
             id: PlayerId::new(),
             output,
-            config,
         }
     }
 
@@ -52,7 +54,7 @@ impl Player {
     /// Processes the timeline and pushes the samples to the output stream.
     /// If there are no sinks to play, the samples pushed are silence.
     pub fn process(&self) {
-        let mut samples = vec![0.; self.config.buffer_size_in_samples()];
+        let mut samples = vec![0.; self.context.config.buffer_size_in_samples()];
         let mut amount_read = 0;
 
         // If the player is not supposed to play, we just push silence.
@@ -107,6 +109,11 @@ impl Player {
 
     fn set_state_if_different(&self, state: PlayerState) {
         if self.state.load() != state {
+            self.context.emit(PipelineEvent::PlayerStateUpdate {
+                player_id: self.id,
+                new_state: state,
+            });
+
             self.state.store(state);
         }
     }

@@ -16,7 +16,7 @@ use crate::{get_or_create_handle, Config, Ingestion, Output, PipelineContext, Si
 
 /// The playback type is responsible for managing players, processing playback, and preloading sinks as needed.
 pub struct Playback {
-    config: Config,
+    context: PipelineContext,
     output: Arc<Output>,
     /// All the players that exist in the playback.
     players: Arc<DashMap<PlayerId, Player>>,
@@ -34,9 +34,9 @@ impl Playback {
         spawn_preloading_task(config.clone(), ingestion, players.clone());
 
         Self {
-            output,
-            config,
+            context: context.clone(),
             players,
+            output,
         }
     }
 
@@ -48,7 +48,7 @@ impl Playback {
 
     /// Creates a new player, registers it with the output, and returns its id.
     pub fn create_player(&self) -> PlayerId {
-        let player = Player::new(self.config.clone(), self.output.clone());
+        let player = Player::new(&self.context, self.output.clone());
         let player_id = player.id;
 
         self.output.register_player(player.id);
