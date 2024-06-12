@@ -21,13 +21,15 @@ pub use queuing::*;
 pub use util::*;
 
 // Reduces verbosity
-type Store<Id, T> = Arc<DashMap<Id, Arc<T>>>;
+type Store<Id, T> = Arc<DashMap<Id, T>>;
+type ArcedStore<Id, T> = Store<Id, Arc<T>>;
 
 /// The turntable pipeline, facilitating ingestion, playback, and output.
 pub struct Pipeline<I> {
     ingestion: Arc<I>,
     playback: Playback,
     output: Arc<Output>,
+    queuing: Arc<Queuing>,
 
     event_receiver: EventReceiver,
 }
@@ -40,8 +42,9 @@ pub struct PipelineContext {
     action_sender: ActionSender,
     event_sender: EventSender,
 
-    pub sinks: Store<SinkId, Sink>,
-    pub players: Store<PlayerId, Player>,
+    pub sinks: ArcedStore<SinkId, Sink>,
+    pub players: ArcedStore<PlayerId, Player>,
+    pub queues: Store<PlayerId, BoxedQueue>,
 }
 
 impl<I> Pipeline<I>
@@ -60,18 +63,21 @@ where
 
             sinks: Default::default(),
             players: Default::default(),
+            queues: Default::default(),
         };
 
         let ingestion = Arc::new(I::new(&context));
         let output = Arc::new(Output::new(&context));
+        let queuing = Arc::new(Queuing::new(&context, ingestion.clone()));
         let playback = Playback::new(&context, ingestion.clone(), output.clone());
 
-        spawn_action_handler_thread(&context, action_receiver);
+        spawn_action_handler_thread(&context, queuing.clone(), action_receiver);
 
         Pipeline {
             output,
-            ingestion,
+            queuing,
             playback,
+            ingestion,
             event_receiver,
         }
     }
@@ -79,6 +85,14 @@ where
     /// Creates a new player and returns its id.
     pub fn create_player(&self) -> PlayerContext {
         self.playback.create_player()
+    }
+
+    /// Creates a new queue for a player and returns it.
+    pub fn create_queue<T>(&self, player_id: PlayerId) -> Arc<T>
+    where
+        T: Queue,
+    {
+        self.queuing.create_queue(player_id)
     }
 
     /// Ingests a loader and returns the sink.
@@ -90,6 +104,7 @@ where
     }
 
     /// Sets the sinks that a player should play.
+    // TODO: Deprecate this in favor of queues when they are implemented.
     pub fn set_sinks(&self, player_id: PlayerId, sinks: Vec<Arc<Sink>>) {
         self.playback.set_sinks(player_id, sinks);
     }
@@ -141,7 +156,11 @@ impl PipelineContext {
     }
 }
 
-fn spawn_action_handler_thread(context: &PipelineContext, action_receiver: ActionReceiver) {
+fn spawn_action_handler_thread(
+    context: &PipelineContext,
+    queueing: Arc<Queuing>,
+    action_receiver: ActionReceiver,
+) {
     let players = context.players.clone();
     let config = context.config.clone();
 
@@ -149,6 +168,9 @@ fn spawn_action_handler_thread(context: &PipelineContext, action_receiver: Actio
         let action = action_receiver.recv().unwrap();
 
         match action {
+            PipelineAction::NotifyQueueUpdate { player_id } => {
+                queueing.notify_queue_update(player_id);
+            }
             PipelineAction::PlayPlayer { player_id } => {
                 let player = players.get(&player_id).expect("player exists");
                 player.play();
@@ -187,8 +209,7 @@ impl Default for PipelineContext {
 
             sinks: Default::default(),
             players: Default::default(),
+            queues: Default::default(),
         }
-    }
-}
     }
 }
