@@ -14,7 +14,7 @@ where
         Self: Sized;
 
     /// Returns the current and next items in the queue.
-    fn peek(&self) -> &[BoxedQueueItem];
+    fn peek(&self) -> Vec<BoxedQueueItem>;
 
     /// Advances the queue forward by one item.
     fn next(&self);
@@ -48,7 +48,7 @@ impl Queue for BoxedQueue {
         panic!("Queue::new() should not be called on a BoxedQueue");
     }
 
-    fn peek(&self) -> &[BoxedQueueItem] {
+    fn peek(&self) -> Vec<BoxedQueueItem> {
         self.0.peek()
     }
 
@@ -77,7 +77,7 @@ where
         Arc::new(T::new(notifier))
     }
 
-    fn peek(&self) -> &[BoxedQueueItem] {
+    fn peek(&self) -> Vec<BoxedQueueItem> {
         self.as_ref().peek()
     }
 
