@@ -8,6 +8,7 @@ mod events;
 mod ingestion;
 mod output;
 mod playback;
+mod queuing;
 mod util;
 
 pub mod implementors;
@@ -16,6 +17,7 @@ pub use events::*;
 pub use ingestion::*;
 pub use output::*;
 pub use playback::*;
+pub use queuing::*;
 pub use util::*;
 
 // Reduces verbosity
