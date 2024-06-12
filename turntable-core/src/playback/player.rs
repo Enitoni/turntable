@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crossbeam::atomic::AtomicCell;
 
 use crate::{
-    Id, Output, PipelineAction, PipelineContext, PipelineEvent, Sink, SinkId, Timeline,
+    Id, Output, PipelineAction, PipelineContext, PipelineEvent, Queue, Sink, SinkId, Timeline,
     TimelinePreload,
 };
 
@@ -75,7 +75,12 @@ impl Player {
             return;
         }
 
+        // Get the current sink before advancing the timeline.
+        let current_sink = self.timeline.current_sink();
         let reads = self.timeline.advance(samples.len());
+
+        // If this new sink is different, we can be sure that we advanced to the next sink.
+        let new_sink = self.timeline.current_sink();
         let was_empty = reads.is_empty();
 
         // Update state according to the result of the reads.
@@ -96,6 +101,10 @@ impl Player {
             let result = read.sink.read(read.offset, slice);
 
             amount_read += result.amount;
+        }
+
+        if new_sink != current_sink {
+            self.advance_queue_if_exists()
         }
 
         // Emit the current time and total time.
@@ -150,6 +159,16 @@ impl Player {
             });
 
             self.state.store(state);
+        }
+    }
+
+    /// Advances the queue associated with this player if it exists.
+    fn advance_queue_if_exists(&self) {
+        let queue = self.context.queues.get(&self.id);
+
+        if let Some(queue) = queue {
+            // If the queue is implemented correctly, this should notify the queue system to update the sinks in this player.
+            queue.next();
         }
     }
 }
