@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::{BoxedQueueItem, QueueNotifier};
 
 /// Represents a type that acts as a consumable queue.
@@ -27,6 +29,15 @@ where
 /// [Queue] trait object.
 pub struct BoxedQueue(Box<dyn Queue>);
 
+impl BoxedQueue {
+    pub fn new<T>(queue: T) -> Self
+    where
+        T: Queue,
+    {
+        BoxedQueue(Box::new(queue))
+    }
+}
+
 impl Queue for BoxedQueue {
     fn new(_: QueueNotifier) -> Self {
         panic!("Queue::new() should not be called on a BoxedQueue");
@@ -46,5 +57,30 @@ impl Queue for BoxedQueue {
 
     fn reset(&self) {
         self.0.reset()
+    }
+}
+
+impl<T> Queue for Arc<T>
+where
+    T: Queue,
+{
+    fn new(notifier: QueueNotifier) -> Self {
+        Arc::new(T::new(notifier))
+    }
+
+    fn peek(&self) -> &[BoxedQueueItem] {
+        self.as_ref().peek()
+    }
+
+    fn next(&self) {
+        self.as_ref().next()
+    }
+
+    fn previous(&self) {
+        self.as_ref().previous()
+    }
+
+    fn reset(&self) {
+        self.as_ref().reset()
     }
 }
