@@ -62,12 +62,16 @@ impl Sink {
     }
 
     pub fn set_state(&self, state: SinkState) {
-        self.context.emit(PipelineEvent::SinkStateUpdate {
-            sink_id: self.id,
-            new_state: state.clone(),
-        });
+        let previous_state = self.state.lock();
 
-        *self.state.lock() = state;
+        if *previous_state != state {
+            self.context.emit(PipelineEvent::SinkStateUpdate {
+                sink_id: self.id,
+                new_state: state.clone(),
+            });
+
+            *self.state.lock() = state;
+        }
     }
 
     pub fn state(&self) -> SinkState {
