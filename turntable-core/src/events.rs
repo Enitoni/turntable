@@ -52,6 +52,11 @@ pub enum PipelineEvent {
 /// Describes an action to be performed on the pipeline.
 #[derive(Debug)]
 pub enum PipelineAction {
+    /// The pipeline should notify a player of a queue update.
+    NotifyQueueUpdate {
+        // The player the queue belongs to.
+        player_id: PlayerId,
+    },
     /// The player of the given id should resume or start playing.
     PlayPlayer { player_id: PlayerId },
     /// The player of the given id should pause.
