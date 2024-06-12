@@ -36,13 +36,17 @@ impl Timeline {
     pub fn set_sinks(&self, sinks: Vec<Arc<Sink>>) {
         let mut current_sinks = self.sinks.lock();
 
+        let current_sink_ids: Vec<_> = current_sinks.iter().map(|s| s.id).collect();
+        let used_sinks = sinks.iter().filter(|s| current_sink_ids.contains(&s.id));
+        let released_sinks = sinks.iter().filter(|s| !current_sink_ids.contains(&s.id));
+
         // Deactivate all sinks that are no longer in the new list.
-        for sink in current_sinks.iter() {
+        for sink in released_sinks {
             sink.deactivate();
         }
 
         // Activate all sinks that are in the new list.
-        for sink in sinks.iter() {
+        for sink in used_sinks {
             sink.activate();
         }
 
