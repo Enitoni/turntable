@@ -29,6 +29,24 @@ pub enum PipelineEvent {
         /// The total position of the player, in seconds.
         total_position: f32,
     },
+    /// A queue item has been ingested
+    QueueItemActivated {
+        /// The id of the player the queue item's queue belongs to.
+        player_id: PlayerId,
+        /// The id of the new sink created for the queue item.
+        new_sink_id: SinkId,
+        /// The custom identifier of the queue item.
+        item_id: String,
+    },
+    /// A queue item failed to be ingested.
+    QueueItemActivationError {
+        /// The id of the player the queue item's queue belongs to.
+        player_id: PlayerId,
+        /// The custom identifier of the queue item.
+        item_id: String,
+        /// The error that happened while activating the queue item.
+        error: String,
+    },
 }
 
 /// Describes an action to be performed on the pipeline.
