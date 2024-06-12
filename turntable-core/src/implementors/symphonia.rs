@@ -360,7 +360,7 @@ impl Read for LoadableMediaSource {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::implementors::{tests::test_file, LoadableNetworkStream};
+    use crate::implementors::loadables::{tests::test_file, LoadableNetworkStream};
 
     #[tokio::test]
     async fn test_symphonia_ingestion_with_local_file() {
