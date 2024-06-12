@@ -24,6 +24,11 @@ where
 
     /// Resets the queue back to the beginning.
     fn reset(&self);
+
+    /// Skip the given item. This is called when a queue item could not be ingested due to an error.
+    ///
+    /// Implementors are expected to remove the item from the queue without notifying.
+    fn skip(&self, id: &str);
 }
 
 /// [Queue] trait object.
@@ -58,6 +63,10 @@ impl Queue for BoxedQueue {
     fn reset(&self) {
         self.0.reset()
     }
+
+    fn skip(&self, id: &str) {
+        self.0.skip(id)
+    }
 }
 
 impl<T> Queue for Arc<T>
@@ -82,5 +91,9 @@ where
 
     fn reset(&self) {
         self.as_ref().reset()
+    }
+
+    fn skip(&self, id: &str) {
+        self.as_ref().skip(id)
     }
 }
