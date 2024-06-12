@@ -29,6 +29,15 @@ where
 /// [QueueItem] trait object.
 pub struct BoxedQueueItem(Box<dyn QueueItem>);
 
+impl BoxedQueueItem {
+    pub fn new<T>(item: T) -> Self
+    where
+        T: QueueItem,
+    {
+        BoxedQueueItem(Box::new(item))
+    }
+}
+
 #[async_trait]
 impl QueueItem for BoxedQueueItem {
     fn length(&self) -> Option<f32> {
