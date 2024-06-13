@@ -103,12 +103,6 @@ where
         self.ingestion.ingest(loader).await
     }
 
-    /// Sets the sinks that a player should play.
-    // TODO: Deprecate this in favor of queues when they are implemented.
-    pub fn set_sinks(&self, player_id: PlayerId, sinks: Vec<Arc<Sink>>) {
-        self.playback.set_sinks(player_id, sinks);
-    }
-
     /// Creates a consumer for a player.
     pub fn consume_player<E>(&self, player_id: PlayerId) -> Arc<Consumer>
     where
