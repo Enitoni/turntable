@@ -29,16 +29,23 @@ impl Timeline {
 
     /// Sets the sinks to play and preload.
     ///
-    /// Calling this function will not reset the playback offset to 0 if the first sink is different from the current one.
+    /// Calling this function will not reset the playback offset to 0 if the first sink is not different from the current one.
     /// This is because the player may have already started reading from the next sink, and we don't want to reset the offset.
     ///
-    /// Instead, this function is meant to be called when we advance to the next sink, so that future sinks in a queue can be preloaded.
+    /// Instead, this function is meant to be called when we advance to the next sink or a previous one, so that future sinks in a queue can be preloaded.
     pub fn set_sinks(&self, sinks: Vec<Arc<Sink>>) {
+        let current_sink_id = self.current_sink();
+        let new_first_sink_id = sinks.first().map(|s| s.id);
+
         let mut current_sinks = self.sinks.lock();
+
+        // Reset the timeline if the first sink is different.
+        if current_sink_id != new_first_sink_id {
+            self.reset();
+        }
 
         // Clear the current guards.
         current_sinks.drain(..);
-
         *current_sinks = sinks.into_iter().map(|s| s.guard()).collect();
     }
 
