@@ -165,19 +165,14 @@ impl Sink {
     }
 
     fn clear_guard(&self) {
-        println!("cleared guard");
         self.has_guard.store(false)
     }
 
     fn clear_write_ref(&self) {
-        println!("cleared write ref");
-
         // Reset load state to Idle if it is still loading.
         if self.load_state() == SinkLoadState::Loading {
             self.set_load_state(SinkLoadState::Idle);
         }
-
-        println!("cleared write ref 2");
 
         self.has_write_ref.store(false)
     }
