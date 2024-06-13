@@ -98,8 +98,14 @@ impl Player {
 
         for read in reads {
             let slice = &mut samples[amount_read..];
-            let result = read.sink.read(read.offset, slice);
 
+            let sink = self
+                .context
+                .sinks
+                .get(&read.sink_id)
+                .expect("Sink exists when trying to read from it");
+
+            let result = sink.read(read.offset, slice);
             amount_read += result.amount;
         }
 

@@ -21,7 +21,7 @@ use tokio::runtime::Handle;
 
 use crate::{
     get_or_create_handle, BoxedLoadable, Config, Ingestion, IntoLoadable, Loadable, LoaderLength,
-    PipelineContext, ReadResult, Sample, Sink, SinkId, SinkLoadState,
+    PipelineContext, ReadResult, Sample, Sink, SinkId, SinkWriteRef,
 };
 
 /// An ingestion implementation for Symphonia.
@@ -154,20 +154,17 @@ struct Loader {
 
 impl Loader {
     fn load(&self, offset: usize, amount: usize) -> Result<(), ()> {
-        self.sink.set_load_state(SinkLoadState::Loading);
-        let result = self.load_into_sink(offset, amount);
+        let write_ref = self.sink.write();
+        let result = self.load_into_sink(offset, amount, &write_ref);
 
         match result {
             Ok(result) => {
                 if result.end_reached {
-                    self.sink.set_load_state(SinkLoadState::Sealed);
-                } else {
-                    self.sink.set_load_state(SinkLoadState::Idle);
+                    self.sink.seal();
                 }
             }
             Err(e) => {
-                self.sink
-                    .set_load_state(SinkLoadState::Error(format!("{:?}", e)));
+                self.sink.error(format!("{:?}", e));
                 return Err(());
             }
         }
@@ -176,7 +173,12 @@ impl Loader {
     }
 
     // Loads the samples into the sink.
-    fn load_into_sink(&self, offset: usize, amount: usize) -> Result<LoadResult, Box<dyn Error>> {
+    fn load_into_sink(
+        &self,
+        offset: usize,
+        amount: usize,
+        write_ref: &SinkWriteRef,
+    ) -> Result<LoadResult, Box<dyn Error>> {
         let old_offset = self.offset.load();
         let mut seeked_offset = offset;
 
@@ -190,7 +192,7 @@ impl Loader {
         let start = offset.saturating_sub(seeked_offset);
         let samples = &result.samples[start..];
 
-        self.sink.write(offset, samples);
+        write_ref.write(offset, samples);
         self.offset.store(old_offset + result.samples.len());
 
         Ok(result)
