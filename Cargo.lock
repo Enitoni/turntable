@@ -1998,15 +1998,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ringbuf"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c65e4c865bc3d2e3294493dff0acf7e6c259d066e34e22059fa9c39645c3636"
-dependencies = [
- "crossbeam-utils",
-]
-
-[[package]]
 name = "rmp"
 version = "0.8.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3036,7 +3027,7 @@ dependencies = [
  "rand",
  "regex",
  "reqwest 0.11.17",
- "ringbuf 0.2.8",
+ "ringbuf",
  "ron",
  "scrypt",
  "serde",
@@ -3057,7 +3048,6 @@ dependencies = [
  "dashmap",
  "parking_lot",
  "reqwest 0.12.4",
- "ringbuf 0.4.1",
  "serde",
  "serde_json",
  "spin_sleep",
