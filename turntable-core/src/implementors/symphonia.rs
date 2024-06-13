@@ -21,7 +21,7 @@ use tokio::runtime::Handle;
 
 use crate::{
     get_or_create_handle, BoxedLoadable, Config, Ingestion, IntoLoadable, Loadable, LoaderLength,
-    PipelineContext, ReadResult, Sample, Sink, SinkId, SinkState,
+    PipelineContext, ReadResult, Sample, Sink, SinkId, SinkLoadState,
 };
 
 /// An ingestion implementation for Symphonia.
@@ -154,21 +154,20 @@ struct Loader {
 
 impl Loader {
     fn load(&self, offset: usize, amount: usize) -> Result<(), ()> {
-        self.sink.set_state(SinkState::Loading);
+        self.sink.set_load_state(SinkLoadState::Loading);
         let result = self.load_into_sink(offset, amount);
 
         match result {
             Ok(result) => {
                 if result.end_reached {
-                    self.sink.set_state(SinkState::Sealed);
+                    self.sink.set_load_state(SinkLoadState::Sealed);
                 } else {
-                    // Todo: Deal with this in a better way. This has to be set to `Active` to avoid the player skipping it.
-                    // It is a bad implementation detail that the implementor of an Ingestion has to account for this.
-                    self.sink.set_state(SinkState::Active);
+                    self.sink.set_load_state(SinkLoadState::Idle);
                 }
             }
             Err(e) => {
-                self.sink.set_state(SinkState::Error(format!("{:?}", e)));
+                self.sink
+                    .set_load_state(SinkLoadState::Error(format!("{:?}", e)));
                 return Err(());
             }
         }
@@ -360,7 +359,10 @@ impl Read for LoadableMediaSource {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::implementors::loadables::{tests::test_file, LoadableNetworkStream};
+    use crate::{
+        implementors::loadables::{tests::test_file, LoadableNetworkStream},
+        SinkLoadState,
+    };
 
     #[tokio::test]
     async fn test_symphonia_ingestion_with_local_file() {
@@ -378,7 +380,7 @@ mod tests {
             .await;
 
         // If successful, the sink should be in the `Sealed` state.
-        assert_eq!(sink.state(), SinkState::Sealed);
+        assert_eq!(sink.load_state(), SinkLoadState::Sealed);
     }
 
     #[tokio::test]
@@ -399,6 +401,6 @@ mod tests {
         }
 
         // If successful, the sink should be in the `Sealed` state.
-        assert_eq!(sink.state(), SinkState::Sealed);
+        assert_eq!(sink.load_state(), SinkLoadState::Sealed);
     }
 }

@@ -35,21 +35,6 @@ impl Timeline {
     /// Instead, this function is meant to be called when we advance to the next sink, so that future sinks in a queue can be preloaded.
     pub fn set_sinks(&self, sinks: Vec<Arc<Sink>>) {
         let mut current_sinks = self.sinks.lock();
-
-        let current_sink_ids: Vec<_> = current_sinks.iter().map(|s| s.id).collect();
-        let used_sinks = sinks.iter().filter(|s| current_sink_ids.contains(&s.id));
-        let released_sinks = sinks.iter().filter(|s| !current_sink_ids.contains(&s.id));
-
-        // Deactivate all sinks that are no longer in the new list.
-        for sink in released_sinks {
-            sink.deactivate();
-        }
-
-        // Activate all sinks that are in the new list.
-        for sink in used_sinks {
-            sink.activate();
-        }
-
         *current_sinks = sinks;
     }
 
@@ -66,13 +51,7 @@ impl Timeline {
     pub fn advance(&self, amount: usize) -> Vec<TimelineRead> {
         let mut result = vec![];
 
-        let playable_sinks: Vec<_> = self
-            .sinks
-            .lock()
-            .iter()
-            .filter(|s| s.is_playable())
-            .cloned()
-            .collect();
+        let playable_sinks: Vec<_> = self.sinks.lock().iter().cloned().collect();
 
         let mut remaining = amount;
         let mut playback_offset = self.offset.load();
@@ -107,7 +86,7 @@ impl Timeline {
             // 1. We've reached the end of the last loaded range of samples, and
             // 2. The sink is sealed/not loadable, meaning there won't be any more samples to load, and
             // 3. There are no more remaining samples to read.
-            let should_move_on = !sink.is_loadable()
+            let should_move_on = !sink.can_load_more()
                 && available_until_void.is_end
                 && available_until_void.distance.saturating_sub(amount_to_read) == 0;
 
@@ -117,7 +96,6 @@ impl Timeline {
             }
 
             // Otherwise, remove the sink from the list and mark it as consumed.
-            sink.deactivate();
             self.offset.store(0);
             self.sinks.lock().retain(|s| s.id != sink.id);
         }
@@ -147,7 +125,7 @@ impl Timeline {
             }
 
             // Only try to preload if the sink is loadable.
-            if sink.is_loadable() {
+            if sink.can_load_more() {
                 let how_much_can_preload = available_until_end.min(remaining_to_load);
                 let preload_offset = available_until_void.distance + offset;
 
@@ -231,7 +209,7 @@ pub struct TimelinePreload {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{PipelineContext, SinkState};
+    use crate::{PipelineContext, SinkLoadState};
 
     #[test]
     fn test_advancement() {
@@ -245,7 +223,7 @@ mod tests {
 
         // First is fully loaded.
         first.write(0, &[1., 2., 3., 4., 5., 6., 7., 8., 9., 10.]);
-        first.set_state(SinkState::Sealed);
+        first.set_load_state(SinkLoadState::Sealed);
 
         // Second has a gap after first range.
         second.write(0, &[1., 2., 3., 4., 5.]);
@@ -319,7 +297,7 @@ mod tests {
         assert_eq!(preload[0].offset, 2, "returns the correct offset");
 
         // Seal the first sink, so we have to preload the second sink.
-        first.set_state(SinkState::Sealed);
+        first.set_load_state(SinkLoadState::Sealed);
 
         // Should return the second sink to preload.
         let preload = timeline.preload();

@@ -1,6 +1,6 @@
 use crossbeam::channel::{Receiver, Sender};
 
-use crate::{PlayerId, PlayerState, SinkId, SinkState};
+use crate::{PlayerId, PlayerState, SinkId, SinkLoadState};
 
 pub type EventSender = Sender<PipelineEvent>;
 pub type EventReceiver = Receiver<PipelineEvent>;
@@ -12,9 +12,9 @@ pub type ActionReceiver = Receiver<PipelineAction>;
 #[derive(Debug)]
 pub enum PipelineEvent {
     /// A sink's state has changed.
-    SinkStateUpdate {
+    SinkLoadStateUpdate {
         sink_id: SinkId,
-        new_state: SinkState,
+        new_state: SinkLoadState,
     },
     /// A player's state has changed.
     PlayerStateUpdate {

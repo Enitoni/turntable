@@ -13,27 +13,26 @@ pub struct Sink {
     buffer: MultiRangeBuffer,
     /// The expected length of the samples. If this is `None`, the length is unknown.
     expected_length: Option<usize>,
-    /// The current state of the sink.
-    state: Mutex<SinkState>,
+    /// The current load state of the sink.
+    load_state: Mutex<SinkLoadState>,
 }
 
-/// Represents the lifecycle of a [Sink].
+/// Represents the load state of a [Sink].
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub enum SinkState {
-    /// Nothing is happening with the sink right now.
-    /// It may still be read from during this state.
+pub enum SinkLoadState {
+    /// The sink finished loading or hasn't started loading yet.
     #[default]
     Idle,
-    /// The sink is idle, but in use by a [Player].
-    Active,
     /// The [Ingestion] is loading samples into the sink.
     Loading,
-    /// The sink will not receive any more samples.
+    /// The [Ingestion] has finished loading samples into the sink and there is no more data to load.
+    ///
+    /// If the sink is in this state, it will be skipped by the player when it encounters a void.
     Sealed,
     /// Something went wrong with the sink, or the [Ingestion] loading into it.
-    /// If the sink is in this state, it will be skipped by the player.
-    ///
     /// Note: This is a string because the error may not be clonable.
+    ///
+    /// If the sink is in this state, it will be skipped by the player when it encounters a void.
     Error(String),
 }
 
@@ -47,7 +46,7 @@ impl Sink {
             expected_length,
             context: context.clone(),
             id: SinkId::new(),
-            state: Default::default(),
+            load_state: Default::default(),
             buffer: MultiRangeBuffer::new(buffer_expected_length),
         }
     }
@@ -61,21 +60,21 @@ impl Sink {
         self.buffer.write(offset, samples);
     }
 
-    pub fn set_state(&self, state: SinkState) {
-        let mut current_state = self.state.lock();
+    pub fn set_load_state(&self, state: SinkLoadState) {
+        let mut current_load_state = self.load_state.lock();
 
-        if *current_state != state {
-            self.context.emit(PipelineEvent::SinkStateUpdate {
+        if *current_load_state != state {
+            self.context.emit(PipelineEvent::SinkLoadStateUpdate {
                 sink_id: self.id,
                 new_state: state.clone(),
             });
 
-            *current_state = state;
+            *current_load_state = state;
         }
     }
 
-    pub fn state(&self) -> SinkState {
-        self.state.lock().clone()
+    pub fn load_state(&self) -> SinkLoadState {
+        self.load_state.lock().clone()
     }
 
     /// Returns how many samples are left in the sink until a void at the current offset.
@@ -95,41 +94,23 @@ impl Sink {
         self.buffer.retain_window(offset, window, chunk_size)
     }
 
-    /// Marks the sink as idle, meaning it can be dropped from memory.
-    pub fn deactivate(&self) {
-        self.set_state(SinkState::Idle);
-    }
-
-    /// Marks the sink as active, meaning it is in use and cannot be dropped.
-    pub fn activate(&self) {
-        self.set_state(SinkState::Active);
-    }
-
     /// Returns the expected length of the sink. [None] if unknown.
     pub fn expected_length(&self) -> Option<usize> {
         self.expected_length
     }
 
-    /// Returns true if the sink is idle, loading, or sealed.
-    /// That means it can be played by a [Player].
-    pub fn is_playable(&self) -> bool {
-        matches!(
-            self.state(),
-            SinkState::Active | SinkState::Loading | SinkState::Sealed
-        )
-    }
-
     /// Returns true if the sink can still be loaded into.
-    /// If this is false, the sink should be advanced past once the last loaded samples have been played.
-    pub fn is_loadable(&self) -> bool {
-        !matches!(
-            self.state(),
-            SinkState::Error(_) | SinkState::Sealed | SinkState::Idle
+    pub fn can_load_more(&self) -> bool {
+        matches!(
+            self.load_state(),
+            SinkLoadState::Loading | SinkLoadState::Idle
         )
     }
 
     /// Returns true if the sink can be cleared from memory.
     pub fn is_clearable(&self) -> bool {
-        self.state() == SinkState::Idle
+        false
     }
+}
+
 }
