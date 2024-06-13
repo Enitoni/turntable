@@ -126,7 +126,11 @@ where
             new_sinks.push(sink.clone());
         } else {
             let loader = item.loadable().await;
-            let sink = ingestion.ingest(loader).await;
+
+            let sink = match loader {
+                Ok(loader) => ingestion.ingest(loader).await,
+                Err(err) => Err(err),
+            };
 
             match sink {
                 Ok(sink) => {
