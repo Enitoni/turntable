@@ -29,6 +29,8 @@ pub enum PipelineEvent {
         /// The total position of the player, in seconds.
         total_position: f32,
     },
+    /// A player advanced to the next queue item.
+    PlayerAdvanced { player_id: PlayerId },
     /// A queue item has been ingested
     QueueItemActivated {
         /// The id of the player the queue item's queue belongs to.

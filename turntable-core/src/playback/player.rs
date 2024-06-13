@@ -175,6 +175,10 @@ impl Player {
         if let Some(queue) = queue {
             // If the queue is implemented correctly, this should notify the queue system to update the sinks in this player.
             queue.next();
+
+            // Emit an event to notify that the player has advanced.
+            self.context
+                .emit(PipelineEvent::PlayerAdvanced { player_id: self.id });
         }
     }
 }
