@@ -109,7 +109,7 @@ impl Player {
             amount_read += result.amount;
         }
 
-        if new_sink != current_sink {
+        if new_sink != current_sink && current_sink.is_some() {
             self.advance_queue_if_exists()
         }
 
