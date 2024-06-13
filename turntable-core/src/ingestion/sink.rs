@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Instant};
 
 use crate::{
     BufferRead, BufferVoidDistance, Id, MultiRangeBuffer, PipelineContext, PipelineEvent, Sample,
@@ -23,6 +23,8 @@ pub struct Sink {
     has_guard: AtomicCell<bool>,
     /// Whether a write reference has been created and exists somewhere.
     has_write_ref: AtomicCell<bool>,
+    /// The time since the sink was last interacted with.
+    duration_since_interaction: AtomicCell<Instant>,
 }
 
 /// Represents the load state of a [Sink].
@@ -57,13 +59,16 @@ impl Sink {
             load_state: Default::default(),
             has_guard: Default::default(),
             has_write_ref: Default::default(),
+            duration_since_interaction: Instant::now().into(),
             buffer: MultiRangeBuffer::new(buffer_expected_length),
         }
     }
 
     pub fn guard(&self) -> SinkGuard {
         assert!(!self.has_guard.load(), "Sink already has a guard");
+
         self.has_guard.store(true);
+        self.duration_since_interaction.store(Instant::now());
 
         SinkGuard {
             context: self.context.clone(),
@@ -92,6 +97,7 @@ impl Sink {
 
         self.has_write_ref.store(true);
         self.set_load_state(SinkLoadState::Loading);
+        self.duration_since_interaction.store(Instant::now());
 
         SinkWriteRef {
             context: &self.context,
@@ -147,6 +153,13 @@ impl Sink {
     pub fn is_clearable(&self) -> bool {
         let has_read_ref = self.has_guard.load();
         let has_write_ref = self.has_write_ref.load();
+
+        let elapsed_secs = self.duration_since_interaction.load().elapsed().as_secs();
+
+        // Three minutes should be enough to clear sinks before too much memory is used.
+        if elapsed_secs < 60 * 3 {
+            return false;
+        }
 
         !has_read_ref && !has_write_ref
     }
