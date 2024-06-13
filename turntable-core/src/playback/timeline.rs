@@ -83,11 +83,9 @@ impl Timeline {
             playback_offset = 0;
 
             // Let's break down the conditions for moving on to the next sink.
-            // 1. We've reached the end of the last loaded range of samples, and
-            // 2. The sink is sealed/not loadable, meaning there won't be any more samples to load, and
-            // 3. There are no more remaining samples to read.
+            // 1. The sink is sealed/not loadable, meaning there won't be any more samples to load, and
+            // 2. There are no more remaining samples to read.
             let should_move_on = !sink.can_load_more()
-                && available_until_void.is_end
                 && available_until_void.distance.saturating_sub(amount_to_read) == 0;
 
             // Stop here if we're not moving on to the next sink.
