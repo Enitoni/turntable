@@ -8,3 +8,8 @@ edition = "2021"
 [dependencies]
 turntable-core = { path = "../turntable-core" }
 turntable-impls = { path = "../turntable-impls" }
+
+async-trait = { workspace = true }
+parking_lot = { workspace = true }
+crossbeam = { workspace = true }
+tokio = { workspace = true }
