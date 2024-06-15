@@ -3042,6 +3042,10 @@ dependencies = [
 [[package]]
 name = "turntable-collab"
 version = "0.1.0"
+dependencies = [
+ "turntable-core",
+ "turntable-impls",
+]
 
 [[package]]
 name = "turntable-core"
