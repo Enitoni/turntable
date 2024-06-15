@@ -12,6 +12,12 @@ use turntable_core::{Loadable, LoaderLength, ReadResult};
 /// Implements [Loadable] for a tokio [File]
 pub struct LoadableFile(Mutex<File>);
 
+impl LoadableFile {
+    pub fn new(file: File) -> Self {
+        Self(Mutex::new(file))
+    }
+}
+
 #[async_trait]
 impl Loadable for LoadableFile {
     async fn read(&self, buf: &mut [u8]) -> Result<ReadResult, Box<dyn Error>> {
