@@ -1,6 +1,5 @@
 use crossbeam::channel::unbounded;
 use dashmap::DashMap;
-use implementors::SymphoniaIngestion;
 use std::{error::Error, sync::Arc, thread};
 
 mod config;
@@ -11,7 +10,6 @@ mod playback;
 mod queuing;
 mod util;
 
-pub mod implementors;
 pub use config::*;
 pub use events::*;
 pub use ingestion::*;
@@ -116,12 +114,6 @@ where
         self.event_receiver
             .recv()
             .expect("event is received without error")
-    }
-}
-
-impl Default for Pipeline<SymphoniaIngestion> {
-    fn default() -> Self {
-        Self::new(Config::default())
     }
 }
 
