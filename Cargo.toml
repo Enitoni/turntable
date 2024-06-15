@@ -38,7 +38,7 @@ ron = "0.7"
 regex = "1"
 
 [workspace]
-members = ["turntable-core", "turntable-impls"]
+members = [ "turntable-collab","turntable-core", "turntable-impls"]
 
 [workspace.dependencies]
 dashmap = "5.5.3"
