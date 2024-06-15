@@ -3043,6 +3043,10 @@ dependencies = [
 name = "turntable-collab"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "crossbeam",
+ "parking_lot",
+ "tokio",
  "turntable-core",
  "turntable-impls",
 ]
@@ -3055,11 +3059,7 @@ dependencies = [
  "crossbeam",
  "dashmap",
  "parking_lot",
- "reqwest 0.12.4",
- "serde",
- "serde_json",
  "spin_sleep",
- "symphonia",
  "tokio",
 ]
 
