@@ -38,11 +38,17 @@ ron = "0.7"
 regex = "1"
 
 [workspace]
-members = [ "turntable-collab","turntable-core", "turntable-impls", "turntable-server"]
+members = [
+  "turntable-collab",
+  "turntable-core",
+  "turntable-impls",
+  "turntable-server",
+]
 
 [workspace.dependencies]
 dashmap = "5.5.3"
 crossbeam = "0.8.4"
+thiserror = "1.0.61"
 parking_lot = "0.12.3"
 
 async-trait = "0.1.80"

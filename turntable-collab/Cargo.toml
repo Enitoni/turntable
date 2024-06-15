@@ -12,4 +12,5 @@ turntable-impls = { path = "../turntable-impls" }
 async-trait = { workspace = true }
 parking_lot = { workspace = true }
 crossbeam = { workspace = true }
+thiserror = { workspace = true }
 tokio = { workspace = true }
