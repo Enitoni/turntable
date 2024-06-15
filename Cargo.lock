@@ -3058,6 +3058,16 @@ dependencies = [
 [[package]]
 name = "turntable-impls"
 version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "crossbeam",
+ "dashmap",
+ "parking_lot",
+ "reqwest 0.12.4",
+ "symphonia",
+ "tokio",
+ "turntable-core",
+]
 
 [[package]]
 name = "typenum"
