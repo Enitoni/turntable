@@ -101,7 +101,7 @@ impl RangeBuffer {
         let data = self.data.read();
 
         let absolute_start = self.offset.load();
-        let absolute_end = absolute_start + data.len();
+        let absolute_end = (absolute_start + data.len()).min(data.len());
         let requested_length = buf.len();
 
         let start = offset.saturating_sub(absolute_start);
