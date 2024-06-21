@@ -3,6 +3,7 @@ use thiserror::Error;
 use turntable_core::BoxedLoadable;
 use youtube::YouTubeVideoInput;
 
+mod file;
 mod youtube;
 
 #[derive(Debug, Error)]
@@ -32,6 +33,7 @@ pub enum InputError {
 /// Represents any resource that can be used as an input for turntable
 pub enum Input {
     YouTube(youtube::YouTubeVideoInput),
+    File(file::FileInput),
 }
 
 impl Input {
@@ -41,18 +43,25 @@ impl Input {
             return Ok(results.into_iter().map(Input::YouTube).collect());
         }
 
+        if file::FileInput::test(input) {
+            let results = file::FileInput::fetch(input).await?;
+            return Ok(results.into_iter().map(Input::File).collect());
+        }
+
         Err(InputError::NoMatch)
     }
 
     pub async fn loadable(&self) -> Result<BoxedLoadable, InputError> {
         match self {
             Input::YouTube(input) => input.loadable().await,
+            Input::File(input) => input.loadable().await,
         }
     }
 
     pub fn length(&self) -> Option<f32> {
         match self {
             Input::YouTube(input) => input.length(),
+            Input::File(input) => input.length(),
         }
     }
 }
