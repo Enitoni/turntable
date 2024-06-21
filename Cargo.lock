@@ -3047,6 +3047,8 @@ dependencies = [
  "crossbeam",
  "lazy_static",
  "parking_lot",
+ "serde",
+ "serde_json",
  "thiserror",
  "tokio",
  "turntable-core",
