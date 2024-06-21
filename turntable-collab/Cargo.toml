@@ -9,6 +9,8 @@ edition = "2021"
 turntable-core = { path = "../turntable-core" }
 turntable-impls = { path = "../turntable-impls" }
 
+lazy_static = "1.4.0"
+
 async-trait = { workspace = true }
 parking_lot = { workspace = true }
 crossbeam = { workspace = true }
