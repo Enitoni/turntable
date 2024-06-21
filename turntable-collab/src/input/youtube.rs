@@ -7,6 +7,8 @@ use regex::Regex;
 use serde::Deserialize;
 use std::process::Stdio;
 use tokio::{io::AsyncReadExt, process::Command};
+use turntable_core::{BoxedLoadable, Loadable};
+use turntable_impls::LoadableNetworkStream;
 
 use super::{InputError, Inputable};
 
@@ -75,6 +77,56 @@ impl Inputable for YouTubeVideoInput {
                 Ok(playlist.entries.into_iter().map(Into::into).collect())
             }
         }
+    }
+
+    fn length(&self) -> Option<f32> {
+        Some(self.duration)
+    }
+
+    async fn loadable(&self) -> Result<BoxedLoadable, InputError> {
+        let url = format!("https://youtube.com/watch?v={}", self.id);
+
+        let mut child = Command::new("yt-dlp")
+            .arg("-f")
+            .arg("bestaudio/best")
+            .arg("-j")
+            .arg("--")
+            .arg(url)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .map_err(|e| InputError::Other(e.to_string()))?;
+
+        let mut output = String::new();
+
+        child
+            .stdout
+            .take()
+            .unwrap()
+            .read_to_string(&mut output)
+            .await
+            .map_err(|e| InputError::Other(e.to_string()))?;
+
+        child
+            .wait()
+            .await
+            .map_err(|e| InputError::Other(e.to_string()))?;
+
+        let entry: RawYouTubeVideo =
+            serde_json::from_str(&output).map_err(|_| InputError::Invalid)?;
+
+        let stream_url = entry
+            .formats
+            .iter()
+            .find(|f| f.format_id == entry.format_id)
+            .map(|f| f.url.to_owned())
+            .ok_or(InputError::Invalid)?;
+
+        let boxed = LoadableNetworkStream::new(stream_url)
+            .await
+            .map_err(|_| InputError::NetworkFailed)?
+            .boxed();
+        Ok(boxed)
     }
 }
 

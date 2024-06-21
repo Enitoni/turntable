@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use thiserror::Error;
+use turntable_core::BoxedLoadable;
 use youtube::YouTubeVideoInput;
 
 mod youtube;
@@ -42,6 +43,18 @@ impl Input {
 
         Err(InputError::NoMatch)
     }
+
+    pub async fn loadable(&self) -> Result<BoxedLoadable, InputError> {
+        match self {
+            Input::YouTube(input) => input.loadable().await,
+        }
+    }
+
+    pub fn length(&self) -> Option<f32> {
+        match self {
+            Input::YouTube(input) => input.length(),
+        }
+    }
 }
 
 /// Represents a type that can be used as an input to turntable
@@ -55,4 +68,10 @@ pub trait Inputable {
     async fn fetch(query: &str) -> Result<Vec<Self>, InputError>
     where
         Self: Sized;
+
+    /// Returns the length of the resource in seconds if known.
+    fn length(&self) -> Option<f32>;
+
+    /// "Activates" the resource, returning a loadable that can be used to play it.
+    async fn loadable(&self) -> Result<BoxedLoadable, InputError>;
 }
