@@ -88,7 +88,7 @@ impl Inputable for YouTubeVideoInput {
 
         let mut child = Command::new("yt-dlp")
             .arg("-f")
-            .arg("bestaudio/best")
+            .arg("bestaudio[ext=mp3]/best")
             .arg("-j")
             .arg("--")
             .arg(url)
@@ -126,6 +126,7 @@ impl Inputable for YouTubeVideoInput {
             .await
             .map_err(|_| InputError::NetworkFailed)?
             .boxed();
+
         Ok(boxed)
     }
 }
