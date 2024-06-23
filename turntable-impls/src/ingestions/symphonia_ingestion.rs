@@ -2,7 +2,9 @@ use async_trait::async_trait;
 use crossbeam::atomic::AtomicCell;
 use dashmap::DashMap;
 use parking_lot::Mutex;
+use rubato::{FftFixedInOut, Resampler};
 use std::{
+    borrow::BorrowMut,
     error::Error,
     io::{ErrorKind as IoErrorKind, Read, Seek, SeekFrom},
     sync::Arc,
@@ -23,6 +25,8 @@ use turntable_core::{
     get_or_create_handle, BoxedLoadable, Config, Ingestion, IntoLoadable, Loadable, LoaderLength,
     PipelineContext, ReadResult, Sample, Sink, SinkId, SinkWriteRef,
 };
+
+type SymphoniaResampler = FftFixedInOut<Sample>;
 
 /// An ingestion implementation for Symphonia.
 pub struct SymphoniaIngestion {
@@ -85,6 +89,25 @@ impl Ingestion for SymphoniaIngestion {
             .find(|t| t.codec_params.codec != CODEC_TYPE_NULL)
             .ok_or("Symphonia: No supported audio stream found")?;
 
+        let sample_rate = audio_track
+            .codec_params
+            .sample_rate
+            .map(|s| s as usize)
+            .unwrap_or(self.context.config.sample_rate);
+
+        let resampler = if sample_rate != self.context.config.sample_rate {
+            let resampler = SymphoniaResampler::new(
+                sample_rate,
+                self.context.config.sample_rate,
+                self.context.config.preload_size_in_samples() / self.context.config.channel_count,
+                self.context.config.channel_count,
+            )?;
+
+            Some(resampler)
+        } else {
+            None
+        };
+
         let codec_params = audio_track.codec_params.clone();
         let decoder = self
             .rt
@@ -118,6 +141,7 @@ impl Ingestion for SymphoniaIngestion {
             decoder: decoder.into(),
             track: audio_track.clone(),
             offset: Default::default(),
+            resampler: resampler.into(),
             config: self.context.config.clone(),
             format_reader: format_reader.into(),
         };
@@ -150,6 +174,7 @@ struct Loader {
     offset: AtomicCell<usize>,
     decoder: Mutex<Box<dyn Decoder>>,
     format_reader: Mutex<Box<dyn FormatReader>>,
+    resampler: Mutex<Option<SymphoniaResampler>>,
 }
 
 impl Loader {
@@ -301,11 +326,65 @@ impl Loader {
             }
         }
 
+        let mut resampler = self.resampler.lock();
+
+        let samples = if let Some(resampler) = &mut *resampler {
+            resample_samples(samples, self.config.channel_count, resampler)
+        } else {
+            samples
+        };
+
         Ok(LoadResult {
             samples,
             end_reached,
         })
     }
+}
+
+fn resample_samples(
+    samples: Vec<Sample>,
+    channels: usize,
+    resampler: &mut SymphoniaResampler,
+) -> Vec<Sample> {
+    let split_samples = uninterleave_samples(samples, channels);
+    let resampled_samples = resampler.process(&split_samples, None);
+
+    // TODO: This is a quick and dirty solution for the MVP, so if there's an error just return the non-resampled samples. In the future this should definitely be changed and done properly.
+    match resampled_samples {
+        Ok(s) => interleave_samples(s),
+        Err(_) => interleave_samples(split_samples),
+    }
+}
+
+/// Uninterleaves a chunk of samples into a vector where each sub-vector is a channel.
+fn uninterleave_samples(samples: Vec<Sample>, channels: usize) -> Vec<Vec<Sample>> {
+    let mut uninterleaved_samples = vec![];
+    let chunks: Vec<Vec<f32>> = samples.chunks_exact(channels).map(|c| c.to_vec()).collect();
+
+    for c in 0..channels {
+        let mut channel_samples = vec![];
+
+        for chunk in chunks.iter() {
+            channel_samples.push(chunk[c]);
+        }
+
+        uninterleaved_samples.push(channel_samples);
+    }
+
+    uninterleaved_samples
+}
+
+/// Interleaves vectors of channels into a single vector of samples
+fn interleave_samples(samples: Vec<Vec<Sample>>) -> Vec<Sample> {
+    if samples.is_empty() {
+        return vec![];
+    }
+    let channel_len = samples[0].len();
+    assert!(samples.iter().all(|channel| channel.len() == channel_len));
+
+    (0..channel_len)
+        .flat_map(|sample_index| samples.iter().map(move |channel| channel[sample_index]))
+        .collect()
 }
 
 #[derive(Debug)]
@@ -355,5 +434,26 @@ impl Read for LoadableMediaSource {
                 ReadResult::More(bytes) => bytes,
                 ReadResult::End(bytes) => bytes,
             })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_uninterleave_samples() {
+        let samples = vec![1., 2., 3., 4., 5., 6.];
+        let result = uninterleave_samples(samples, 2);
+
+        assert_eq!(result, vec![vec![1., 3., 5.], vec![2., 4., 6.]])
+    }
+
+    #[test]
+    fn test_interleave_samples() {
+        let samples = vec![vec![1., 3., 5.], vec![2., 4., 6.]];
+        let result = interleave_samples(samples);
+
+        assert_eq!(result, vec![1., 2., 3., 4., 5., 6.]);
     }
 }
