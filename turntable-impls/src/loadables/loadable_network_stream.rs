@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use crossbeam::atomic::AtomicCell;
 use parking_lot::Mutex;
 use reqwest::Client;
-use turntable_core::{assign_slice, assign_slice_with_offset, Loadable, LoaderLength, ReadResult};
+use turntable_core::{assign_slice, Loadable, LoaderLength, ReadResult};
 
 /// A loadable that reads from a network stream.
 /// If the stream supports byte ranges, it can be seeked.
@@ -21,8 +21,8 @@ pub struct LoadableNetworkStream {
 }
 
 impl LoadableNetworkStream {
-    const MAX_CHUNK_SIZE: usize = 5_000_000; // 5MB
-    const MIN_CHUNK_SIZE: usize = 100_000; // 100KB
+    const MAX_CHUNK_SIZE: usize = 50_000_000; // 50MB
+    const MIN_CHUNK_SIZE: usize = 5_000_000; // 5MB
 
     pub async fn new<S>(url: S) -> Result<Self, reqwest::Error>
     where
@@ -160,19 +160,30 @@ impl Loadable for LoadableNetworkStream {
     }
 
     async fn seek(&self, seek: SeekFrom) -> Result<usize, Box<dyn Error>> {
-        let offset = self.absolute_read_offset();
+        let absolute_read_offset = self.absolute_read_offset();
+        let absolute_load_start_offset = self.absolute_load_start_offset();
+        let absolute_load_end_offset = self.loaded_bytes_offset.load();
 
-        let new_offset = match seek {
-            SeekFrom::Current(increment) => (increment + offset as i64) as usize,
+        let new_absolute_read_offset = match seek {
+            SeekFrom::Current(increment) => (absolute_read_offset as i64 + increment) as usize,
             SeekFrom::Start(offset) => offset as usize,
             SeekFrom::End(increment) => (self.normal_len() as i64 + increment) as usize,
         };
 
-        let safe_new_offset = new_offset.min(self.normal_len());
+        let safe_new_offset = new_absolute_read_offset.min(self.normal_len());
+        let safe_new_relative_read_offset =
+            new_absolute_read_offset.saturating_sub(absolute_load_start_offset);
 
-        self.read_offset.store(0);
-        self.loaded_bytes_offset.store(safe_new_offset);
-        self.loaded_bytes.lock().clear();
+        // Reset the loaded bytes if the seek is outside the current loaded range.
+        if new_absolute_read_offset < absolute_load_start_offset
+            || new_absolute_read_offset > absolute_load_end_offset
+        {
+            self.read_offset.store(0);
+            self.loaded_bytes.lock().clear();
+            self.loaded_bytes_offset.store(safe_new_offset);
+        } else {
+            self.read_offset.store(safe_new_relative_read_offset);
+        }
 
         Ok(safe_new_offset)
     }
