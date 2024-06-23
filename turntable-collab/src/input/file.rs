@@ -9,7 +9,7 @@ use turntable_impls::LoadableFile;
 use crate::{InputError, Inputable};
 
 lazy_static! {
-    static ref REGEX: Regex = Regex::new(r"^file://([a-zA-Z0-9/\\:-]+\.[a-zA-Z0-9]+)$").unwrap();
+    static ref REGEX: Regex = Regex::new(r"^file://([a-zA-Z0-9_/\\:-]+\.[a-zA-Z0-9_]+)$").unwrap();
 }
 
 // A file that can be played by turntable.
