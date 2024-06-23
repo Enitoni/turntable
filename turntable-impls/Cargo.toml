@@ -9,6 +9,7 @@ edition = "2021"
 turntable-core = { path = "../turntable-core" }
 
 symphonia = { version = "0.5.4", features = ["all"] }
+rubato = "0.15.0"
 
 async-trait = { workspace = true }
 parking_lot = { workspace = true }
