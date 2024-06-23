@@ -94,18 +94,7 @@ impl Ingestion for SymphoniaIngestion {
             .map(|s| s as usize)
             .unwrap_or(self.context.config.sample_rate);
 
-        let resampler = if sample_rate != self.context.config.sample_rate {
-            let resampler = SymphoniaResampler::new(
-                sample_rate,
-                self.context.config.sample_rate,
-                self.context.config.preload_size_in_samples() / self.context.config.channel_count,
-                self.context.config.channel_count,
-            )?;
-
-            Some(resampler)
-        } else {
-            None
-        };
+        let resampler = DynamicResampler::new(sample_rate, &self.context.config)?;
 
         let codec_params = audio_track.codec_params.clone();
         let decoder = self
@@ -173,7 +162,7 @@ struct Loader {
     offset: AtomicCell<usize>,
     decoder: Mutex<Box<dyn Decoder>>,
     format_reader: Mutex<Box<dyn FormatReader>>,
-    resampler: Mutex<Option<SymphoniaResampler>>,
+    resampler: Mutex<DynamicResampler>,
 }
 
 impl Loader {
@@ -326,32 +315,12 @@ impl Loader {
         }
 
         let mut resampler = self.resampler.lock();
-
-        let samples = if let Some(resampler) = &mut *resampler {
-            resample_samples(samples, self.config.channel_count, resampler)
-        } else {
-            samples
-        };
+        let samples = resampler.process(samples);
 
         Ok(LoadResult {
             samples,
             end_reached,
         })
-    }
-}
-
-fn resample_samples(
-    samples: Vec<Sample>,
-    channels: usize,
-    resampler: &mut SymphoniaResampler,
-) -> Vec<Sample> {
-    let split_samples = uninterleave_samples(samples, channels);
-    let resampled_samples = resampler.process(&split_samples, None);
-
-    // TODO: This is a quick and dirty solution for the MVP, so if there's an error just return the non-resampled samples. In the future this should definitely be changed and done properly.
-    match resampled_samples {
-        Ok(s) => interleave_samples(s),
-        Err(_) => interleave_samples(split_samples),
     }
 }
 
@@ -433,6 +402,86 @@ impl Read for LoadableMediaSource {
                 ReadResult::More(bytes) => bytes,
                 ReadResult::End(bytes) => bytes,
             })
+    }
+}
+
+/// A resampler that can take any length of samples as input
+struct DynamicResampler {
+    resampler: SymphoniaResampler,
+    channel_count: usize,
+    source_sample_rate: usize,
+    target_sample_rate: usize,
+    did_remove_silence: bool,
+}
+
+impl DynamicResampler {
+    const CHUNK_SIZE: usize = 1024;
+
+    fn new(source_sample_rate: usize, config: &Config) -> Result<Self, Box<dyn Error>> {
+        let resampler = SymphoniaResampler::new(
+            source_sample_rate,
+            config.sample_rate,
+            Self::CHUNK_SIZE,
+            config.channel_count,
+        )?;
+
+        Ok(Self {
+            resampler,
+            source_sample_rate,
+            channel_count: config.channel_count,
+            target_sample_rate: config.sample_rate,
+            did_remove_silence: false,
+        })
+    }
+
+    fn process(&mut self, samples: Vec<Sample>) -> Vec<Sample> {
+        // Don't do anything if it's not necessary
+        if self.target_sample_rate == self.source_sample_rate {
+            return samples;
+        }
+
+        let mut interleaved_result = vec![0f32; 0];
+        let chunked_channels: Vec<_> = uninterleave_samples(samples, self.channel_count)
+            .into_iter()
+            .map(|c| {
+                c.chunks_exact(Self::CHUNK_SIZE)
+                    .map(|c| c.to_vec())
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+
+        let chunk_amount = chunked_channels[0].len();
+
+        for chunk_index in 0..chunk_amount {
+            let mut chunks = vec![];
+
+            // ok clippy
+            (0..self.channel_count).for_each(|channel_index| {
+                let channel_chunk = &chunked_channels[channel_index][chunk_index];
+                chunks.push(channel_chunk.to_owned());
+            });
+
+            let resampled = self
+                .resampler
+                .process(&chunks, None)
+                .expect("processes without issue");
+
+            let interleaved = interleave_samples(resampled);
+            interleaved_result.extend_from_slice(&interleaved)
+        }
+
+        if !self.did_remove_silence {
+            self.did_remove_silence = true;
+
+            let silence_in_samples = self.resampler.output_delay() * self.channel_count;
+
+            return interleaved_result
+                .into_iter()
+                .skip(silence_in_samples)
+                .collect();
+        }
+
+        interleaved_result
     }
 }
 
