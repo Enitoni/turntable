@@ -14,7 +14,7 @@ use super::{InputError, Inputable};
 
 lazy_static! {
     static ref REGEX: Regex =
-        Regex::new(r"^(?:https?://)?(?:[a-z]+\.)?youtube\.com/(?:(?:playlist\?list=)|(?:watch\?v=|v/))[A-Za-z\d_-]+$")
+        Regex::new(r"^(?:https?://)?(?:[a-z]+\.)?youtube\.com/(?:(?:playlist\?list=)|(?:watch\?v=|v/))[A-Za-z\d_\-&=]+$")
             .unwrap();
 }
 
