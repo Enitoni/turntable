@@ -14,7 +14,7 @@ use super::{InputError, Inputable};
 
 lazy_static! {
     static ref REGEX: Regex =
-        Regex::new(r"^(?:https?://)?(?:[a-z]+\.)?youtube\.com/(?:watch\?v=|v/)[A-Za-z\d_-]+$")
+        Regex::new(r"^(?:https?://)?(?:[a-z]+\.)?youtube\.com/(?:(?:playlist\?list=)|(?:watch\?v=|v/))[A-Za-z\d_-]+$")
             .unwrap();
 }
 
@@ -29,34 +29,48 @@ pub struct YouTubeVideoInput {
 }
 
 #[derive(Debug, Deserialize)]
-struct RawFormat {
+struct Format {
     format_id: String,
     url: String,
 }
 
 #[derive(Debug, Deserialize)]
-struct RawYouTubeVideo {
+struct FlatYouTubeVideo {
     id: String,
     title: String,
     channel: String,
-    thumbnail: String,
-    format_id: String,
-    formats: Vec<RawFormat>,
     duration: f32,
 }
 
 #[derive(Debug, Deserialize)]
-struct RawYouTubePlaylist {
+struct PlayableYouTubeVideo {
+    format_id: String,
+    formats: Vec<Format>,
+}
+
+#[derive(Debug, Deserialize)]
+struct DeletedYouTubeVideo {
     id: String,
-    title: String,
-    entries: Vec<RawYouTubeVideo>,
+    duration: (),
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
-enum RawYouTubeResource {
-    Video(RawYouTubeVideo),
-    Playlist(RawYouTubePlaylist),
+enum YouTubeVideo {
+    Flat(FlatYouTubeVideo),
+    Deleted(DeletedYouTubeVideo),
+}
+
+#[derive(Debug, Deserialize)]
+struct YouTubePlaylist {
+    entries: Vec<YouTubeVideo>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum YouTubeResource {
+    Video(FlatYouTubeVideo),
+    Playlist(YouTubePlaylist),
 }
 
 #[async_trait]
@@ -69,13 +83,19 @@ impl Inputable for YouTubeVideoInput {
     where
         Self: Sized,
     {
-        let resource = RawYouTubeResource::fetch(query).await?;
+        let resource = YouTubeResource::fetch(query).await?;
 
         match resource {
-            RawYouTubeResource::Video(video) => Ok(vec![video.into()]),
-            RawYouTubeResource::Playlist(playlist) => {
-                Ok(playlist.entries.into_iter().map(Into::into).collect())
-            }
+            YouTubeResource::Video(video) => Ok(vec![video.into()]),
+            YouTubeResource::Playlist(playlist) => Ok(playlist
+                .entries
+                .into_iter()
+                .filter_map(|v| match v {
+                    YouTubeVideo::Flat(v) => Some(v),
+                    YouTubeVideo::Deleted(_) => None,
+                })
+                .map(Into::into)
+                .collect()),
         }
     }
 
@@ -112,7 +132,7 @@ impl Inputable for YouTubeVideoInput {
             .await
             .map_err(|e| InputError::Other(e.to_string()))?;
 
-        let entry: RawYouTubeVideo =
+        let entry: PlayableYouTubeVideo =
             serde_json::from_str(&output).map_err(|_| InputError::Invalid)?;
 
         let stream_url = entry
@@ -131,7 +151,7 @@ impl Inputable for YouTubeVideoInput {
     }
 }
 
-impl RawYouTubeResource {
+impl YouTubeResource {
     /// Attempts to fetch a video or several videos from the given URL using yt-dlp.
     pub async fn fetch(url: &str) -> Result<Self, InputError> {
         let mut child = Command::new("yt-dlp")
@@ -162,20 +182,20 @@ impl RawYouTubeResource {
             .await
             .map_err(|e| InputError::Other(e.to_string()))?;
 
-        let entry: RawYouTubeResource =
-            serde_json::from_str(&output).map_err(|_| InputError::Invalid)?;
+        let entry: YouTubeResource =
+            serde_json::from_str(&output).map_err(|e| InputError::Other(e.to_string()))?;
 
         Ok(entry)
     }
 }
 
-impl From<RawYouTubeVideo> for YouTubeVideoInput {
-    fn from(video: RawYouTubeVideo) -> Self {
+impl From<FlatYouTubeVideo> for YouTubeVideoInput {
+    fn from(video: FlatYouTubeVideo) -> Self {
         YouTubeVideoInput {
             id: video.id,
             title: video.title,
             duration: video.duration,
-            thumbnail: video.thumbnail,
+            thumbnail: "".to_string(),
             channel: video.channel,
         }
     }
