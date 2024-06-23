@@ -4,7 +4,6 @@ use dashmap::DashMap;
 use parking_lot::Mutex;
 use rubato::{FftFixedInOut, Resampler};
 use std::{
-    borrow::BorrowMut,
     error::Error,
     io::{ErrorKind as IoErrorKind, Read, Seek, SeekFrom},
     sync::Arc,
