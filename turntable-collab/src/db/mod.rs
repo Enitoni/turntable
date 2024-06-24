@@ -32,6 +32,9 @@ pub enum DatabaseError {
 /// Represents a type that can fetch turntable data from a database
 #[async_trait]
 pub trait Database {
+    async fn check_for_superuser(&self) -> Result<bool>;
+    async fn create_superuser(&self, new_user: NewUser) -> Result<UserData>;
+
     async fn user_by_id(&self, user_id: PrimaryKey) -> Result<UserData>;
     async fn user_by_username(&self, username: &str) -> Result<UserData>;
     async fn create_user(&self, new_user: NewUser) -> Result<UserData>;
