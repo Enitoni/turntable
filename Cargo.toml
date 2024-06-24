@@ -50,6 +50,7 @@ dashmap = "5.5.3"
 crossbeam = "0.8.4"
 thiserror = "1.0.61"
 parking_lot = "0.12.3"
+rand = "0.8.5"
 
 async-trait = "0.1.80"
 tokio = { version = "1.38.0", features = ["full"] }
