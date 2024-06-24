@@ -20,6 +20,9 @@ pub enum InputError {
     #[error("Failed to fetch resource")]
     NetworkFailed,
 
+    #[error("Failed to parse resource: {0}")]
+    ParseError(String),
+
     #[error("Resource is invalid")]
     Invalid,
 
