@@ -30,8 +30,13 @@ pub struct YouTubeVideoInput {
 
 #[derive(Debug, Deserialize)]
 struct Format {
-    format_id: String,
     url: String,
+    format_id: String,
+    format: String,
+    container: Option<String>,
+    quality: Option<f32>,
+    acodec: Option<String>,
+    audio_ext: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -133,7 +138,7 @@ impl Inputable for YouTubeVideoInput {
             .map_err(|e| InputError::Other(e.to_string()))?;
 
         let entry: PlayableYouTubeVideo =
-            serde_json::from_str(&output).map_err(|_| InputError::Invalid)?;
+            serde_json::from_str(&output).map_err(|e| InputError::ParseError(e.to_string()))?;
 
         let stream_url = entry
             .formats
@@ -183,7 +188,7 @@ impl YouTubeResource {
             .map_err(|e| InputError::Other(e.to_string()))?;
 
         let entry: YouTubeResource =
-            serde_json::from_str(&output).map_err(|e| InputError::Other(e.to_string()))?;
+            serde_json::from_str(&output).map_err(|e| InputError::ParseError(e.to_string()))?;
 
         Ok(entry)
     }
