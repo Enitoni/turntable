@@ -150,7 +150,19 @@ impl Ingestion for SymphoniaIngestion {
     }
 
     fn clear_inactive(&self) {
-        self.context.sinks.retain(|_, s| !s.is_clearable());
+        let clearable_sink_ids: Vec<_> = self
+            .context
+            .sinks
+            .iter()
+            .filter_map(|s| if s.is_clearable() { Some(s.id) } else { None })
+            .collect();
+
+        self.loaders
+            .retain(|id, _| !clearable_sink_ids.contains(id));
+
+        self.context
+            .sinks
+            .retain(|id, _| !clearable_sink_ids.contains(id));
     }
 }
 
