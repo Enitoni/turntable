@@ -11,6 +11,7 @@ turntable-impls = { path = "../turntable-impls" }
 
 lazy_static = "1.4.0"
 regex = "1.10.5"
+argon2 = "0.5.3"
 
 async-trait = { workspace = true }
 parking_lot = { workspace = true }
