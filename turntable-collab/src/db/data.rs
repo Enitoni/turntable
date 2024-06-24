@@ -8,6 +8,7 @@ pub struct UserData {
     pub username: String,
     pub password: String,
     pub display_name: String,
+    pub superuser: bool,
 }
 
 /// Login session data for authentication
