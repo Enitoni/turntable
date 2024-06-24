@@ -5,6 +5,7 @@ mod data;
 pub use data::*;
 
 pub type Result<T> = std::result::Result<T, DatabaseError>;
+pub type BoxedDatabase = Box<dyn Database>;
 
 #[derive(Debug, Error)]
 pub enum DatabaseError {
