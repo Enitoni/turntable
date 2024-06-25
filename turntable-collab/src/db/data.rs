@@ -2,7 +2,7 @@
 pub type PrimaryKey = u32;
 
 /// A turntable account
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct UserData {
     pub id: PrimaryKey,
     pub username: String,
@@ -12,7 +12,7 @@ pub struct UserData {
 }
 
 /// Login session data for authentication
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SessionData {
     pub id: PrimaryKey,
     /// The session token, or key if you will
@@ -22,7 +22,7 @@ pub struct SessionData {
 }
 
 /// A turntable room
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RoomData {
     pub id: PrimaryKey,
     /// A slug used to identify the room
@@ -33,7 +33,7 @@ pub struct RoomData {
 }
 
 /// A member of a room
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RoomMemberData {
     pub id: PrimaryKey,
     /// If this is true, the member has full control over the room
@@ -42,7 +42,7 @@ pub struct RoomMemberData {
 }
 
 /// An invitation to a room and account creation
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RoomInviteData {
     pub id: PrimaryKey,
     /// The unique token identifier of the invite
@@ -53,7 +53,7 @@ pub struct RoomInviteData {
 
 /// A stream key is used to access the audio stream of a room
 /// Note: `app`, `room_id`, and `user_id` are unique together.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct StreamKeyData {
     pub id: PrimaryKey,
     /// The unique token used to identify the stream key
