@@ -17,7 +17,7 @@ pub use sink::*;
 #[async_trait]
 pub trait Ingestion
 where
-    Self: Sync + Send,
+    Self: Sync + Send + 'static,
 {
     fn new(context: &PipelineContext) -> Self;
 
