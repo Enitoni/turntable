@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 
 use parking_lot::Mutex;
-use turntable_core::{BoxedQueueItem, Queue, QueueItem, QueueNotifier};
+use turntable_core::{BoxedQueueItem, Queue, QueueItem, QueueNotifier, SinkId};
 
 use crate::Track;
 
@@ -17,6 +17,15 @@ impl LinearQueue {
     pub fn push(&self, item: Track) {
         self.items.lock().push_back(item);
         self.notifier.notify();
+    }
+
+    /// Get a track by sink id, if it exists
+    pub fn get_by_sink_id(&self, sink_id: SinkId) -> Option<Track> {
+        self.items
+            .lock()
+            .iter()
+            .find(|t| t.sink_id() == Some(sink_id))
+            .cloned()
     }
 }
 
