@@ -19,8 +19,8 @@ pub use queuing::*;
 pub use util::*;
 
 // Reduces verbosity
-type Store<Id, T> = Arc<DashMap<Id, T>>;
-type ArcedStore<Id, T> = Store<Id, Arc<T>>;
+pub type Store<Id, T> = Arc<DashMap<Id, T>>;
+pub type ArcedStore<Id, T> = Store<Id, Arc<T>>;
 
 /// The turntable pipeline, facilitating ingestion, playback, and output.
 pub struct Pipeline<I> {
