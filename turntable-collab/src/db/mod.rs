@@ -55,6 +55,7 @@ pub trait Database {
     async fn delete_room(&self, room_id: PrimaryKey) -> Result<()>;
     async fn delete_room_member(&self, user_id: PrimaryKey) -> Result<()>;
     async fn create_room_invite(&self, new_room_invite: NewRoomInvite) -> Result<RoomInviteData>;
+    async fn delete_room_invite(&self, invite_id: PrimaryKey) -> Result<()>;
 
     async fn stream_key_by_token(&self, token: &str) -> Result<StreamKeyData>;
     async fn create_stream_key(&self, new_key: NewStreamKey) -> Result<StreamKeyData>;
