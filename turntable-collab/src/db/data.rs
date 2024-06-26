@@ -52,15 +52,15 @@ pub struct RoomInviteData {
 }
 
 /// A stream key is used to access the audio stream of a room
-/// Note: `app`, `room_id`, and `user_id` are unique together.
+/// Note: `source`, `room_id`, and `user_id` are unique together.
 #[derive(Debug, Clone)]
 pub struct StreamKeyData {
     pub id: PrimaryKey,
     /// The unique token used to identify the stream key
     pub token: String,
-    /// The app that will connect with this stream key.
+    /// What app or source this stream key is being used from.
     /// Example: VLC, turntable, etc
-    pub app: String,
+    pub source: String,
     /// The room this stream key
     pub room_id: PrimaryKey,
     /// The user this stream key belongs to

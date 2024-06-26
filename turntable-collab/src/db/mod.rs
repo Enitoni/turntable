@@ -121,5 +121,5 @@ pub struct NewRoomInvite {
 pub struct NewStreamKey {
     pub room_id: PrimaryKey,
     pub user_id: PrimaryKey,
-    pub app: String,
+    pub source: String,
 }
