@@ -93,7 +93,7 @@ pub struct NewRoom {
     pub title: String,
     pub description: String,
     /// The owner of the new room
-    pub user_id: String,
+    pub user_id: PrimaryKey,
 }
 
 #[derive(Debug)]
