@@ -60,6 +60,11 @@ where
             rooms: room_manager,
         }
     }
+
+    /// Must be called after creation
+    pub async fn init(&self) {
+        self.rooms.restore().await.expect("rooms are restored");
+    }
 }
 
 impl<I, Db> Clone for CollabContext<I, Db>
