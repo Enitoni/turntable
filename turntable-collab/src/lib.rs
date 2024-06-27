@@ -8,6 +8,7 @@ mod util;
 
 use std::sync::Arc;
 
+use auth::Auth;
 pub use db::*;
 pub use input::*;
 pub use queues::*;
@@ -21,6 +22,7 @@ pub struct Collab<I, Db> {
     pipeline: Arc<Pipeline<I>>,
     database: Arc<Db>,
 
+    pub auth: Auth<Db>,
     pub rooms: RoomManager<I, Db>,
 }
 
@@ -49,8 +51,10 @@ where
         };
 
         let room_manager = RoomManager::new(&context);
+        let auth = Auth::new(&database);
 
         Self {
+            auth,
             pipeline,
             database,
             rooms: room_manager,
