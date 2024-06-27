@@ -3,7 +3,7 @@ mod room;
 
 use std::sync::Arc;
 
-use crate::{CollabContext, Database, DatabaseError, NewRoom};
+use crate::{CollabContext, Database, DatabaseError, NewRoom, PrimaryKey};
 
 pub use connection::*;
 pub use room::*;
@@ -60,6 +60,11 @@ where
         self.context.rooms.insert(room.id(), room.clone());
 
         Ok(room)
+    }
+
+    /// Returns a room by id if it exists
+    pub fn room_by_id(&self, room_id: PrimaryKey) -> Option<Arc<Room<I, Db>>> {
+        self.context.rooms.get(&room_id).map(|r| r.clone())
     }
 
     /// Get all rooms in memory
