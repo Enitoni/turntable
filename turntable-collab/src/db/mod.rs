@@ -119,6 +119,7 @@ pub struct NewRoomInvite {
 
 #[derive(Debug)]
 pub struct NewStreamKey {
+    pub token: String,
     pub room_id: PrimaryKey,
     pub user_id: PrimaryKey,
     pub source: String,
