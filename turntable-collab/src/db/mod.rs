@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use thiserror::Error;
 
 mod data;
@@ -85,6 +86,7 @@ pub struct UpdatedUser {
 pub struct NewSession {
     pub token: String,
     pub user_id: PrimaryKey,
+    pub expires_at: DateTime<Utc>,
 }
 
 #[derive(Debug)]

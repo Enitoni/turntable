@@ -2,6 +2,7 @@ use argon2::{
     password_hash::{Encoding, SaltString},
     Argon2, PasswordHash, PasswordHasher, PasswordVerifier,
 };
+use chrono::{DateTime, Duration, Utc};
 use rand::rngs::OsRng;
 use std::sync::Arc;
 use thiserror::Error;
@@ -34,6 +35,8 @@ impl<Db> Auth<Db>
 where
     Db: Database,
 {
+    const SESSION_DURATION_IN_DAYS: usize = 7;
+
     pub fn new(db: &Arc<Db>) -> Self {
         Self {
             db: db.clone(),
@@ -64,9 +67,12 @@ where
             .verify_password(credentials.password.as_bytes(), &stored_password)
             .map_err(|_| AuthError::InvalidCredentials)?;
 
+        let expires_at = Utc::now() + Duration::days(Self::SESSION_DURATION_IN_DAYS as i64);
+
         let new_session = NewSession {
             token: random_string(32),
             user_id: user.id,
+            expires_at,
         };
 
         let new_session = self

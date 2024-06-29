@@ -1,3 +1,5 @@
+use chrono::{DateTime, Utc};
+
 /// The type used for primary keys in the database.
 pub type PrimaryKey = u32;
 
@@ -19,6 +21,8 @@ pub struct SessionData {
     pub token: String,
     /// The user that is logged in
     pub user: UserData,
+    /// The date that the session will expire
+    pub expires_at: DateTime<Utc>,
 }
 
 /// A turntable room
