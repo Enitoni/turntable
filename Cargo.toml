@@ -51,6 +51,7 @@ crossbeam = "0.8.4"
 thiserror = "1.0.61"
 parking_lot = "0.12.3"
 rand = "0.8.5"
+chrono = "0.4.38"
 
 async-trait = "0.1.80"
 futures-util = "0.3.30"
