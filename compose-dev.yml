@@ -1,0 +1,18 @@
+version: "3"
+
+services:
+  db:
+    image: docker.io/library/postgres:latest
+    container-name: turntable_postgres
+    restart: always
+    ports:
+      - 5432:5432
+    environment:
+      POSTGRES_PASSWORD: turntable
+      POSTGRES_USER: turntable
+      POSTGRES_DB: turntable
+    volumes:
+      - postgres_data:/var/lib/pgsql/data
+
+volumes:
+  postgres_data:
