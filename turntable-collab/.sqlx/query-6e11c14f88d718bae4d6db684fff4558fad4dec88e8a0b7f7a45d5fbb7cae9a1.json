@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO room_invites (token, room_id, inviter_id) VALUES ($1, $2, $3) RETURNING token",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "token",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "6e11c14f88d718bae4d6db684fff4558fad4dec88e8a0b7f7a45d5fbb7cae9a1"
+}
