@@ -57,16 +57,19 @@ impl Collab {
         let room_manager = RoomManager::new(&context);
         let auth = Auth::new(&database);
 
-        Self {
+        let new = Self {
             auth,
             pipeline,
             database,
             rooms: room_manager,
-        }
+        };
+
+        new.init().await;
+        new
     }
 
     /// Must be called after creation
-    pub async fn init(&self) {
+    async fn init(&self) {
         self.rooms.restore().await.expect("rooms are restored");
     }
 }
