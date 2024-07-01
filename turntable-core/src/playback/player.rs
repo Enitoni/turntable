@@ -16,7 +16,7 @@ pub struct Player {
     context: PipelineContext,
     timeline: Arc<Timeline>,
     output: Arc<Output>,
-    state: AtomicCell<PlayerState>,
+    state: Arc<AtomicCell<PlayerState>>,
     should_play: AtomicCell<bool>,
 }
 
@@ -25,6 +25,7 @@ pub struct PlayerContext {
     pub id: PlayerId,
     context: PipelineContext,
     timeline: Arc<Timeline>,
+    state: Arc<AtomicCell<PlayerState>>,
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -152,6 +153,7 @@ impl Player {
     pub fn context(&self) -> PlayerContext {
         PlayerContext {
             id: self.id,
+            state: self.state.clone(),
             context: self.context.clone(),
             timeline: self.timeline.clone(),
         }
@@ -223,5 +225,10 @@ impl PlayerContext {
     /// Returns the currently playing sink.
     pub fn current_sink(&self) -> Option<SinkId> {
         self.timeline.current_sink()
+    }
+
+    /// Returns the current state of the player
+    pub fn current_state(&self) -> PlayerState {
+        self.state.load()
     }
 }
