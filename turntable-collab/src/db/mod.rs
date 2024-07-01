@@ -153,6 +153,7 @@ pub struct NewRoomMember {
 
 #[derive(Debug)]
 pub struct NewRoomInvite {
+    pub token: String,
     pub room_id: PrimaryKey,
     /// The inviter of the new room invite
     pub user_id: PrimaryKey,
