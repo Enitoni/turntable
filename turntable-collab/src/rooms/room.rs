@@ -1,18 +1,18 @@
 use std::sync::Arc;
 
 use parking_lot::Mutex;
-use turntable_core::{Ingestion, PlayerContext as Player};
+use turntable_core::PlayerContext as Player;
 use turntable_impls::WaveEncoder;
 
-use crate::{CollabContext, Database, LinearQueue, PrimaryKey, RoomData, RoomMemberData, Track};
+use crate::{CollabContext, LinearQueue, PrimaryKey, RoomData, RoomMemberData, Track};
 
 use super::{RoomConnection, RoomConnectionHandle, RoomConnectionId, RoomError};
 
 pub type RoomId = PrimaryKey;
 
 /// A turntable room, containing listeners, a queue, and a player.
-pub struct Room<I, Db> {
-    context: CollabContext<I, Db>,
+pub struct Room {
+    context: CollabContext,
     state: Mutex<RoomState>,
     data: Mutex<RoomData>,
     /// The users currently connected and listening in this room
@@ -29,12 +29,8 @@ pub enum RoomState {
     },
 }
 
-impl<I, Db> Room<I, Db>
-where
-    I: Ingestion,
-    Db: Database,
-{
-    pub fn new(context: &CollabContext<I, Db>, data: RoomData) -> Self {
+impl Room {
+    pub fn new(context: &CollabContext, data: RoomData) -> Self {
         Self {
             context: context.clone(),
             state: Default::default(),
@@ -110,7 +106,7 @@ where
         &self,
         user_id: PrimaryKey,
         source: String,
-    ) -> Result<RoomConnectionHandle<I, Db>, RoomError> {
+    ) -> Result<RoomConnectionHandle, RoomError> {
         // Ensure the user is actually in the room before doing anything else
         let _ = self.member_by_user_id(user_id)?;
 

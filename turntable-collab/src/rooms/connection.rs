@@ -5,9 +5,9 @@ use std::{
 };
 
 use futures_util::Stream;
-use turntable_core::{Consumer, Id, Ingestion};
+use turntable_core::{Consumer, Id};
 
-use crate::{CollabContext, Database, PrimaryKey};
+use crate::{CollabContext, PrimaryKey};
 
 use super::RoomId;
 
@@ -23,14 +23,10 @@ pub struct RoomConnection {
 }
 
 /// A handle to a stream, which when dropped removes the [RoomConnection] from a room
-pub struct RoomConnectionHandle<I, Db>
-where
-    I: Ingestion,
-    Db: Database,
-{
+pub struct RoomConnectionHandle {
     connection_id: RoomConnectionId,
     room_id: RoomId,
-    context: CollabContext<I, Db>,
+    context: CollabContext,
     /// The audio stream
     stream: Arc<Consumer>,
 }
@@ -45,13 +41,9 @@ impl RoomConnection {
     }
 }
 
-impl<I, Db> RoomConnectionHandle<I, Db>
-where
-    I: Ingestion,
-    Db: Database,
-{
+impl RoomConnectionHandle {
     pub fn new(
-        context: &CollabContext<I, Db>,
+        context: &CollabContext,
         connection_id: RoomConnectionId,
         room_id: RoomId,
         stream: Arc<Consumer>,
@@ -65,11 +57,7 @@ where
     }
 }
 
-impl<I, Db> Drop for RoomConnectionHandle<I, Db>
-where
-    I: Ingestion,
-    Db: Database,
-{
+impl Drop for RoomConnectionHandle {
     fn drop(&mut self) {
         if let Some(room) = self.context.rooms.get(&self.room_id) {
             room.remove_connection(self.connection_id)
@@ -77,11 +65,7 @@ where
     }
 }
 
-impl<I, Db> Stream for RoomConnectionHandle<I, Db>
-where
-    I: Ingestion,
-    Db: Database,
-{
+impl Stream for RoomConnectionHandle {
     type Item = Vec<u8>;
 
     fn poll_next(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {

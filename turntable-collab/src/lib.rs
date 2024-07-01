@@ -15,33 +15,37 @@ pub use queues::*;
 use rooms::{Room, RoomId, RoomManager};
 pub use track::*;
 
-use turntable_core::{ArcedStore, Ingestion, Pipeline};
+use turntable_core::{ArcedStore, Config, Pipeline};
+use turntable_impls::SymphoniaIngestion;
+
+pub type CollabPipeline = Pipeline<SymphoniaIngestion>;
+pub type CollabDatabase = PgDatabase;
 
 /// The turntable collab system, facilitating room management, authentication, and more.
-pub struct Collab<I, Db> {
-    pipeline: Arc<Pipeline<I>>,
-    database: Arc<Db>,
+pub struct Collab {
+    pipeline: Arc<CollabPipeline>,
+    database: Arc<CollabDatabase>,
 
-    pub auth: Auth<Db>,
-    pub rooms: RoomManager<I, Db>,
+    pub auth: Auth<CollabDatabase>,
+    pub rooms: RoomManager,
 }
 
 /// A type passed to various components of the collab system, to access state, emit events, and dispatch actions.
-pub struct CollabContext<I, Db> {
-    pub pipeline: Arc<Pipeline<I>>,
-    pub database: Arc<Db>,
+pub struct CollabContext {
+    pub pipeline: Arc<CollabPipeline>,
+    pub database: Arc<CollabDatabase>,
 
-    pub rooms: ArcedStore<RoomId, Room<I, Db>>,
+    pub rooms: ArcedStore<RoomId, Room>,
 }
 
-impl<I, Db> Collab<I, Db>
-where
-    I: Ingestion,
-    Db: Database,
-{
-    pub fn new(pipeline: Pipeline<I>, database: Db) -> Self {
-        let database = Arc::new(database);
-        let pipeline = Arc::new(pipeline);
+impl Collab {
+    pub async fn new(config: Config, database_url: &str) -> Self {
+        let database = Arc::new(
+            CollabDatabase::new(database_url)
+                .await
+                .expect("database is created"),
+        );
+        let pipeline = Arc::new(CollabPipeline::new(config));
 
         let context = CollabContext {
             database: database.clone(),
@@ -67,11 +71,7 @@ where
     }
 }
 
-impl<I, Db> Clone for CollabContext<I, Db>
-where
-    I: Ingestion,
-    Db: Database,
-{
+impl Clone for CollabContext {
     fn clone(&self) -> Self {
         Self {
             database: self.database.clone(),

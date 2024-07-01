@@ -13,10 +13,9 @@ use futures_util::TryFutureExt;
 pub use room::*;
 
 use thiserror::Error;
-use turntable_core::Ingestion;
 
-pub struct RoomManager<I, Db> {
-    context: CollabContext<I, Db>,
+pub struct RoomManager {
+    context: CollabContext,
 }
 
 #[derive(Debug, Error)]
@@ -35,12 +34,8 @@ pub enum RoomError {
     Database(DatabaseError),
 }
 
-impl<I, Db> RoomManager<I, Db>
-where
-    I: Ingestion,
-    Db: Database,
-{
-    pub fn new(context: &CollabContext<I, Db>) -> Self {
+impl RoomManager {
+    pub fn new(context: &CollabContext) -> Self {
         Self {
             context: context.clone(),
         }
@@ -65,7 +60,7 @@ where
     }
 
     /// Creates a new room
-    pub async fn create_room(&self, new_room: NewRoom) -> Result<Arc<Room<I, Db>>, DatabaseError> {
+    pub async fn create_room(&self, new_room: NewRoom) -> Result<Arc<Room>, DatabaseError> {
         let room_data = self.context.database.create_room(new_room).await?;
         let room = Arc::new(Room::new(&self.context, room_data));
 
@@ -75,7 +70,7 @@ where
     }
 
     /// Returns a room by id if it exists
-    pub fn room_by_id(&self, room_id: PrimaryKey) -> Result<Arc<Room<I, Db>>, RoomError> {
+    pub fn room_by_id(&self, room_id: PrimaryKey) -> Result<Arc<Room>, RoomError> {
         self.context
             .rooms
             .get(&room_id)
@@ -84,7 +79,7 @@ where
     }
 
     /// Get all rooms in memory
-    pub fn list_all(&self) -> Vec<Arc<Room<I, Db>>> {
+    pub fn list_all(&self) -> Vec<Arc<Room>> {
         self.context.rooms.iter().map(|r| r.clone()).collect()
     }
 
@@ -131,7 +126,7 @@ where
         &self,
         for_user_id: PrimaryKey,
         token: String,
-    ) -> Result<RoomConnectionHandle<I, Db>, RoomError> {
+    ) -> Result<RoomConnectionHandle, RoomError> {
         let stream_key = self
             .context
             .database
