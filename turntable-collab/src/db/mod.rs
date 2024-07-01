@@ -5,6 +5,8 @@ use thiserror::Error;
 mod data;
 pub use data::*;
 
+mod pg;
+
 pub type Result<T> = std::result::Result<T, DatabaseError>;
 pub type BoxedDatabase = Box<dyn Database>;
 
@@ -17,17 +19,17 @@ pub enum DatabaseError {
     #[error("{resource} with {field} of value {value} already exists")]
     Conflict {
         /// The resource in question
-        resource: String,
+        resource: &'static str,
         /// The field that is conflicting
-        field: String,
+        field: &'static str,
         /// The conflicting value
-        value: String,
+        value: &'static str,
     },
     /// A resource in the database doesn't exist
     #[error("{resource}:{identifier} doesn't exist")]
     NotFound {
-        resource: String,
-        identifier: String,
+        resource: &'static str,
+        identifier: &'static str,
     },
 }
 
