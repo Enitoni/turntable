@@ -2,7 +2,7 @@ use argon2::{
     password_hash::{Encoding, SaltString},
     Argon2, PasswordHash, PasswordHasher, PasswordVerifier,
 };
-use chrono::{DateTime, Duration, Utc};
+use chrono::{Duration, Utc};
 use rand::rngs::OsRng;
 use std::sync::Arc;
 use thiserror::Error;
