@@ -6,13 +6,13 @@ mod rooms;
 mod track;
 mod util;
 
+use auth::Auth;
+use rooms::{Room, RoomId, RoomManager};
 use std::sync::Arc;
 
-use auth::Auth;
 pub use db::*;
 pub use input::*;
 pub use queues::*;
-use rooms::{Room, RoomId, RoomManager};
 pub use track::*;
 
 use turntable_core::{ArcedStore, Config, Pipeline};
