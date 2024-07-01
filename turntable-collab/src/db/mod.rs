@@ -33,6 +33,12 @@ pub enum DatabaseError {
     },
 }
 
+/// Helper trait to reduce boilerplate
+pub trait IntoDatabaseError {
+    fn not_found_or(self, resource: &'static str, identifier: &'static str) -> DatabaseError;
+    fn any(self) -> DatabaseError;
+}
+
 /// Represents a type that can fetch turntable data from a database
 #[async_trait]
 pub trait Database {
