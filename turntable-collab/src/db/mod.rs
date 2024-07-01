@@ -39,6 +39,37 @@ pub trait IntoDatabaseError {
     fn any(self) -> DatabaseError;
 }
 
+/// Helper trait to reduce boilerplate
+pub trait DatabaseResult {
+    /// Turns the Result into a conflict error if it's Ok()
+    fn conflict_or_ok(self, resource: &'static str, field: &'static str, value: &str)
+        -> Result<()>;
+}
+
+impl<T> DatabaseResult for Result<T> {
+    fn conflict_or_ok(
+        self,
+        resource: &'static str,
+        field: &'static str,
+        value: &str,
+    ) -> Result<()> {
+        match self {
+            Ok(_) => Err(DatabaseError::Conflict {
+                resource,
+                field,
+                value: value.to_string(),
+            }),
+            Err(e) => match e {
+                DatabaseError::NotFound {
+                    resource: _,
+                    identifier: _,
+                } => Ok(()),
+                e => Err(e),
+            },
+        }
+    }
+}
+
 /// Represents a type that can fetch turntable data from a database
 #[async_trait]
 pub trait Database {
