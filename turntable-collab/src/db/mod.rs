@@ -6,6 +6,7 @@ mod data;
 pub use data::*;
 
 mod pg;
+pub use pg::*;
 
 pub type Result<T> = std::result::Result<T, DatabaseError>;
 pub type BoxedDatabase = Box<dyn Database>;
