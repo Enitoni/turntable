@@ -93,7 +93,7 @@ pub trait Database {
     async fn create_room_member(&self, new_member: NewRoomMember) -> Result<()>;
     async fn update_room(&self, updated_room: UpdatedRoom) -> Result<RoomData>;
     async fn delete_room(&self, room_id: PrimaryKey) -> Result<()>;
-    async fn delete_room_member(&self, user_id: PrimaryKey) -> Result<()>;
+    async fn delete_room_member(&self, room_id: PrimaryKey, user_id: PrimaryKey) -> Result<()>;
     async fn create_room_invite(&self, new_room_invite: NewRoomInvite) -> Result<RoomInviteData>;
     async fn delete_room_invite(&self, invite_id: PrimaryKey) -> Result<()>;
 
