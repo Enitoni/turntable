@@ -23,7 +23,7 @@ pub enum DatabaseError {
         /// The field that is conflicting
         field: &'static str,
         /// The conflicting value
-        value: &'static str,
+        value: String,
     },
     /// A resource in the database doesn't exist
     #[error("{resource}:{identifier} doesn't exist")]
