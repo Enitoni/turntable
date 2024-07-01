@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 
 /// The type used for primary keys in the database.
-pub type PrimaryKey = u32;
+pub type PrimaryKey = i32;
 
 /// A turntable account
 #[derive(Debug, Clone)]
