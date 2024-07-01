@@ -32,7 +32,7 @@ pub struct RoomData {
     /// A slug used to identify the room
     pub slug: String,
     pub title: String,
-    pub description: String,
+    pub description: Option<String>,
     pub members: Vec<RoomMemberData>,
 }
 
