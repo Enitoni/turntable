@@ -5,14 +5,28 @@ use axum::{
     http::StatusCode,
     Json,
 };
-use schemars::JsonSchema;
+use schemars::{gen::SchemaGenerator, schema::Schema, JsonSchema};
 use serde::{de::DeserializeOwned, Deserialize};
 use validator::Validate;
 
 #[derive(Debug, JsonSchema, Validate, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct LoginSchema {
-    username: String,
-    password: String,
+    #[validate(length(max = 1024))]
+    pub username: String,
+    #[validate(length(max = 1024))]
+    pub password: String,
+}
+
+#[derive(Debug, JsonSchema, Validate, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RegisterSchema {
+    #[validate(length(min = 2, max = 1024))]
+    pub display_name: String,
+    #[validate(length(min = 2, max = 1024))]
+    pub username: String,
+    #[validate(length(min = 8, max = 1024))]
+    pub password: String,
 }
 
 pub struct ValidatedJson<T>(pub T);
