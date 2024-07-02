@@ -29,6 +29,17 @@ pub struct RegisterSchema {
     pub password: String,
 }
 
+#[derive(Debug, ToSchema, Validate, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct NewRoomSchema {
+    #[validate(length(min = 3, max = 64))]
+    pub slug: String,
+    #[validate(length(min = 3, max = 64))]
+    pub title: String,
+    #[validate(length(max = 2048))]
+    pub description: Option<String>,
+}
+
 pub struct ValidatedJson<T>(pub T);
 
 #[async_trait]
