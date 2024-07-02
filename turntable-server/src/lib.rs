@@ -2,7 +2,7 @@ use aide::{
     axum::{routing::get, ApiRouter, IntoApiResponse},
     openapi::{Info, OpenApi},
 };
-use axum::{Extension, Json};
+use axum::{extract::FromRef, Extension, Json};
 use std::{
     env,
     net::{Ipv6Addr, SocketAddr},
@@ -18,12 +18,20 @@ mod serialized;
 /// The default port the server will listen on.
 pub const DEFAULT_PORT: u16 = 9050;
 
-pub type ServerContext = Arc<Collab>;
-pub type Router = ApiRouter<Arc<Collab>>;
+#[derive(Clone, FromRef)]
+struct ServerContext {
+    pub collab: Arc<Collab>,
+}
+
+pub type Router = ApiRouter<ServerContext>;
 pub type Api = OpenApi;
 
 /// Starts the turntable server
 pub async fn run_server(collab: Collab) {
+    let context = ServerContext {
+        collab: Arc::new(collab),
+    };
+
     let port = env::var("TURNTABLE_SERVER_PORT")
         .map(|x| x.parse::<u16>().expect("Port must be a number"))
         .unwrap_or(DEFAULT_PORT);
@@ -40,7 +48,7 @@ pub async fn run_server(collab: Collab) {
     let root_router = Router::new()
         .nest("/v1", version_one_router)
         .route("/api.json", get(serve_api))
-        .with_state(Arc::new(collab))
+        .with_state(context)
         .layer(cors);
 
     let listener = TcpListener::bind(&addr).await.expect("listens on address");
