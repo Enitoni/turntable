@@ -14,7 +14,7 @@ pub use auth::{AuthError, Credentials, NewPlainUser};
 pub use db::*;
 pub use input::*;
 pub use queues::*;
-pub use rooms::{Room, RoomConnection, RoomError, RoomState};
+pub use rooms::{Room, RoomConnection, RoomConnectionHandle, RoomError, RoomState};
 pub use track::*;
 
 use turntable_core::{ArcedStore, Config, Pipeline};
