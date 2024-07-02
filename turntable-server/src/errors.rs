@@ -4,16 +4,17 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use thiserror::Error;
-use turntable_collab::{AuthError, DatabaseError};
+use turntable_collab::{AuthError, DatabaseError, RoomError};
 
 pub type ServerResult<T> = Result<T, ServerError>;
 
 #[derive(Debug, Error)]
 pub enum ServerError {
+    // General
     #[error("{resource}:{identifier} not found")]
     NotFound {
         resource: &'static str,
-        identifier: &'static str,
+        identifier: String,
     },
     #[error("{resource} with {field} of value {value} already exists")]
     Conflict {
@@ -21,12 +22,22 @@ pub enum ServerError {
         field: &'static str,
         value: String,
     },
+    #[error("Unknown internal error: {0}")]
+    Unknown(String),
+    // Auth
     #[error("Invalid credentials")]
     InvalidCredentials,
     #[error("A superuser already exists")]
     SuperuserExists,
-    #[error("Unknown internal error: {0}")]
-    Unknown(String),
+    // Rooms
+    #[error("Room is not active")]
+    RoomNotActive,
+    #[error("User is not a member of this room")]
+    UserNotInRoom,
+    #[error("User does not own this stream key")]
+    StreamKeyNotOwn,
+    #[error("Stream key does not exist")]
+    StreamKeyNotFound,
 }
 
 impl ServerError {
@@ -43,6 +54,10 @@ impl ServerError {
                 resource: _,
                 identifier: _,
             } => StatusCode::NOT_FOUND,
+            Self::RoomNotActive => StatusCode::BAD_REQUEST,
+            Self::UserNotInRoom => StatusCode::FORBIDDEN,
+            Self::StreamKeyNotFound => StatusCode::NOT_FOUND,
+            Self::StreamKeyNotOwn => StatusCode::FORBIDDEN,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
@@ -76,7 +91,7 @@ impl From<DatabaseError> for ServerError {
                 identifier,
             } => Self::NotFound {
                 resource,
-                identifier,
+                identifier: identifier.to_string(),
             },
             DatabaseError::Conflict {
                 resource,
@@ -87,6 +102,22 @@ impl From<DatabaseError> for ServerError {
                 field,
                 value,
             },
+            e => Self::Unknown(e.to_string()),
+        }
+    }
+}
+
+impl From<RoomError> for ServerError {
+    fn from(value: RoomError) -> Self {
+        match value {
+            RoomError::RoomNotFound(identifer) => Self::NotFound {
+                resource: "room",
+                identifier: identifer,
+            },
+            RoomError::RoomNotActive => Self::RoomNotActive,
+            RoomError::UserNotInRoom => Self::UserNotInRoom,
+            RoomError::StreamKeyNotFound => Self::StreamKeyNotFound,
+            RoomError::StreamKeyNotOwn => Self::StreamKeyNotOwn,
             e => Self::Unknown(e.to_string()),
         }
     }

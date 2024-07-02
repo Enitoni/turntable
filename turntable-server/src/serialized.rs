@@ -1,9 +1,11 @@
 //! All schemas that are exposed from endpoints are defined here
 //! along with the From<T> impls
 
+use std::sync::Arc;
+
 use schemars::JsonSchema;
 use serde::Serialize;
-use turntable_collab::{PrimaryKey, SessionData, UserData};
+use turntable_collab::{PrimaryKey, Room as CollabRoom, SessionData, UserData};
 
 #[derive(Debug, Serialize, JsonSchema)]
 pub struct User {
@@ -16,6 +18,13 @@ pub struct User {
 pub struct LoginResult {
     token: String,
     user: User,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct Room {
+    id: PrimaryKey,
+    title: String,
+    description: Option<String>,
 }
 
 /// Helper trait to convert any type into a serialized version
@@ -41,6 +50,18 @@ impl ToSerialized<LoginResult> for SessionData {
         LoginResult {
             token: self.token.clone(),
             user: self.user.to_serialized(),
+        }
+    }
+}
+
+impl ToSerialized<Room> for Arc<CollabRoom> {
+    fn to_serialized(&self) -> Room {
+        let data = self.data();
+
+        Room {
+            id: data.id,
+            title: data.title,
+            description: data.description,
         }
     }
 }

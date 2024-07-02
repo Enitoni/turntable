@@ -16,6 +16,7 @@ use turntable_collab::Collab;
 mod auth;
 mod context;
 mod errors;
+mod rooms;
 mod schemas;
 mod serialized;
 
@@ -42,7 +43,9 @@ pub async fn run_server(collab: Collab) {
         .allow_methods(Any)
         .allow_headers(Any);
 
-    let version_one_router = Router::new().nest("/auth", auth::router());
+    let version_one_router = Router::new()
+        .nest("/auth", auth::router())
+        .merge(rooms::router());
 
     let root_router = Router::new()
         .nest("/v1", version_one_router)
