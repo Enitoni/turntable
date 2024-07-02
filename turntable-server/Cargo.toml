@@ -10,6 +10,7 @@ turntable-collab = { path = "../turntable-collab" }
 turntable-core = { path = "../turntable-core" }
 
 schemars = "0.8.21"
+validator = "0.18.1"
 axum = { version = "0.7.5", features = ["macros"] }
 aide = { version = "0.13.4", features = ["axum"] }
 tower-http = { version = "0.5.2", features = ["cors"] }
