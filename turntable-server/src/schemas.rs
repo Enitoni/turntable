@@ -40,6 +40,13 @@ pub struct NewRoomSchema {
     pub description: Option<String>,
 }
 
+#[derive(Debug, ToSchema, Validate, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct NewStreamKeySchema {
+    #[validate(length(min = 2, max = 24))]
+    pub source: String,
+}
+
 pub struct ValidatedJson<T>(pub T);
 
 #[async_trait]

@@ -6,7 +6,7 @@ use std::sync::Arc;
 use serde::Serialize;
 use turntable_collab::{
     Room as CollabRoom, RoomConnection as CollabRoomConnection, RoomMemberData, SessionData,
-    UserData,
+    StreamKeyData, UserData,
 };
 use utoipa::ToSchema;
 
@@ -43,6 +43,15 @@ pub struct RoomMember {
 pub struct RoomConnection {
     user_id: i32,
     source: String,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct StreamKey {
+    id: i32,
+    token: String,
+    source: String,
+    room_id: i32,
+    user_id: i32,
 }
 
 /// Helper trait to convert any type into a serialized version
@@ -111,6 +120,18 @@ impl ToSerialized<RoomConnection> for CollabRoomConnection {
         RoomConnection {
             user_id: self.user_id,
             source: self.source.clone(),
+        }
+    }
+}
+
+impl ToSerialized<StreamKey> for StreamKeyData {
+    fn to_serialized(&self) -> StreamKey {
+        StreamKey {
+            id: self.id,
+            token: self.token.clone(),
+            source: self.source.clone(),
+            room_id: self.room_id,
+            user_id: self.user_id,
         }
     }
 }
