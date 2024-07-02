@@ -53,7 +53,21 @@ where
     }
 }
 
-impl<T> OperationInput for ValidatedJson<T> {}
+impl<T> OperationInput for ValidatedJson<T>
+where
+    T: JsonSchema,
+{
+    fn inferred_early_responses(
+        ctx: &mut aide::gen::GenContext,
+        operation: &mut aide::openapi::Operation,
+    ) -> Vec<(Option<u16>, aide::openapi::Response)> {
+        Json::<T>::inferred_early_responses(ctx, operation)
+    }
+
+    fn operation_input(ctx: &mut aide::gen::GenContext, operation: &mut aide::openapi::Operation) {
+        Json::<T>::operation_input(ctx, operation)
+    }
+}
 
 impl<T> JsonSchema for ValidatedJson<T>
 where
