@@ -1,4 +1,5 @@
 use std::{
+    convert::Infallible,
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
@@ -55,6 +56,11 @@ impl RoomConnectionHandle {
             stream,
         }
     }
+
+    /// Get the content type of the stream
+    pub fn content_type(&self) -> String {
+        self.stream.content_type()
+    }
 }
 
 impl Drop for RoomConnectionHandle {
@@ -66,7 +72,7 @@ impl Drop for RoomConnectionHandle {
 }
 
 impl Stream for RoomConnectionHandle {
-    type Item = Vec<u8>;
+    type Item = Result<Vec<u8>, Infallible>;
 
     fn poll_next(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let mut buf = vec![0; 2048];
@@ -79,7 +85,7 @@ impl Stream for RoomConnectionHandle {
                 // Remove the empty data from the vec, if any
                 buf.drain(amount..);
 
-                Poll::Ready(Some(buf))
+                Poll::Ready(Some(Ok(buf)))
             }
         }
     }
