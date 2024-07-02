@@ -1,5 +1,6 @@
 use aide::{
-    axum::{routing::get, IntoApiResponse},
+    axum::{routing::get_with, IntoApiResponse},
+    transform::TransformOperation,
     OperationInput,
 };
 use axum::{
@@ -57,6 +58,20 @@ impl FromRequestParts<ServerContext> for Session {
     }
 }
 
+/// A helper function to add auth information to routes
+fn with_auth(transform: TransformOperation) -> TransformOperation {
+    transform
+        .security_requirement("http")
+        .response_with::<401, String, _>(|r| {
+            r.description("Request refused because of missing authorization")
+                .example("Missing authorization")
+        })
+        .response_with::<400, String, _>(|r| {
+            r.description("Request refused because Authorization header is incorrect")
+                .example("Authorization must be Bearer")
+        })
+}
+
 impl OperationInput for Session {}
 
 #[debug_handler(state = ServerContext)]
@@ -65,5 +80,10 @@ async fn user(session: Session) -> impl IntoApiResponse {
 }
 
 pub fn router() -> Router {
-    Router::new().api_route("/user", get(user))
+    Router::new().api_route(
+        "/user",
+        get_with(user, |op| {
+            with_auth(op.description("Gets the user associated with the supplied session"))
+        }),
+    )
 }
