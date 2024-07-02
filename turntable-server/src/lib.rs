@@ -13,6 +13,7 @@ use tower_http::cors::{Any, CorsLayer};
 use turntable_collab::Collab;
 
 mod auth;
+mod serialized;
 
 /// The default port the server will listen on.
 pub const DEFAULT_PORT: u16 = 9050;
