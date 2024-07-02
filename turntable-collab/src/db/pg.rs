@@ -33,7 +33,7 @@ impl PgDatabase {
                 users.display_name,
                 users.superuser
             FROM room_members
-                INNER JOIN users ON room_members.id = users.id
+                INNER JOIN users ON room_members.user_id = users.id
             WHERE room_id = $1",
             room_id
         )
