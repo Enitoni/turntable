@@ -40,3 +40,16 @@ where
 }
 
 impl<T> OperationInput for ValidatedJson<T> {}
+
+impl<T> JsonSchema for ValidatedJson<T>
+where
+    T: JsonSchema,
+{
+    fn schema_name() -> String {
+        T::schema_name()
+    }
+
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        T::json_schema(gen)
+    }
+}
