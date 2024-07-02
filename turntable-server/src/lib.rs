@@ -87,7 +87,7 @@ fn bearer_security() -> (String, ReferenceOr<SecurityScheme>) {
         "BearerAuth".to_string(),
         ReferenceOr::Item(SecurityScheme::Http {
             scheme: "bearer".to_string(),
-            bearer_format: None,
+            bearer_format: Some("Bearer <token>".to_string()),
             description: None,
             extensions: [].into(),
         }),
