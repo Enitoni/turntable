@@ -4,7 +4,10 @@
 use std::sync::Arc;
 
 use serde::Serialize;
-use turntable_collab::{Room as CollabRoom, SessionData, UserData};
+use turntable_collab::{
+    Room as CollabRoom, RoomConnection as CollabRoomConnection, RoomMemberData, SessionData,
+    UserData,
+};
 use utoipa::ToSchema;
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -25,6 +28,21 @@ pub struct Room {
     id: i32,
     title: String,
     description: Option<String>,
+    members: Vec<RoomMember>,
+    connections: Vec<RoomConnection>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct RoomMember {
+    id: i32,
+    owner: bool,
+    user: User,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct RoomConnection {
+    user_id: i32,
+    source: String,
 }
 
 /// Helper trait to convert any type into a serialized version
@@ -33,6 +51,16 @@ where
     T: Serialize,
 {
     fn to_serialized(&self) -> T;
+}
+
+impl<I, O> ToSerialized<Vec<O>> for Vec<I>
+where
+    I: ToSerialized<O>,
+    O: Serialize,
+{
+    fn to_serialized(&self) -> Vec<O> {
+        self.iter().map(|x| x.to_serialized()).collect()
+    }
 }
 
 impl ToSerialized<User> for UserData {
@@ -62,6 +90,27 @@ impl ToSerialized<Room> for Arc<CollabRoom> {
             id: data.id,
             title: data.title,
             description: data.description,
+            members: data.members.to_serialized(),
+            connections: self.current_connections().to_serialized(),
+        }
+    }
+}
+
+impl ToSerialized<RoomMember> for RoomMemberData {
+    fn to_serialized(&self) -> RoomMember {
+        RoomMember {
+            id: self.id,
+            owner: self.owner,
+            user: self.user.to_serialized(),
+        }
+    }
+}
+
+impl ToSerialized<RoomConnection> for CollabRoomConnection {
+    fn to_serialized(&self) -> RoomConnection {
+        RoomConnection {
+            user_id: self.user_id,
+            source: self.source.clone(),
         }
     }
 }
