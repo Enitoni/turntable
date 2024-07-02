@@ -78,6 +78,16 @@ impl RoomManager {
             .ok_or(RoomError::RoomNotFound)
     }
 
+    /// Returns a room by slug if it exists
+    pub fn room_by_slug(&self, slug: &str) -> Result<Arc<Room>, RoomError> {
+        self.context
+            .rooms
+            .iter()
+            .find(|r| r.data().slug == slug)
+            .map(|r| r.clone())
+            .ok_or(RoomError::RoomNotFound)
+    }
+
     /// Get all rooms in memory
     pub fn list_all(&self) -> Vec<Arc<Room>> {
         self.context.rooms.iter().map(|r| r.clone()).collect()
