@@ -3782,6 +3782,7 @@ name = "turntable-server"
 version = "0.1.0"
 dependencies = [
  "aide",
+ "async-trait",
  "axum 0.7.5",
  "serde",
  "serde_json",
