@@ -133,7 +133,7 @@ pub struct NewSession {
 pub struct NewRoom {
     pub slug: String,
     pub title: String,
-    pub description: String,
+    pub description: Option<String>,
     /// The owner of the new room
     pub user_id: PrimaryKey,
 }
