@@ -466,7 +466,12 @@ impl Database for PgDatabase {
             .as_str(),
         )?;
 
-        todo!()
+        query_as!(StreamKeyData, "INSERT INTO stream_keys (token, source, room_id, user_id) VALUES ($1, $2, $3, $4) RETURNING *",
+            new_key.token,
+            new_key.source,
+            new_key.room_id,
+            new_key.user_id
+        ).fetch_one(&self.pool).await.map_err(|e| e.any())
     }
 
     async fn list_stream_keys(
