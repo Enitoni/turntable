@@ -15,6 +15,7 @@ use turntable_collab::Collab;
 
 mod auth;
 mod context;
+mod errors;
 mod schemas;
 mod serialized;
 

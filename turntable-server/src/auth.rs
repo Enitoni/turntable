@@ -15,8 +15,9 @@ use axum::{
 use turntable_collab::{Credentials, NewPlainUser, SessionData, UserData};
 
 use crate::{
+    errors::ServerResult,
     schemas::{LoginSchema, RegisterSchema, ValidatedJson},
-    serialized::ToSerialized,
+    serialized::{LoginResult, ToSerialized, User},
     Router, ServerContext,
 };
 
@@ -88,7 +89,7 @@ async fn user(session: Session) -> impl IntoApiResponse {
 async fn register(
     context: ServerContext,
     ValidatedJson(body): ValidatedJson<RegisterSchema>,
-) -> impl IntoApiResponse {
+) -> ServerResult<Json<User>> {
     let new_user = context
         .collab
         .auth
@@ -97,16 +98,15 @@ async fn register(
             password: body.password,
             display_name: body.display_name,
         })
-        .await
-        .expect("handle this later");
+        .await?;
 
-    Json(new_user.to_serialized())
+    Ok(Json(new_user.to_serialized()))
 }
 
 async fn login(
     context: ServerContext,
     ValidatedJson(body): ValidatedJson<LoginSchema>,
-) -> impl IntoApiResponse {
+) -> ServerResult<Json<LoginResult>> {
     let session = context
         .collab
         .auth
@@ -114,19 +114,14 @@ async fn login(
             username: body.username,
             password: body.password,
         })
-        .await
-        .expect("handle this later");
+        .await?;
 
-    Json(session.to_serialized())
+    Ok(Json(session.to_serialized()))
 }
 
-async fn logout(context: ServerContext, session: Session) -> impl IntoApiResponse {
-    context
-        .collab
-        .auth
-        .logout(&session.0.token)
-        .await
-        .expect("handle this later")
+async fn logout(context: ServerContext, session: Session) -> ServerResult<()> {
+    context.collab.auth.logout(&session.0.token).await?;
+    Ok(())
 }
 
 pub fn router() -> Router {
