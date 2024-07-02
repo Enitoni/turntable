@@ -1,5 +1,8 @@
 use aide::{
-    axum::{routing::get_with, IntoApiResponse},
+    axum::{
+        routing::{get_with, post_with},
+        IntoApiResponse,
+    },
     transform::TransformOperation,
     OperationInput,
 };
@@ -9,9 +12,13 @@ use axum::{
     http::{header, request::Parts, StatusCode},
     Json,
 };
-use turntable_collab::{SessionData, UserData};
+use turntable_collab::{Credentials, NewPlainUser, SessionData, UserData};
 
-use crate::{serialized::ToSerialized, Router, ServerContext};
+use crate::{
+    schemas::{LoginSchema, RegisterSchema, ValidatedJson},
+    serialized::ToSerialized,
+    Router, ServerContext,
+};
 
 /// Wraps [SessionData] so [FromRequestParts] can be implemented for it
 pub struct Session(SessionData);
@@ -78,11 +85,68 @@ async fn user(session: Session) -> impl IntoApiResponse {
     Json(session.user().to_serialized())
 }
 
+async fn register(
+    context: ServerContext,
+    ValidatedJson(body): ValidatedJson<RegisterSchema>,
+) -> impl IntoApiResponse {
+    let new_user = context
+        .collab
+        .auth
+        .register_superuser(NewPlainUser {
+            username: body.username,
+            password: body.password,
+            display_name: body.display_name,
+        })
+        .await
+        .expect("handle this later");
+
+    Json(new_user.to_serialized())
+}
+
+async fn login(
+    context: ServerContext,
+    ValidatedJson(body): ValidatedJson<LoginSchema>,
+) -> impl IntoApiResponse {
+    let session = context
+        .collab
+        .auth
+        .login(Credentials {
+            username: body.username,
+            password: body.password,
+        })
+        .await
+        .expect("handle this later");
+
+    Json(session.to_serialized())
+}
+
+async fn logout(context: ServerContext, session: Session) -> impl IntoApiResponse {
+    context
+        .collab
+        .auth
+        .logout(&session.0.token)
+        .await
+        .expect("handle this later")
+}
+
 pub fn router() -> Router {
-    Router::new().api_route(
-        "/user",
-        get_with(user, |op| {
-            with_auth(op.description("Gets the user associated with the supplied session"))
-        }),
-    )
+    Router::new()
+        .api_route(
+            "/user",
+            get_with(user, |op| {
+                with_auth(op.description("Gets the user associated with the supplied session"))
+            }),
+        )
+        .api_route(
+            "/register",
+            post_with(register, |op| {
+                op.description("Register a new user via an invite or a superuser without an invite")
+            }),
+        )
+        .api_route("/login", post_with(login, |op| {
+            op.description("Creates a new session with the given credentials and returns an authentication token")
+        }))
+        .api_route("/logout", post_with(logout, |op| {
+            with_auth(op.description("Logs out of a session, deleting it"))
+        }))
 }
