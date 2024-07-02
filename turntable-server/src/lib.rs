@@ -16,6 +16,7 @@ mod errors;
 mod rooms;
 mod schemas;
 mod serialized;
+mod streaming;
 
 /// The default port the server will listen on.
 pub const DEFAULT_PORT: u16 = 9050;
@@ -41,7 +42,8 @@ pub async fn run_server(collab: Collab) {
 
     let version_one_router = Router::new()
         .nest("/auth", auth::router())
-        .nest("/rooms", rooms::router());
+        .nest("/rooms", rooms::router())
+        .nest("/streams", streaming::router());
 
     let root_router = Router::new()
         .nest("/v1", version_one_router)
