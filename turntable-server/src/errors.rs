@@ -113,7 +113,7 @@ impl From<RoomError> for ServerError {
             RoomError::UserNotInRoom => Self::UserNotInRoom,
             RoomError::StreamKeyNotFound => Self::StreamKeyNotFound,
             RoomError::StreamKeyNotOwn => Self::StreamKeyNotOwn,
-            e => Self::Unknown(e.to_string()),
+            RoomError::Database(e) => e.into(),
         }
     }
 }
