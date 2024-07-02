@@ -1,10 +1,11 @@
 //! All schemas that are exposed from endpoints are defined here
 //! along with the From<T> impls
 
+use schemars::JsonSchema;
 use serde::Serialize;
 use turntable_collab::{PrimaryKey, UserData};
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, JsonSchema)]
 pub struct User {
     id: PrimaryKey,
     username: String,
