@@ -1,3 +1,5 @@
+use std::ops::Deref;
+
 use axum::{
     async_trait,
     extract::{FromRef, FromRequestParts},
@@ -21,7 +23,15 @@ pub struct Session(SessionData);
 impl Session {
     /// Returns the user of the session
     pub fn user(&self) -> UserData {
-        self.0.user.clone()
+        self.user.clone()
+    }
+}
+
+impl Deref for Session {
+    type Target = SessionData;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 
@@ -138,7 +148,7 @@ async fn login(
     )
 )]
 async fn logout(context: ServerContext, session: Session) -> ServerResult<()> {
-    context.collab.auth.logout(&session.0.token).await?;
+    context.collab.auth.logout(&session.token).await?;
     Ok(())
 }
 
