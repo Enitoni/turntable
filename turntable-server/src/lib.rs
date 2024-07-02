@@ -2,7 +2,7 @@ use aide::{
     axum::{routing::get, ApiRouter, IntoApiResponse},
     openapi::{Info, OpenApi},
 };
-use axum::{extract::State, Extension, Json};
+use axum::{Extension, Json};
 use std::{
     env,
     net::{Ipv6Addr, SocketAddr},
@@ -11,6 +11,8 @@ use std::{
 use tokio::net::TcpListener;
 use tower_http::cors::{Any, CorsLayer};
 use turntable_collab::Collab;
+
+mod auth;
 
 /// The default port the server will listen on.
 pub const DEFAULT_PORT: u16 = 9050;
