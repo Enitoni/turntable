@@ -15,7 +15,7 @@ use turntable_collab::Collab;
 /// The default port the server will listen on.
 pub const DEFAULT_PORT: u16 = 9050;
 
-pub type Context = State<Arc<Collab>>;
+pub type ServerContext = Arc<Collab>;
 pub type Router = ApiRouter<Arc<Collab>>;
 pub type Api = OpenApi;
 
