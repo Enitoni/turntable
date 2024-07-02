@@ -27,8 +27,8 @@ pub enum AuthError {
     /// Something else went wrong with the database
     #[error(transparent)]
     Db(DatabaseError),
-    #[error(transparent)]
-    HashError(argon2::password_hash::Error),
+    #[error("HashError: {0}")]
+    HashError(String),
 }
 
 impl<Db> Auth<Db>
@@ -61,7 +61,7 @@ where
             })?;
 
         let stored_password = PasswordHash::parse(&user.password, Encoding::default())
-            .map_err(AuthError::HashError)?;
+            .map_err(|e| AuthError::HashError(e.to_string()))?;
 
         self.argon
             .verify_password(credentials.password.as_bytes(), &stored_password)
@@ -137,7 +137,7 @@ where
         let hashed_password = self
             .argon
             .hash_password(new_user.password.as_bytes(), &salt)
-            .map_err(AuthError::HashError)?
+            .map_err(|e| AuthError::HashError(e.to_string()))?
             .to_string();
 
         self.db
