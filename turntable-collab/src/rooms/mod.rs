@@ -20,8 +20,8 @@ pub struct RoomManager {
 
 #[derive(Debug, Error)]
 pub enum RoomError {
-    #[error("Room does not exist")]
-    RoomNotFound,
+    #[error("Room {0} does not exist")]
+    RoomNotFound(String),
     #[error("Room is not active")]
     RoomNotActive,
     #[error("User is not a member of this room")]
@@ -75,7 +75,7 @@ impl RoomManager {
             .rooms
             .get(&room_id)
             .map(|r| r.clone())
-            .ok_or(RoomError::RoomNotFound)
+            .ok_or(RoomError::RoomNotFound(room_id.to_string()))
     }
 
     /// Returns a room by slug if it exists
@@ -85,7 +85,7 @@ impl RoomManager {
             .iter()
             .find(|r| r.data().slug == slug)
             .map(|r| r.clone())
-            .ok_or(RoomError::RoomNotFound)
+            .ok_or(RoomError::RoomNotFound(slug.to_string()))
     }
 
     /// Get all rooms in memory
