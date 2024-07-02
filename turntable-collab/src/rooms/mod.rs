@@ -132,11 +132,7 @@ impl RoomManager {
     }
 
     /// Connects to a room and returns a connection handle using a stream key token
-    pub async fn connect(
-        &self,
-        for_user_id: PrimaryKey,
-        token: String,
-    ) -> Result<RoomConnectionHandle, RoomError> {
+    pub async fn connect(&self, token: String) -> Result<RoomConnectionHandle, RoomError> {
         let stream_key = self
             .context
             .database
@@ -149,10 +145,6 @@ impl RoomManager {
                 } => RoomError::StreamKeyNotFound,
                 e => RoomError::Database(e),
             })?;
-
-        if stream_key.user_id != for_user_id {
-            return Err(RoomError::StreamKeyNotOwn);
-        }
 
         let room = self.room_by_id(stream_key.room_id)?;
         let handle = room.connect(stream_key.user_id, stream_key.source)?;
