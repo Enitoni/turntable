@@ -4,7 +4,7 @@ use aide::{
     OperationInput,
 };
 use axum::{
-    async_trait, debug_handler,
+    async_trait,
     extract::{FromRef, FromRequestParts},
     http::{header, request::Parts, StatusCode},
     Json,
@@ -74,7 +74,6 @@ fn with_auth(transform: TransformOperation) -> TransformOperation {
 
 impl OperationInput for Session {}
 
-#[debug_handler(state = ServerContext)]
 async fn user(session: Session) -> impl IntoApiResponse {
     Json(session.user().to_serialized())
 }

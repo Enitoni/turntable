@@ -2,7 +2,8 @@ use aide::{
     axum::{routing::get, ApiRouter, IntoApiResponse},
     openapi::{Components, Info, OpenApi, ReferenceOr, SecurityScheme},
 };
-use axum::{extract::FromRef, Extension, Json};
+use axum::{Extension, Json};
+use context::ServerContext;
 use std::{
     env,
     net::{Ipv6Addr, SocketAddr},
@@ -13,16 +14,12 @@ use tower_http::cors::{Any, CorsLayer};
 use turntable_collab::Collab;
 
 mod auth;
+mod context;
 mod schemas;
 mod serialized;
 
 /// The default port the server will listen on.
 pub const DEFAULT_PORT: u16 = 9050;
-
-#[derive(Clone, FromRef)]
-struct ServerContext {
-    pub collab: Arc<Collab>,
-}
 
 type Router = ApiRouter<ServerContext>;
 type Api = OpenApi;
