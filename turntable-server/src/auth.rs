@@ -148,5 +148,7 @@ pub fn router() -> Router {
         }))
         .api_route("/logout", post_with(logout, |op| {
             with_auth(op.description("Logs out of a session, deleting it"))
-        }))
+        })).with_path_items(|op| {
+            op.tag("auth")
+        })
 }
