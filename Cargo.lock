@@ -3784,7 +3784,6 @@ dependencies = [
  "aide",
  "async-trait",
  "axum 0.7.5",
- "indexmap 2.2.6",
  "schemars",
  "serde",
  "serde_json",

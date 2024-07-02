@@ -1,6 +1,6 @@
 use aide::{
     axum::{routing::get, ApiRouter, IntoApiResponse},
-    openapi::{Info, OpenApi},
+    openapi::{Components, Info, OpenApi, ReferenceOr, SecurityScheme},
 };
 use axum::{extract::FromRef, Extension, Json};
 use std::{
@@ -73,8 +73,25 @@ fn setup_api() -> OpenApi {
             description: Some("Exposes endpoints to interact with a turntable server".to_string()),
             ..Default::default()
         },
+        components: Some(Components {
+            security_schemes: [bearer_security()].into(),
+            ..Default::default()
+        }),
+        security: vec![],
         ..Default::default()
     }
+}
+
+fn bearer_security() -> (String, ReferenceOr<SecurityScheme>) {
+    (
+        "BearerAuth".to_string(),
+        ReferenceOr::Item(SecurityScheme::Http {
+            scheme: "bearer".to_string(),
+            bearer_format: None,
+            description: None,
+            extensions: [].into(),
+        }),
+    )
 }
 
 async fn serve_api(Extension(api): Extension<Api>) -> impl IntoApiResponse {
