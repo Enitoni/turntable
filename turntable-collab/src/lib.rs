@@ -10,6 +10,7 @@ use auth::Auth;
 use rooms::{Room, RoomId, RoomManager};
 use std::sync::Arc;
 
+pub use auth::{AuthError, Credentials, NewPlainUser};
 pub use db::*;
 pub use input::*;
 pub use queues::*;
