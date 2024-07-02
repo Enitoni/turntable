@@ -1,11 +1,16 @@
+use aide::{
+    axum::{routing::get, IntoApiResponse},
+    OperationInput,
+};
 use axum::{
-    async_trait,
+    async_trait, debug_handler,
     extract::{FromRef, FromRequestParts},
     http::{header, request::Parts, StatusCode},
+    Json,
 };
 use turntable_collab::{SessionData, UserData};
 
-use crate::ServerContext;
+use crate::{serialized::ToSerialized, Router, ServerContext};
 
 /// Wraps [SessionData] so [FromRequestParts] can be implemented for it
 pub struct Session(SessionData);
@@ -18,14 +23,13 @@ impl Session {
 }
 
 #[async_trait]
-impl<S> FromRequestParts<S> for Session
-where
-    ServerContext: FromRef<S>,
-    S: Send + Sync,
-{
+impl FromRequestParts<ServerContext> for Session {
     type Rejection = (StatusCode, &'static str);
 
-    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &ServerContext,
+    ) -> Result<Self, Self::Rejection> {
         let context = ServerContext::from_ref(state);
 
         let token = parts
@@ -43,6 +47,7 @@ where
         let token = parts.last().cloned().unwrap_or_default();
 
         let session = context
+            .collab
             .auth
             .session(token)
             .await
@@ -50,4 +55,15 @@ where
 
         Ok(Self(session))
     }
+}
+
+impl OperationInput for Session {}
+
+#[debug_handler(state = ServerContext)]
+async fn user(session: Session) -> impl IntoApiResponse {
+    Json(session.user().to_serialized())
+}
+
+pub fn router() -> Router {
+    Router::new().api_route("/user", get(user))
 }

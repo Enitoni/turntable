@@ -23,8 +23,8 @@ struct ServerContext {
     pub collab: Arc<Collab>,
 }
 
-pub type Router = ApiRouter<ServerContext>;
-pub type Api = OpenApi;
+type Router = ApiRouter<ServerContext>;
+type Api = OpenApi;
 
 /// Starts the turntable server
 pub async fn run_server(collab: Collab) {
@@ -43,7 +43,7 @@ pub async fn run_server(collab: Collab) {
         .allow_methods(Any)
         .allow_headers(Any);
 
-    let version_one_router = Router::new();
+    let version_one_router = Router::new().nest("/auth", auth::router());
 
     let root_router = Router::new()
         .nest("/v1", version_one_router)
