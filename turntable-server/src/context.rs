@@ -1,5 +1,6 @@
 use std::{convert::Infallible, sync::Arc};
 
+use aide::OperationInput;
 use axum::{
     async_trait,
     extract::{FromRef, FromRequestParts},
@@ -25,3 +26,5 @@ impl FromRequestParts<ServerContext> for ServerContext {
         Ok(context)
     }
 }
+
+impl OperationInput for ServerContext {}
