@@ -12,20 +12,20 @@ use validator::Validate;
 #[derive(Debug, JsonSchema, Validate, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct LoginSchema {
-    #[validate(length(max = 1024))]
+    #[validate(length(max = 128))]
     pub username: String,
-    #[validate(length(max = 1024))]
+    #[validate(length(max = 64))]
     pub password: String,
 }
 
 #[derive(Debug, JsonSchema, Validate, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct RegisterSchema {
-    #[validate(length(min = 2, max = 1024))]
+    #[validate(length(min = 2, max = 128))]
     pub display_name: String,
-    #[validate(length(min = 2, max = 1024))]
+    #[validate(length(min = 2, max = 128))]
     pub username: String,
-    #[validate(length(min = 8, max = 1024))]
+    #[validate(length(min = 8, max = 64))]
     pub password: String,
 }
 
