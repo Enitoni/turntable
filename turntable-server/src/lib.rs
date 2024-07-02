@@ -6,7 +6,6 @@ use axum::{Extension, Json};
 use std::{
     env,
     net::{Ipv6Addr, SocketAddr},
-    sync::Arc,
 };
 use tokio::net::TcpListener;
 use tower_http::cors::{Any, CorsLayer};
@@ -15,7 +14,7 @@ use tower_http::cors::{Any, CorsLayer};
 pub const DEFAULT_PORT: u16 = 9050;
 
 pub type Router = ApiRouter<()>;
-pub type Api = Arc<OpenApi>;
+pub type Api = OpenApi;
 
 /// Starts the turntable server
 pub async fn run_server() {
@@ -45,7 +44,7 @@ pub async fn run_server() {
         listener,
         root_router
             .finish_api(&mut api)
-            .layer(Extension(Arc::new(api)))
+            .layer(Extension(api))
             .into_make_service(),
     )
     .await
