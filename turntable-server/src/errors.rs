@@ -1,4 +1,3 @@
-use aide::OperationOutput;
 use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
@@ -67,10 +66,6 @@ impl IntoResponse for ServerError {
     fn into_response(self) -> Response {
         (self.as_status_code(), self.to_string()).into_response()
     }
-}
-
-impl OperationOutput for ServerError {
-    type Inner = Self;
 }
 
 impl From<AuthError> for ServerError {

@@ -1,8 +1,4 @@
-use aide::{
-    axum::{routing::get, ApiRouter, IntoApiResponse},
-    openapi::{Components, Info, OpenApi, ReferenceOr, SecurityScheme},
-};
-use axum::{Extension, Json};
+use axum::{routing::get, Router as AxumRouter};
 use context::ServerContext;
 use std::{
     env,
@@ -15,6 +11,7 @@ use turntable_collab::Collab;
 
 mod auth;
 mod context;
+mod docs;
 mod errors;
 mod rooms;
 mod schemas;
@@ -23,8 +20,7 @@ mod serialized;
 /// The default port the server will listen on.
 pub const DEFAULT_PORT: u16 = 9050;
 
-type Router = ApiRouter<ServerContext>;
-type Api = OpenApi;
+type Router = AxumRouter<ServerContext>;
 
 /// Starts the turntable server
 pub async fn run_server(collab: Collab) {
@@ -45,57 +41,17 @@ pub async fn run_server(collab: Collab) {
 
     let version_one_router = Router::new()
         .nest("/auth", auth::router())
-        .merge(rooms::router());
+        .nest("/rooms", rooms::router());
 
     let root_router = Router::new()
         .nest("/v1", version_one_router)
-        .route("/api.json", get(serve_api))
+        .route("/api.json", get(docs::docs))
         .with_state(context)
         .layer(cors);
 
     let listener = TcpListener::bind(&addr).await.expect("listens on address");
 
-    let mut api = setup_api();
-
-    axum::serve(
-        listener,
-        root_router
-            .finish_api(&mut api)
-            .layer(Extension(Arc::new(api)))
-            .into_make_service(),
-    )
-    .await
-    .unwrap();
-}
-
-fn setup_api() -> OpenApi {
-    OpenApi {
-        info: Info {
-            title: "turntable API".to_string(),
-            description: Some("Exposes endpoints to interact with a turntable server".to_string()),
-            ..Default::default()
-        },
-        components: Some(Components {
-            security_schemes: [bearer_security()].into(),
-            ..Default::default()
-        }),
-        security: vec![],
-        ..Default::default()
-    }
-}
-
-fn bearer_security() -> (String, ReferenceOr<SecurityScheme>) {
-    (
-        "BearerAuth".to_string(),
-        ReferenceOr::Item(SecurityScheme::Http {
-            scheme: "bearer".to_string(),
-            bearer_format: Some("Bearer <token>".to_string()),
-            description: None,
-            extensions: [].into(),
-        }),
-    )
-}
-
-async fn serve_api(Extension(api): Extension<Arc<Api>>) -> impl IntoApiResponse {
-    Json(api)
+    axum::serve(listener, root_router.into_make_service())
+        .await
+        .unwrap();
 }

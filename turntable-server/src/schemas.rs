@@ -1,15 +1,15 @@
-use aide::OperationInput;
 use axum::{
     async_trait,
     extract::{FromRequest, Request},
     http::StatusCode,
     Json,
 };
-use schemars::{gen::SchemaGenerator, schema::Schema, JsonSchema};
+
 use serde::{de::DeserializeOwned, Deserialize};
+use utoipa::ToSchema;
 use validator::Validate;
 
-#[derive(Debug, JsonSchema, Validate, Deserialize)]
+#[derive(Debug, ToSchema, Validate, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct LoginSchema {
     #[validate(length(max = 128))]
@@ -18,7 +18,7 @@ pub struct LoginSchema {
     pub password: String,
 }
 
-#[derive(Debug, JsonSchema, Validate, Deserialize)]
+#[derive(Debug, ToSchema, Validate, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct RegisterSchema {
     #[validate(length(min = 2, max = 128))]
@@ -50,34 +50,5 @@ where
             .map_err(|_| (StatusCode::BAD_REQUEST, "Request body is invalid"))?;
 
         Ok(Self(extracted_json.0))
-    }
-}
-
-impl<T> OperationInput for ValidatedJson<T>
-where
-    T: JsonSchema,
-{
-    fn inferred_early_responses(
-        ctx: &mut aide::gen::GenContext,
-        operation: &mut aide::openapi::Operation,
-    ) -> Vec<(Option<u16>, aide::openapi::Response)> {
-        Json::<T>::inferred_early_responses(ctx, operation)
-    }
-
-    fn operation_input(ctx: &mut aide::gen::GenContext, operation: &mut aide::openapi::Operation) {
-        Json::<T>::operation_input(ctx, operation)
-    }
-}
-
-impl<T> JsonSchema for ValidatedJson<T>
-where
-    T: JsonSchema,
-{
-    fn schema_name() -> String {
-        T::schema_name()
-    }
-
-    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
-        T::json_schema(gen)
     }
 }

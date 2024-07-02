@@ -1,15 +1,25 @@
-use aide::axum::{routing::get_with, IntoApiResponse};
-use axum::{extract::Path, Json};
+use axum::{extract::Path, response::IntoResponse, routing::get, Json};
 
 use crate::{
-    auth::{with_auth, Session},
+    auth::Session,
     context::ServerContext,
     errors::ServerResult,
     serialized::{Room, ToSerialized},
     Router,
 };
 
-async fn list_rooms(_session: Session, context: ServerContext) -> impl IntoApiResponse {
+#[utoipa::path(
+    get, 
+    path = "/v1/rooms",
+    tag = "rooms",
+    security(
+        ("BearerAuth" = [])
+    ),
+    responses(
+        (status = 200, body = Vec<Room>)
+    )
+)]
+async fn list_rooms(_session: Session, context: ServerContext) -> impl IntoResponse {
     let rooms: Vec<_> = context
         .collab
         .rooms
@@ -21,6 +31,17 @@ async fn list_rooms(_session: Session, context: ServerContext) -> impl IntoApiRe
     Json(rooms)
 }
 
+#[utoipa::path(
+    get, 
+    path = "/v1/rooms/{slug}",
+    tag = "rooms",
+    security(
+        ("BearerAuth" = [])
+    ),
+    responses(
+        (status = 200, body = Room)
+    )
+)]
 async fn room(
     _session: Session,
     context: ServerContext,
@@ -33,20 +54,6 @@ async fn room(
 
 pub fn router() -> Router {
     Router::new()
-        .api_route(
-            "/rooms",
-            get_with(list_rooms, |op| {
-                with_auth(op.description("Gets all rooms on this instance"))
-            }),
-        )
-        .api_route(
-            "/rooms/:slug",
-            get_with(room, |op| {
-                with_auth(
-                    op.description("Gets a room by its slug")
-                        .parameter::<String, _>("slug", |p| p),
-                )
-            }),
-        )
-        .with_path_items(|op| op.tag("rooms"))
+        .route("/", get(list_rooms))
+        .route("/:slug", get(room))
 }

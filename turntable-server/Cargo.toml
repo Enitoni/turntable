@@ -9,10 +9,11 @@ edition = "2021"
 turntable-collab = { path = "../turntable-collab" }
 turntable-core = { path = "../turntable-core" }
 
-schemars = "0.8.21"
+utoipa = { version = "4", features = ["axum_extras"] }
+utoipauto = "0.1.12"
+
 validator = { versions = "0.18.1", features = ["derive"] }
 axum = { version = "0.7.5", features = ["macros"] }
-aide = { version = "0.13.4", features = ["axum"] }
 tower-http = { version = "0.5.2", features = ["cors"] }
 
 tokio = { workspace = true }

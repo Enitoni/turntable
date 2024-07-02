@@ -3,26 +3,26 @@
 
 use std::sync::Arc;
 
-use schemars::JsonSchema;
 use serde::Serialize;
-use turntable_collab::{PrimaryKey, Room as CollabRoom, SessionData, UserData};
+use turntable_collab::{Room as CollabRoom, SessionData, UserData};
+use utoipa::ToSchema;
 
-#[derive(Debug, Serialize, JsonSchema)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct User {
-    id: PrimaryKey,
+    id: i32,
     username: String,
     display_name: String,
 }
 
-#[derive(Debug, Serialize, JsonSchema)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct LoginResult {
     token: String,
     user: User,
 }
 
-#[derive(Debug, Serialize, JsonSchema)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct Room {
-    id: PrimaryKey,
+    id: i32,
     title: String,
     description: Option<String>,
 }

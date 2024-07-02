@@ -1,15 +1,9 @@
-use aide::{
-    axum::{
-        routing::{get_with, post_with},
-        IntoApiResponse,
-    },
-    transform::TransformOperation,
-    OperationInput,
-};
 use axum::{
     async_trait,
     extract::{FromRef, FromRequestParts},
     http::{header, request::Parts, StatusCode},
+    response::IntoResponse,
+    routing::{get, post},
     Json,
 };
 use turntable_collab::{Credentials, NewPlainUser, SessionData, UserData};
@@ -66,26 +60,30 @@ impl FromRequestParts<ServerContext> for Session {
     }
 }
 
-/// A helper function to add auth information to routes
-pub fn with_auth(transform: TransformOperation) -> TransformOperation {
-    transform
-        .security_requirement("BearerAuth")
-        .response_with::<401, String, _>(|r| {
-            r.description("Request refused because of missing authorization")
-                .example("Missing authorization")
-        })
-        .response_with::<400, String, _>(|r| {
-            r.description("Request refused because Authorization header is incorrect")
-                .example("Authorization must be Bearer")
-        })
-}
-
-impl OperationInput for Session {}
-
-async fn user(session: Session) -> impl IntoApiResponse {
+#[utoipa::path(
+    get, 
+    path = "/v1/auth/user",
+    tag = "auth",
+    security(
+        ("BearerAuth" = [])
+    ),
+    responses(
+        (status = 200, body = User)
+    )
+)]
+async fn user(session: Session) -> impl IntoResponse {
     Json(session.user().to_serialized())
 }
 
+#[utoipa::path(
+    post,
+    path = "/v1/auth/register",
+    tag = "auth",
+    request_body = RegisterSchema,
+    responses(
+        (status = 200, body = User)
+    )
+)]
 async fn register(
     context: ServerContext,
     ValidatedJson(body): ValidatedJson<RegisterSchema>,
@@ -103,6 +101,15 @@ async fn register(
     Ok(Json(new_user.to_serialized()))
 }
 
+#[utoipa::path(
+    post,
+    path = "/v1/auth/login",
+    tag = "auth",
+    request_body = LoginSchema,
+    responses(
+        (status = 200, body = LoginResult)
+    )
+)]
 async fn login(
     context: ServerContext,
     ValidatedJson(body): ValidatedJson<LoginSchema>,
@@ -119,6 +126,17 @@ async fn login(
     Ok(Json(session.to_serialized()))
 }
 
+#[utoipa::path(
+    post,
+    path = "/v1/auth/logout",
+    tag = "auth",
+    security(
+        ("BearerAuth" = [])
+    ),
+    responses(
+        (status = 200)
+    )
+)]
 async fn logout(context: ServerContext, session: Session) -> ServerResult<()> {
     context.collab.auth.logout(&session.0.token).await?;
     Ok(())
@@ -126,24 +144,8 @@ async fn logout(context: ServerContext, session: Session) -> ServerResult<()> {
 
 pub fn router() -> Router {
     Router::new()
-        .api_route(
-            "/user",
-            get_with(user, |op| {
-                with_auth(op.description("Gets the user associated with the supplied session"))
-            }),
-        )
-        .api_route(
-            "/register",
-            post_with(register, |op| {
-                op.description("Register a new user via an invite or a superuser without an invite")
-            }),
-        )
-        .api_route("/login", post_with(login, |op| {
-            op.description("Creates a new session with the given credentials and returns an authentication token")
-        }))
-        .api_route("/logout", post_with(logout, |op| {
-            with_auth(op.description("Logs out of a session, deleting it"))
-        })).with_path_items(|op| {
-            op.tag("auth")
-        })
+        .route("/user", get(user))
+        .route("/register", post(register))
+        .route("/login", post(login))
+        .route("/logout", post(logout))
 }
