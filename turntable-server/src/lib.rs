@@ -13,6 +13,7 @@ use tower_http::cors::{Any, CorsLayer};
 use turntable_collab::Collab;
 
 mod auth;
+mod schemas;
 mod serialized;
 
 /// The default port the server will listen on.
