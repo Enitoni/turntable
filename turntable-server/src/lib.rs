@@ -2,22 +2,25 @@ use aide::{
     axum::{routing::get, ApiRouter, IntoApiResponse},
     openapi::{Info, OpenApi},
 };
-use axum::{Extension, Json};
+use axum::{extract::State, Extension, Json};
 use std::{
     env,
     net::{Ipv6Addr, SocketAddr},
+    sync::Arc,
 };
 use tokio::net::TcpListener;
 use tower_http::cors::{Any, CorsLayer};
+use turntable_collab::Collab;
 
 /// The default port the server will listen on.
 pub const DEFAULT_PORT: u16 = 9050;
 
-pub type Router = ApiRouter<()>;
+pub type Context = State<Arc<Collab>>;
+pub type Router = ApiRouter<Arc<Collab>>;
 pub type Api = OpenApi;
 
 /// Starts the turntable server
-pub async fn run_server() {
+pub async fn run_server(collab: Collab) {
     let port = env::var("TURNTABLE_SERVER_PORT")
         .map(|x| x.parse::<u16>().expect("Port must be a number"))
         .unwrap_or(DEFAULT_PORT);
@@ -34,6 +37,7 @@ pub async fn run_server() {
     let root_router = Router::new()
         .nest("/v1", version_one_router)
         .route("/api.json", get(serve_api))
+        .with_state(Arc::new(collab))
         .layer(cors);
 
     let listener = TcpListener::bind(&addr).await.expect("listens on address");
