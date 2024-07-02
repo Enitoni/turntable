@@ -58,7 +58,7 @@ pub async fn run_server(collab: Collab) {
         listener,
         root_router
             .finish_api(&mut api)
-            .layer(Extension(api))
+            .layer(Extension(Arc::new(api)))
             .into_make_service(),
     )
     .await
@@ -93,6 +93,6 @@ fn bearer_security() -> (String, ReferenceOr<SecurityScheme>) {
     )
 }
 
-async fn serve_api(Extension(api): Extension<Api>) -> impl IntoApiResponse {
+async fn serve_api(Extension(api): Extension<Arc<Api>>) -> impl IntoApiResponse {
     Json(api)
 }
