@@ -61,7 +61,7 @@ impl FromRequestParts<ServerContext> for Session {
 /// A helper function to add auth information to routes
 fn with_auth(transform: TransformOperation) -> TransformOperation {
     transform
-        .security_requirement("http")
+        .security_requirement("BearerAuth")
         .response_with::<401, String, _>(|r| {
             r.description("Request refused because of missing authorization")
                 .example("Missing authorization")
