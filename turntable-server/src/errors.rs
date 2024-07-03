@@ -70,6 +70,10 @@ impl ServerError {
             Self::UserNotInRoom => StatusCode::FORBIDDEN,
             Self::StreamKeyNotFound => StatusCode::NOT_FOUND,
             Self::StreamKeyNotOwn => StatusCode::FORBIDDEN,
+            Self::InputNotFound => StatusCode::NOT_FOUND,
+            Self::InputNoMatch => StatusCode::BAD_REQUEST,
+            Self::UnsupportedInputType => StatusCode::BAD_REQUEST,
+            Self::InputInvalid => StatusCode::BAD_REQUEST,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
