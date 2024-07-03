@@ -1,7 +1,6 @@
 use std::{
     convert::Infallible,
     pin::Pin,
-    sync::Arc,
     task::{Context, Poll},
 };
 
@@ -29,7 +28,7 @@ pub struct RoomConnectionHandle {
     room_id: RoomId,
     context: CollabContext,
     /// The audio stream
-    stream: Arc<Consumer>,
+    stream: Consumer,
 }
 
 impl RoomConnection {
@@ -47,7 +46,7 @@ impl RoomConnectionHandle {
         context: &CollabContext,
         connection_id: RoomConnectionId,
         room_id: RoomId,
-        stream: Arc<Consumer>,
+        stream: Consumer,
     ) -> Self {
         Self {
             connection_id,

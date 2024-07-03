@@ -4,7 +4,7 @@ use dashmap::DashMap;
 use parking_lot::Mutex;
 
 use super::{Consumer, ConsumerId, Encoder};
-use crate::{Config, Sample};
+use crate::{Config, Producer, Sample};
 
 /// A stream is the destination of a [Player], and manages consumers for said player.
 ///
@@ -16,8 +16,8 @@ pub struct Stream {
     /// A preloaded cache of samples used to instantly fill a consumer,
     /// so that there isn't a delay before a consumer returns data.
     preload_cache: Mutex<Vec<Sample>>,
-    /// The consumers that have been created for this stream.
-    consumers: DashMap<ConsumerId, Arc<Consumer>>,
+    /// The producer parts of consumers that have been created for this stream.
+    producers: DashMap<ConsumerId, Producer>,
 }
 
 impl Stream {
@@ -25,38 +25,38 @@ impl Stream {
         Arc::new_cyclic(|me| Self {
             config,
             me: me.clone(),
-            consumers: Default::default(),
+            producers: Default::default(),
             preload_cache: Default::default(),
         })
     }
 
     /// Gets a new consumer for this stream.
-    pub fn consume<E>(&self) -> Arc<Consumer>
+    pub fn consume<E>(&self) -> Consumer
     where
         E: Encoder,
     {
-        let consumer: Arc<_> = Consumer::new::<E>(self.config.clone(), self.me.clone()).into();
+        let consumer = Consumer::new::<E>(self.config.clone(), self.me.clone());
         let preload_cache = self.preload_cache.lock();
 
-        self.consumers.insert(consumer.id, consumer.clone());
+        let producer = consumer.producer();
+        producer.push(&preload_cache);
 
-        consumer.push(&preload_cache);
+        self.producers.insert(consumer.id, producer);
+
         consumer
     }
 
-    /// Removes a consumer from this stream.
+    /// Removes a producer from this stream.
     pub fn remove(&self, consumer_id: ConsumerId) {
-        self.consumers.remove(&consumer_id);
+        self.producers.remove(&consumer_id);
     }
 
     /// Push new samples to the stream.
     ///
     /// Note: This function must not be called on the playback thread.
     pub fn push(&self, samples: &[Sample]) {
-        let consumers: Vec<_> = self.consumers.iter().map(|c| c.clone()).collect();
-
-        for consumer in consumers {
-            consumer.push(samples);
+        for producer in self.producers.iter() {
+            producer.push(samples);
         }
 
         self.push_preload(samples)

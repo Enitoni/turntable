@@ -102,7 +102,7 @@ where
     }
 
     /// Creates a consumer for a player.
-    pub fn consume_player<E>(&self, player_id: PlayerId) -> Arc<Consumer>
+    pub fn consume_player<E>(&self, player_id: PlayerId) -> Consumer
     where
         E: Encoder,
     {

@@ -1,5 +1,8 @@
 use parking_lot::Mutex;
-use std::{io::Read, sync::Weak};
+use std::{
+    io::Read,
+    sync::{Arc, Weak},
+};
 
 use super::{Encoder, Stream};
 use crate::{Config, Id, Sample};
@@ -13,7 +16,12 @@ pub struct Consumer {
     /// The stream this consumer belongs to.
     stream: Weak<Stream>,
     /// The encoder that will be used to encode the audio data.
-    encoder: Mutex<Box<dyn Encoder>>,
+    encoder: Arc<Mutex<Box<dyn Encoder>>>,
+}
+
+/// The producer part of a consumer
+pub struct Producer {
+    encoder: Arc<Mutex<Box<dyn Encoder>>>,
 }
 
 impl Consumer {
@@ -26,14 +34,8 @@ impl Consumer {
         Self {
             stream,
             id: ConsumerId::new(),
-            encoder: Mutex::new(Box::new(encoder)),
+            encoder: Arc::new(Mutex::new(Box::new(encoder))),
         }
-    }
-
-    /// Push the provided samples to the consumer and encode them.
-    pub fn push(&self, samples: &[Sample]) {
-        let mut encoder = self.encoder.lock();
-        encoder.encode(samples);
     }
 
     /// Returns the content type of the encoded data.
@@ -45,6 +47,20 @@ impl Consumer {
     pub fn read(&self, buf: &mut [u8]) -> std::io::Result<usize> {
         let mut encoder = self.encoder.lock();
         encoder.read(buf)
+    }
+
+    pub(crate) fn producer(&self) -> Producer {
+        Producer {
+            encoder: self.encoder.clone(),
+        }
+    }
+}
+
+impl Producer {
+    /// Push the provided samples to the consumer and encode them.
+    pub fn push(&self, samples: &[Sample]) {
+        let mut encoder = self.encoder.lock();
+        encoder.encode(samples);
     }
 }
 

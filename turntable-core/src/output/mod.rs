@@ -45,7 +45,7 @@ impl Output {
     }
 
     /// Gets a consumer for the associated player, with the given encoder.
-    pub fn consume_player<E>(&self, player_id: PlayerId) -> Arc<Consumer>
+    pub fn consume_player<E>(&self, player_id: PlayerId) -> Consumer
     where
         E: Encoder,
     {
