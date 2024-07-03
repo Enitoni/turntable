@@ -91,7 +91,7 @@ pub trait Database {
     async fn room_invite_by_token(&self, token: &str) -> Result<RoomInviteData>;
     async fn list_rooms(&self) -> Result<Vec<RoomData>>;
     async fn create_room(&self, new_room: NewRoom) -> Result<RoomData>;
-    async fn create_room_member(&self, new_member: NewRoomMember) -> Result<()>;
+    async fn create_room_member(&self, new_member: NewRoomMember) -> Result<RoomMemberData>;
     async fn update_room(&self, updated_room: UpdatedRoom) -> Result<RoomData>;
     async fn delete_room(&self, room_id: PrimaryKey) -> Result<()>;
     async fn delete_room_member(&self, room_id: PrimaryKey, user_id: PrimaryKey) -> Result<()>;

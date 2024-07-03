@@ -327,7 +327,7 @@ impl Database for PgDatabase {
         self.room_by_id(room.id).await
     }
 
-    async fn create_room_member(&self, new_member: NewRoomMember) -> Result<()> {
+    async fn create_room_member(&self, new_member: NewRoomMember) -> Result<RoomMemberData> {
         // Ensure the user isn't a member of this room already
         query!(
             "SELECT id FROM room_members WHERE user_id = $1 AND room_id = $2",
@@ -343,18 +343,46 @@ impl Database for PgDatabase {
             format!("{}:{}", new_member.user_id, new_member.room_id).as_str(),
         )?;
 
-        query!(
+        let row = query!(
             "
             INSERT INTO room_members (user_id, room_id, owner)
-            VALUES ($1, $2, $3)",
+            VALUES ($1, $2, $3) RETURNING id",
             new_member.user_id,
             new_member.room_id,
             new_member.owner,
         )
-        .execute(&self.pool)
+        .fetch_one(&self.pool)
         .await
-        .map_err(|e| e.any())
-        .map(|_| ())
+        .map_err(|e| e.any())?;
+
+        let row = query!(
+            "
+            SELECT
+                room_members.*,
+                users.username,
+                users.password,
+                users.display_name,
+                users.superuser
+            FROM room_members
+                INNER JOIN users ON room_members.user_id = users.id
+            WHERE room_members.id = $1",
+            row.id
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| e.any())?;
+
+        Ok(RoomMemberData {
+            id: row.id,
+            owner: row.owner,
+            user: UserData {
+                id: row.user_id,
+                username: row.username,
+                password: row.password,
+                display_name: row.display_name,
+                superuser: row.superuser,
+            },
+        })
     }
 
     async fn update_room(&self, updated_room: UpdatedRoom) -> Result<RoomData> {
