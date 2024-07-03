@@ -11,6 +11,7 @@ use turntable_collab::{
 use utoipa::ToSchema;
 
 #[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct User {
     id: i32,
     username: String,
@@ -18,12 +19,14 @@ pub struct User {
 }
 
 #[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct LoginResult {
     token: String,
     user: User,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct Room {
     id: i32,
     title: String,
@@ -33,6 +36,7 @@ pub struct Room {
 }
 
 #[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct RoomMember {
     id: i32,
     owner: bool,
@@ -40,12 +44,14 @@ pub struct RoomMember {
 }
 
 #[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct RoomConnection {
     user_id: i32,
     source: String,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct StreamKey {
     id: i32,
     token: String,
