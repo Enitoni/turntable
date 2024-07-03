@@ -4,8 +4,8 @@ mod room;
 use std::sync::Arc;
 
 use crate::{
-    util::random_string, CollabContext, Database, DatabaseError, NewRoom, NewStreamKey, PrimaryKey,
-    StreamKeyData,
+    util::random_string, CollabContext, Database, DatabaseError, NewRoom, NewRoomInvite,
+    NewRoomMember, NewStreamKey, PrimaryKey, RoomInviteData, StreamKeyData,
 };
 
 pub use connection::*;
@@ -155,5 +155,65 @@ impl RoomManager {
     /// Deletes a stream key
     pub async fn delete_stream_key(&self, key_id: PrimaryKey) -> Result<(), DatabaseError> {
         self.context.database.delete_stream_key(key_id).await
+    }
+
+    /// Creates an invite for a room
+    pub async fn create_invite(
+        &self,
+        inviter_id: PrimaryKey,
+        for_room: PrimaryKey,
+    ) -> Result<RoomInviteData, DatabaseError> {
+        let token = random_string(32);
+
+        self.context
+            .database
+            .create_room_invite(NewRoomInvite {
+                room_id: for_room,
+                user_id: inviter_id,
+                token,
+            })
+            .await
+    }
+
+    /// Gets an invite by token
+    pub async fn invite_by_token(&self, token: String) -> Result<RoomInviteData, DatabaseError> {
+        self.context.database.room_invite_by_token(&token).await
+    }
+
+    /// Adds a user as a member to a room by consuming an invite
+    pub async fn add_member_with_invite(
+        &self,
+        user_id: PrimaryKey,
+        token: String,
+    ) -> Result<(), RoomError> {
+        let invite = self
+            .context
+            .database
+            .room_invite_by_token(&token)
+            .await
+            .map_err(RoomError::Database)?;
+
+        let room = self.room_by_id(invite.room.id)?;
+
+        let member = self
+            .context
+            .database
+            .create_room_member(NewRoomMember {
+                owner: false,
+                room_id: room.id(),
+                user_id,
+            })
+            .map_err(RoomError::Database)
+            .await?;
+
+        room.add_member(member);
+
+        self.context
+            .database
+            .delete_room_invite(invite.id)
+            .map_err(RoomError::Database)
+            .await?;
+
+        Ok(())
     }
 }
