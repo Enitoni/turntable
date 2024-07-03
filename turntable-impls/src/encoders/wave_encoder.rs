@@ -132,7 +132,10 @@ impl Read for WaveEncoder {
         let amount_to_read = body_buf.len() / (Config::SAMPLES_IN_BYTES / 2);
         let safe_end = self.samples.len().min(amount_to_read);
 
-        let samples_in_bytes: Vec<_> = self.samples[..safe_end]
+        let samples_to_read = &self.samples[..safe_end];
+        let amount_of_samples = samples_to_read.len();
+
+        let samples_in_bytes: Vec<_> = samples_to_read
             .iter()
             .map(|s| (s * i16::MAX as Sample) as i16)
             .flat_map(|s| s.to_le_bytes())
@@ -140,6 +143,9 @@ impl Read for WaveEncoder {
 
         assign_slice(&samples_in_bytes, body_buf);
         bytes_written += samples_in_bytes.len();
+
+        // Remove the samples we read
+        self.samples.drain(..amount_of_samples);
 
         Ok(bytes_written)
     }
