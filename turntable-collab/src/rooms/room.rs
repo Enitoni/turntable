@@ -53,6 +53,18 @@ impl Room {
         }
     }
 
+    /// Ensure the room is activated
+    fn ensure_activation(&self) {
+        let is_inactive = {
+            let state = self.state.lock();
+            matches!(*state, RoomState::Inactive)
+        };
+
+        if is_inactive {
+            self.activate()
+        }
+    }
+
     /// Returns the currently playing track, if any
     pub fn current_track(&self) -> Option<Track> {
         let state = self.state.lock();
@@ -109,6 +121,9 @@ impl Room {
     ) -> Result<RoomConnectionHandle, RoomError> {
         // Ensure the user is actually in the room before doing anything else
         let _ = self.member_by_user_id(user_id)?;
+
+        // For now, just activate a room if it's not active when a user wants to connect
+        self.ensure_activation();
 
         let connection = RoomConnection::new(user_id, source);
         let connection_id = connection.id;
