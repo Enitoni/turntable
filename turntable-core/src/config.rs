@@ -79,8 +79,8 @@ impl Default for Config {
             sample_rate: 44100,
             // Stereo audio
             channel_count: 2,
-            // 1 minutes should be enough whilst not taking too long to load
-            preload_size_in_seconds: 60.0,
+            // 10 seconds should be enough whilst not taking too long to load
+            preload_size_in_seconds: 10.0,
             // Unless network/IO is slow, this should be enough
             preload_threshold_in_seconds: 30.0,
             // 100ms of should be enough to avoid buffer underruns
