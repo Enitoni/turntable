@@ -35,12 +35,10 @@ impl Stream {
     where
         E: Encoder,
     {
-        let consumer = Consumer::new::<E>(self.config.clone(), self.me.clone());
+        let (consumer, producer) = Consumer::new::<E>(self.config.clone(), self.me.clone());
         let preload_cache = self.preload_cache.lock();
 
-        let producer = consumer.producer();
         producer.push(&preload_cache);
-
         self.producers.insert(consumer.id, producer);
 
         consumer
