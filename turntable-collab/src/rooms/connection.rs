@@ -75,7 +75,7 @@ impl Stream for RoomConnectionHandle {
     type Item = Result<Vec<u8>, Infallible>;
 
     fn poll_next(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let mut buf = vec![0; 2048];
+        let mut buf = vec![0; 1024 * 4];
         let read = self.stream.read(&mut buf);
 
         match read {
