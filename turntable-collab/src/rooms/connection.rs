@@ -1,10 +1,13 @@
 use std::{
     convert::Infallible,
     pin::Pin,
+    sync::Arc,
     task::{Context, Poll},
 };
 
-use futures_util::Stream;
+use futures_util::{FutureExt, Stream};
+use parking_lot::Mutex;
+use tokio::task::{spawn_blocking, JoinHandle};
 use turntable_core::{Consumer, Id};
 
 use crate::{CollabContext, PrimaryKey};
@@ -28,7 +31,9 @@ pub struct RoomConnectionHandle {
     room_id: RoomId,
     context: CollabContext,
     /// The audio stream
-    stream: Consumer,
+    stream: Arc<Consumer>,
+    /// The future being polled currently
+    fut: Mutex<Option<JoinHandle<Vec<u8>>>>,
 }
 
 impl RoomConnection {
@@ -42,6 +47,8 @@ impl RoomConnection {
 }
 
 impl RoomConnectionHandle {
+    const BUFFER_SIZE: usize = 1024 * 4;
+
     pub fn new(
         context: &CollabContext,
         connection_id: RoomConnectionId,
@@ -52,7 +59,8 @@ impl RoomConnectionHandle {
             connection_id,
             room_id,
             context: context.clone(),
-            stream,
+            fut: Default::default(),
+            stream: stream.into(),
         }
     }
 
@@ -73,19 +81,25 @@ impl Drop for RoomConnectionHandle {
 impl Stream for RoomConnectionHandle {
     type Item = Result<Vec<u8>, Infallible>;
 
-    fn poll_next(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let mut buf = vec![0; 1024 * 4];
-        let read = self.stream.read(&mut buf);
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let mut fut_guard = self.fut.lock();
+        let cloned_stream = self.stream.clone();
 
-        match read {
-            // If this ever errors, we just terminate the stream
-            Err(_) => Poll::Ready(None),
-            Ok(amount) => {
-                // Remove the empty data from the vec, if any
-                buf.drain(amount..);
+        let fut = fut_guard.get_or_insert_with(|| {
+            spawn_blocking(move || {
+                let mut buf = vec![0; Self::BUFFER_SIZE];
+                let _ = cloned_stream.read(&mut buf).ok();
 
-                Poll::Ready(Some(Ok(buf)))
+                buf
+            })
+        });
+
+        match fut.poll_unpin(cx) {
+            Poll::Ready(result) => {
+                fut_guard.take();
+                Poll::Ready(Some(Ok(result.expect("infallible"))))
             }
+            Poll::Pending => Poll::Pending,
         }
     }
 }
