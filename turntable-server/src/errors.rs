@@ -3,7 +3,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use thiserror::Error;
-use turntable_collab::{AuthError, DatabaseError, RoomError};
+use turntable_collab::{AuthError, DatabaseError, InputError, RoomError};
 
 pub type ServerResult<T> = Result<T, ServerError>;
 
@@ -37,6 +37,19 @@ pub enum ServerError {
     StreamKeyNotOwn,
     #[error("Stream key does not exist")]
     StreamKeyNotFound,
+    // Inputs
+    #[error("Input type is supported but resource was not found")]
+    InputNotFound,
+    #[error("Input did not match")]
+    InputNoMatch,
+    #[error("Unsupported input type")]
+    UnsupportedInputType,
+    #[error("Failed to fetch resource")]
+    InputNetworkFailed,
+    #[error("Failed to parse resource: {0}")]
+    InputParseError(String),
+    #[error("Resource is invalid")]
+    InputInvalid,
 }
 
 impl ServerError {
@@ -114,6 +127,20 @@ impl From<RoomError> for ServerError {
             RoomError::StreamKeyNotFound => Self::StreamKeyNotFound,
             RoomError::StreamKeyNotOwn => Self::StreamKeyNotOwn,
             RoomError::Database(e) => e.into(),
+        }
+    }
+}
+
+impl From<InputError> for ServerError {
+    fn from(value: InputError) -> Self {
+        match value {
+            InputError::Invalid => Self::InputInvalid,
+            InputError::NetworkFailed => Self::InputNetworkFailed,
+            InputError::NoMatch => Self::InputNoMatch,
+            InputError::NotFound => Self::InputNotFound,
+            InputError::UnsupportedType => Self::UnsupportedInputType,
+            InputError::ParseError(e) => Self::InputParseError(e),
+            e => Self::Unknown(e.to_string()),
         }
     }
 }

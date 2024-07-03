@@ -47,6 +47,12 @@ pub struct NewStreamKeySchema {
     pub source: String,
 }
 
+#[derive(Debug, ToSchema, Validate, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct InputSchema {
+    pub query: String,
+}
+
 pub struct ValidatedJson<T>(pub T);
 
 #[async_trait]
