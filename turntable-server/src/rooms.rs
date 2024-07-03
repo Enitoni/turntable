@@ -2,7 +2,17 @@ use axum::{extract::Path, response::IntoResponse, routing::{get, post}, Json};
 use turntable_collab::{Input, NewRoom, Track};
 
 use crate::{
-    auth::Session, context::ServerContext, errors::ServerResult, schemas::{InputSchema, NewRoomSchema, NewStreamKeySchema, ValidatedJson}, serialized::{Room, StreamKey, ToSerialized}, Router
+    auth::Session,
+    context::ServerContext,
+    errors::ServerResult,
+    schemas::{
+        InputSchema,
+        JoinWithInviteSchema,
+        NewRoomSchema,
+        NewStreamKeySchema,
+        ValidatedJson
+    },
+    serialized::{Room, RoomInvite, StreamKey, ToSerialized}, Router
 };
 
 #[utoipa::path(
@@ -133,12 +143,63 @@ async fn add_to_queue(_session: Session, context: ServerContext, Path(room_id): 
     Ok(())
 }
 
+#[utoipa::path(
+    get, 
+    path = "/v1/rooms/invites/{token}",
+    tag = "rooms",
+    responses(
+        (status = 200, body = RoomInvite)
+    )
+)]
+async fn invite_by_token(context: ServerContext, Path(token): Path<String>) -> ServerResult<Json<RoomInvite>> {
+    let invite = context.collab.rooms.invite_by_token(token).await?;
+
+    Ok(Json(invite.to_serialized()))
+}
+
+#[utoipa::path(
+    post,
+    path = "/v1/rooms/{id}/invites",
+    tag = "rooms",
+    security(
+        ("BearerAuth" = [])
+    ),
+    responses(
+        (status = 200, body = RoomInvite)
+    )
+)]
+async fn create_invite(session: Session, context: ServerContext, Path(room_id): Path<i32>) -> ServerResult<Json<RoomInvite>> {
+    let invite = context.collab.rooms.create_invite(session.user.id, room_id).await?;
+
+    Ok(Json(invite.to_serialized()))
+}
+
+#[utoipa::path(
+    post,
+    path = "/v1/rooms/members",
+    tag = "rooms",
+    request_body = JoinWithInviteSchema,
+    security(
+        ("BearerAuth" = [])
+    ),
+    responses(
+        (status = 200, description = "User was added as member to room, and invite is consumed.")
+    )
+)]
+async fn join_with_invite(session: Session, context: ServerContext, ValidatedJson(body): ValidatedJson<JoinWithInviteSchema>) -> ServerResult<()> {
+    context.collab.rooms.add_member_with_invite(session.user.id, body.token).await?;
+    Ok(())
+}
+
 pub fn router() -> Router {
     Router::new()
         .route("/", get(list_rooms))
         .route("/", post(create_room))
+        .route("/invites/:id", get(invite_by_token))
+        .route("/members", post(join_with_invite))
         .route("/:id", get(room))
         .route("/:id/keys", get(stream_keys))
         .route("/:id/keys", post(create_stream_key))
         .route("/:id/queue", post(add_to_queue))
+        .route("/:id/invites", post(create_invite))
 }

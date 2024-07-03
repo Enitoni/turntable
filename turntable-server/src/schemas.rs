@@ -54,6 +54,12 @@ pub struct InputSchema {
     pub query: String,
 }
 
+#[derive(Debug, ToSchema, Validate, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct JoinWithInviteSchema {
+    pub token: String,
+}
+
 pub struct ValidatedJson<T>(pub T);
 
 #[async_trait]

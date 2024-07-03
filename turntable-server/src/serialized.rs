@@ -5,8 +5,8 @@ use std::sync::Arc;
 
 use serde::Serialize;
 use turntable_collab::{
-    Room as CollabRoom, RoomConnection as CollabRoomConnection, RoomMemberData, SessionData,
-    StreamKeyData, UserData,
+    Room as CollabRoom, RoomConnection as CollabRoomConnection, RoomInviteData, RoomMemberData,
+    SessionData, StreamKeyData, UserData,
 };
 use utoipa::ToSchema;
 
@@ -48,6 +48,14 @@ pub struct RoomMember {
 pub struct RoomConnection {
     user_id: i32,
     source: String,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RoomInvite {
+    token: String,
+    inviter: User,
+    room_title: String,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -138,6 +146,16 @@ impl ToSerialized<StreamKey> for StreamKeyData {
             source: self.source.clone(),
             room_id: self.room_id,
             user_id: self.user_id,
+        }
+    }
+}
+
+impl ToSerialized<RoomInvite> for RoomInviteData {
+    fn to_serialized(&self) -> RoomInvite {
+        RoomInvite {
+            token: self.token.clone(),
+            inviter: self.inviter.to_serialized(),
+            room_title: self.room.title.clone(),
         }
     }
 }
