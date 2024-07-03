@@ -164,7 +164,7 @@ impl Timeline {
         if let Some(first_sink) = first_sink.first() {
             first_sink.clear_outside(
                 offset,
-                self.config.preload_size_in_samples() * 4,
+                self.config.sink_preload_window_size(),
                 self.config.channel_count,
             );
         }

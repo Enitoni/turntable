@@ -21,6 +21,12 @@ pub struct Config {
     /// Lower values increase chance of buffer underruns,
     /// whilst higher values increase latency.
     pub stream_preload_cache_size_in_seconds: f32,
+    /// How many seconds of audio can exist between the currently playing offset of a sink.
+    ///
+    /// Higher values means more memory usage but more lenient seeking, lower values
+    /// mean less memory usage but a higher likelihood of buffering when seeking too far from the
+    /// playback offset.
+    pub sink_preload_window_in_seconds: f32,
 }
 
 impl Config {
@@ -56,6 +62,11 @@ impl Config {
         (self.stream_preload_cache_size_in_seconds * self.samples_per_sec() as f32) as usize
     }
 
+    /// How many samples between the playback offset can be stored in a sink
+    pub fn sink_preload_window_size(&self) -> usize {
+        (self.sink_preload_window_in_seconds * self.samples_per_sec() as f32) as usize
+    }
+
     /// Returns the number of samples for any given number of seconds
     pub fn seconds_to_samples(&self, seconds: f32) -> usize {
         (seconds * self.samples_per_sec() as f32) as usize
@@ -79,14 +90,16 @@ impl Default for Config {
             sample_rate: 44100,
             // Stereo audio
             channel_count: 2,
-            // 10 seconds should be enough whilst not taking too long to load
+            // A small preload size ensures quick loading
             preload_size_in_seconds: 10.0,
-            // Unless network/IO is slow, this should be enough
-            preload_threshold_in_seconds: 30.0,
+            // Keep short songs fully loaded for a nicer seeking experience
+            preload_threshold_in_seconds: 60.0 * 3.,
             // 100ms of should be enough to avoid buffer underruns
             buffer_size_in_seconds: 0.1,
-            // Assuming the user's network is fast, this should be enough
+            // Half a second of stream latency
             stream_preload_cache_size_in_seconds: 0.5,
+            // 5 minutes of stored audio is more than enough
+            sink_preload_window_in_seconds: 60. * 5.,
         }
     }
 }
