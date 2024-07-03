@@ -98,6 +98,19 @@ async fn register(
     context: ServerContext,
     ValidatedJson(body): ValidatedJson<RegisterSchema>,
 ) -> ServerResult<Json<User>> {
+    if let Some(token) = body.invite_token {
+        // Ensure the invite actually exists
+        let _ = context.collab.rooms.invite_by_token(token).await?;
+
+        let new_user = context.collab.auth.register_basic(NewPlainUser {
+            username: body.username,
+            password: body.password,
+            display_name: body.display_name,
+        }).await?;
+
+        return Ok(Json(new_user.to_serialized()))
+    }
+
     let new_user = context
         .collab
         .auth

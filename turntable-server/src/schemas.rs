@@ -27,6 +27,7 @@ pub struct RegisterSchema {
     pub username: String,
     #[validate(length(min = 8, max = 64))]
     pub password: String,
+    pub invite_token: Option<String>,
 }
 
 #[derive(Debug, ToSchema, Validate, Deserialize)]
