@@ -162,7 +162,12 @@ impl RoomManager {
         &self,
         inviter_id: PrimaryKey,
         for_room: PrimaryKey,
-    ) -> Result<RoomInviteData, DatabaseError> {
+    ) -> Result<RoomInviteData, RoomError> {
+        // Ensure room exists
+        let room = self.room_by_id(for_room)?;
+        // Ensure user is a member of the room
+        let _ = room.member_by_user_id(inviter_id)?;
+
         let token = random_string(32);
 
         self.context
@@ -173,6 +178,7 @@ impl RoomManager {
                 token,
             })
             .await
+            .map_err(RoomError::Database)
     }
 
     /// Gets an invite by token
