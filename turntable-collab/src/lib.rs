@@ -1,5 +1,6 @@
 mod auth;
 mod db;
+mod events;
 mod input;
 mod queues;
 mod rooms;
@@ -17,7 +18,7 @@ pub use queues::*;
 pub use rooms::{Room, RoomConnection, RoomConnectionHandle, RoomError, RoomState};
 pub use track::*;
 
-use turntable_core::{ArcedStore, Config, Pipeline};
+use turntable_core::{ArcedStore, Config, Pipeline, PlayerId};
 use turntable_impls::SymphoniaIngestion;
 
 pub type CollabPipeline = Pipeline<SymphoniaIngestion>;
@@ -83,5 +84,15 @@ impl Clone for CollabContext {
             pipeline: self.pipeline.clone(),
             rooms: self.rooms.clone(),
         }
+    }
+}
+
+impl CollabContext {
+    /// Gets a room by its player id if it exists and is active
+    pub fn room_by_player_id(&self, player_id: PlayerId) -> Option<Arc<Room>> {
+        self.rooms
+            .iter()
+            .find(|r| r.player().ok().filter(|p| p.id == player_id).is_some())
+            .map(|r| r.clone())
     }
 }
