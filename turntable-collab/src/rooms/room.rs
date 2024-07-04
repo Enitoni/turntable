@@ -45,7 +45,7 @@ impl Room {
         let new_queue = self
             .context
             .pipeline
-            .create_queue::<LinearQueue>(new_player.id);
+            .create_queue(new_player.id, LinearQueue::new);
 
         *self.state.lock() = RoomState::Active {
             player: new_player.into(),

@@ -1,18 +1,11 @@
+use crate::BoxedQueueItem;
 use std::sync::Arc;
-
-use crate::{BoxedQueueItem, QueueNotifier};
 
 /// Represents a type that acts as a consumable queue.
 pub trait Queue
 where
     Self: 'static + Sync + Send,
 {
-    /// Instantiates this queue.
-    /// * `notifier` - The notifier that should be used to notify when a queue updates.
-    fn new(notifier: QueueNotifier) -> Self
-    where
-        Self: Sized;
-
     /// Returns the current and next items in the queue.
     fn peek(&self) -> Vec<BoxedQueueItem>;
 
@@ -44,10 +37,6 @@ impl BoxedQueue {
 }
 
 impl Queue for BoxedQueue {
-    fn new(_: QueueNotifier) -> Self {
-        panic!("Queue::new() should not be called on a BoxedQueue");
-    }
-
     fn peek(&self) -> Vec<BoxedQueueItem> {
         self.0.peek()
     }
@@ -73,10 +62,6 @@ impl<T> Queue for Arc<T>
 where
     T: Queue,
 {
-    fn new(notifier: QueueNotifier) -> Self {
-        Arc::new(T::new(notifier))
-    }
-
     fn peek(&self) -> Vec<BoxedQueueItem> {
         self.as_ref().peek()
     }

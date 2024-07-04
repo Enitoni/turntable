@@ -86,11 +86,12 @@ where
     }
 
     /// Creates a new queue for a player and returns it.
-    pub fn create_queue<T>(&self, player_id: PlayerId) -> Arc<T>
+    pub fn create_queue<T, F>(&self, player_id: PlayerId, creator: F) -> Arc<T>
     where
         T: Queue,
+        F: FnOnce(QueueNotifier) -> T,
     {
-        self.queuing.create_queue(player_id)
+        self.queuing.create_queue(player_id, creator)
     }
 
     /// Ingests a loader and returns the sink.

@@ -52,15 +52,17 @@ impl Queuing {
     }
 
     /// Creates a new queue for a player.
-    pub fn create_queue<T>(&self, player_id: PlayerId) -> Arc<T>
+    pub fn create_queue<T, F>(&self, player_id: PlayerId, creator: F) -> Arc<T>
     where
         T: Queue,
+        F: FnOnce(QueueNotifier) -> T,
     {
         let notifier = QueueNotifier::new(&self.context, player_id);
+        let queue = creator(notifier);
 
         // This is kinda cursed, but I do not know how to get around it at this point in time.
         // If this is to be changed, the entire queue system would probably need to be rewritten.
-        let arced_queue = Arc::new(T::new(notifier));
+        let arced_queue = Arc::new(queue);
         let boxed_queue = BoxedQueue::new(arced_queue.clone());
 
         self.context.queues.insert(player_id, boxed_queue);

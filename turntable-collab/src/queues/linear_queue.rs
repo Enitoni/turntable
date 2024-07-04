@@ -20,6 +20,14 @@ pub struct LinearQueue {
 }
 
 impl LinearQueue {
+    pub fn new(notifier: QueueNotifier) -> Self {
+        Self {
+            notifier,
+            history: Default::default(),
+            items: Default::default(),
+        }
+    }
+
     pub fn push(&self, item: Track, user_id: PrimaryKey) {
         let item = LinearQueueItem {
             user_id,
@@ -49,14 +57,6 @@ impl LinearQueue {
 }
 
 impl Queue for LinearQueue {
-    fn new(notifier: QueueNotifier) -> Self {
-        Self {
-            notifier,
-            history: Default::default(),
-            items: Default::default(),
-        }
-    }
-
     fn peek(&self) -> Vec<BoxedQueueItem> {
         self.items
             .lock()
