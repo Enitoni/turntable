@@ -1,5 +1,5 @@
 use axum::{extract::Path, response::IntoResponse, routing::{get, post}, Json};
-use turntable_collab::{Input, NewRoom, Track};
+use turntable_collab::{Input, NewRoom, Track as CollabTrack};
 
 use crate::{
     auth::Session,
@@ -12,7 +12,7 @@ use crate::{
         NewStreamKeySchema,
         ValidatedJson
     },
-    serialized::{Room, RoomInvite, StreamKey, ToSerialized}, Router
+    serialized::{Queue, Room, RoomInvite, StreamKey, ToSerialized}, Router
 };
 
 #[utoipa::path(
@@ -118,6 +118,24 @@ async fn create_stream_key(session: Session, context: ServerContext, Path(room_i
 }
 
 #[utoipa::path(
+    get, 
+    path = "/v1/rooms/{id}/queue",
+    tag = "rooms",
+    security(
+        ("BearerAuth" = [])
+    ),
+    responses(
+        (status = 200, body = Queue)
+    )
+)]
+async fn queue(_session: Session, context: ServerContext, Path(room_id): Path<i32>) -> ServerResult<Json<Queue>> {
+    let room = context.collab.rooms.room_by_id(room_id)?;
+    let queue = room.queue()?;
+
+    Ok(Json(queue.tracks().to_serialized()))
+}
+
+#[utoipa::path(
     post,
     path = "/v1/rooms/{id}/queue",
     tag = "rooms",
@@ -134,7 +152,7 @@ async fn add_to_queue(_session: Session, context: ServerContext, Path(room_id): 
     let queue = room.queue()?;
 
     let input = Input::query(&body.query).await?;
-    let tracks: Vec<Track> = input.into_iter().map(Into::into).collect();
+    let tracks: Vec<CollabTrack> = input.into_iter().map(Into::into).collect();
 
     for track in tracks {
         queue.push(track)
@@ -200,6 +218,7 @@ pub fn router() -> Router {
         .route("/:id", get(room))
         .route("/:id/keys", get(stream_keys))
         .route("/:id/keys", post(create_stream_key))
+        .route("/:id/queue", get(queue))
         .route("/:id/queue", post(add_to_queue))
         .route("/:id/invites", post(create_invite))
 }

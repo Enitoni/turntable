@@ -6,7 +6,7 @@ use std::sync::Arc;
 use serde::Serialize;
 use turntable_collab::{
     Room as CollabRoom, RoomConnection as CollabRoomConnection, RoomInviteData, RoomMemberData,
-    SessionData, StreamKeyData, UserData,
+    SessionData, StreamKeyData, Track as CollabTrack, UserData,
 };
 use utoipa::ToSchema;
 
@@ -66,6 +66,27 @@ pub struct StreamKey {
     source: String,
     room_id: i32,
     user_id: i32,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct Track {
+    id: i32,
+    title: String,
+    artist: String,
+
+    canonical: String,
+    source: String,
+
+    duration: f32,
+    artwork: Option<String>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct Queue {
+    items: Vec<Track>,
+    history: Vec<Track>,
 }
 
 /// Helper trait to convert any type into a serialized version
@@ -156,6 +177,33 @@ impl ToSerialized<RoomInvite> for RoomInviteData {
             token: self.token.clone(),
             inviter: self.inviter.to_serialized(),
             room_title: self.room.title.clone(),
+        }
+    }
+}
+
+impl ToSerialized<Track> for CollabTrack {
+    fn to_serialized(&self) -> Track {
+        Track {
+            id: self.id.value() as i32,
+            title: self.metadata.title.clone(),
+            artwork: self.metadata.artwork.clone(),
+            canonical: self.metadata.canonical.clone(),
+            source: self.metadata.source.clone(),
+            duration: self.metadata.duration,
+            artist: self
+                .metadata
+                .artist
+                .clone()
+                .unwrap_or_else(|| "Unknown artist".to_string()),
+        }
+    }
+}
+
+impl ToSerialized<Queue> for (Vec<CollabTrack>, Vec<CollabTrack>) {
+    fn to_serialized(&self) -> Queue {
+        Queue {
+            items: self.0.to_serialized(),
+            history: self.1.to_serialized(),
         }
     }
 }
