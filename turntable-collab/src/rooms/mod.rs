@@ -13,6 +13,7 @@ use futures_util::TryFutureExt;
 pub use room::*;
 
 use thiserror::Error;
+use turntable_core::PlayerId;
 
 pub struct RoomManager {
     context: CollabContext,
@@ -86,6 +87,15 @@ impl RoomManager {
             .find(|r| r.data().slug == slug)
             .map(|r| r.clone())
             .ok_or(RoomError::RoomNotFound(slug.to_string()))
+    }
+
+    /// Gets a room by its player id if it exists and is active
+    pub fn room_by_player_id(&self, player_id: PlayerId) -> Option<Arc<Room>> {
+        self.context
+            .rooms
+            .iter()
+            .find(|r| r.player().ok().filter(|p| p.id == player_id).is_some())
+            .map(|r| r.clone())
     }
 
     /// Get all rooms in memory
