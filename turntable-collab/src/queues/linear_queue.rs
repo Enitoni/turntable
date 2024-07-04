@@ -3,33 +3,44 @@ use std::collections::VecDeque;
 use parking_lot::Mutex;
 use turntable_core::{BoxedQueueItem, Queue, QueueItem, QueueNotifier, SinkId};
 
-use crate::Track;
+use crate::{PrimaryKey, Track};
+
+#[derive(Clone)]
+pub struct LinearQueueItem {
+    pub user_id: PrimaryKey,
+    pub track: Track,
+}
 
 /// A linear queue of items.
 pub struct LinearQueue {
     notifier: QueueNotifier,
 
-    history: Mutex<Vec<Track>>,
-    items: Mutex<VecDeque<Track>>,
+    history: Mutex<Vec<LinearQueueItem>>,
+    items: Mutex<VecDeque<LinearQueueItem>>,
 }
 
 impl LinearQueue {
-    pub fn push(&self, item: Track) {
+    pub fn push(&self, item: Track, user_id: PrimaryKey) {
+        let item = LinearQueueItem {
+            user_id,
+            track: item,
+        };
+
         self.items.lock().push_back(item);
         self.notifier.notify();
     }
 
     /// Get a track by sink id, if it exists
-    pub fn get_by_sink_id(&self, sink_id: SinkId) -> Option<Track> {
+    pub fn get_by_sink_id(&self, sink_id: SinkId) -> Option<LinearQueueItem> {
         self.items
             .lock()
             .iter()
-            .find(|t| t.sink_id() == Some(sink_id))
+            .find(|q| q.track.sink_id() == Some(sink_id))
             .cloned()
     }
 
     /// Gets all the tracks + history
-    pub fn tracks(&self) -> (Vec<Track>, Vec<Track>) {
+    pub fn tracks(&self) -> (Vec<LinearQueueItem>, Vec<LinearQueueItem>) {
         let items: Vec<_> = self.items.lock().iter().cloned().collect();
         let history: Vec<_> = self.history.lock().iter().cloned().collect();
 
@@ -50,7 +61,7 @@ impl Queue for LinearQueue {
         self.items
             .lock()
             .iter()
-            .map(|i| BoxedQueueItem::new(i.clone()))
+            .map(|q| BoxedQueueItem::new(q.track.clone()))
             .collect()
     }
 
@@ -88,6 +99,6 @@ impl Queue for LinearQueue {
 
     fn skip(&self, id: &str) {
         let mut items = self.items.lock();
-        items.retain(|item| item.item_id() != id);
+        items.retain(|item| item.track.item_id() != id);
     }
 }

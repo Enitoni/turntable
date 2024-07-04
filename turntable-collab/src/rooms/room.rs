@@ -4,7 +4,9 @@ use parking_lot::Mutex;
 use turntable_core::PlayerContext as Player;
 use turntable_impls::WaveEncoder;
 
-use crate::{CollabContext, LinearQueue, PrimaryKey, RoomData, RoomMemberData, Track};
+use crate::{
+    CollabContext, LinearQueue, LinearQueueItem, PrimaryKey, RoomData, RoomMemberData, Track,
+};
 
 use super::{RoomConnection, RoomConnectionHandle, RoomConnectionId, RoomError};
 
@@ -65,8 +67,8 @@ impl Room {
         }
     }
 
-    /// Returns the currently playing track, if any
-    pub fn current_track(&self) -> Option<Track> {
+    /// Returns the currently playing queue item, if any
+    pub fn current_item(&self) -> Option<LinearQueueItem> {
         let state = self.state.lock();
 
         match &*state {

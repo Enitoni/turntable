@@ -144,7 +144,7 @@ async fn queue(_session: Session, context: ServerContext, Path(room_id): Path<i3
         (status = 200, description = "Item(s) were added to the queue")
     )
 )]
-async fn add_to_queue(_session: Session, context: ServerContext, Path(room_id): Path<i32>, ValidatedJson(body): ValidatedJson<InputSchema>) -> ServerResult<()> {
+async fn add_to_queue(session: Session, context: ServerContext, Path(room_id): Path<i32>, ValidatedJson(body): ValidatedJson<InputSchema>) -> ServerResult<()> {
     let room = context.collab.rooms.room_by_id(room_id)?;
     let queue = room.queue()?;
 
@@ -152,7 +152,7 @@ async fn add_to_queue(_session: Session, context: ServerContext, Path(room_id): 
     let tracks: Vec<CollabTrack> = input.into_iter().map(Into::into).collect();
 
     for track in tracks {
-        queue.push(track)
+        queue.push(track, session.user.id)
     }
 
     Ok(())

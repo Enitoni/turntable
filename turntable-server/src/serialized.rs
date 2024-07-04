@@ -5,8 +5,8 @@ use std::sync::Arc;
 
 use serde::Serialize;
 use turntable_collab::{
-    Room as CollabRoom, RoomConnection as CollabRoomConnection, RoomInviteData, RoomMemberData,
-    SessionData, StreamKeyData, Track as CollabTrack, UserData,
+    LinearQueueItem, Room as CollabRoom, RoomConnection as CollabRoomConnection, RoomInviteData,
+    RoomMemberData, SessionData, StreamKeyData, Track as CollabTrack, UserData,
 };
 use turntable_core::PlayerState as CorePlayerState;
 use utoipa::ToSchema;
@@ -86,9 +86,16 @@ pub struct Track {
 
 #[derive(Debug, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
+pub struct QueueItem {
+    user_id: i32,
+    track: Track,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct Queue {
-    items: Vec<Track>,
-    history: Vec<Track>,
+    items: Vec<QueueItem>,
+    history: Vec<QueueItem>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -97,7 +104,7 @@ pub struct Player {
     state: PlayerState,
     total_time: f32,
     current_time: f32,
-    current_track: Option<Track>,
+    current_item: Option<QueueItem>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -149,13 +156,13 @@ impl ToSerialized<Room> for Arc<CollabRoom> {
     fn to_serialized(&self) -> Room {
         let data = self.data();
 
-        let track = self.current_track();
+        let track = self.current_item();
         let player = self
             .player()
             .map(|p| Player {
                 current_time: p.current_time(),
                 total_time: p.current_total_time(),
-                current_track: track.map(|t| t.to_serialized()),
+                current_item: track.map(|t| t.to_serialized()),
                 state: p.current_state().to_serialized(),
             })
             .ok();
@@ -230,7 +237,16 @@ impl ToSerialized<Track> for CollabTrack {
     }
 }
 
-impl ToSerialized<Queue> for (Vec<CollabTrack>, Vec<CollabTrack>) {
+impl ToSerialized<QueueItem> for LinearQueueItem {
+    fn to_serialized(&self) -> QueueItem {
+        QueueItem {
+            user_id: self.user_id,
+            track: self.track.to_serialized(),
+        }
+    }
+}
+
+impl ToSerialized<Queue> for (Vec<LinearQueueItem>, Vec<LinearQueueItem>) {
     fn to_serialized(&self) -> Queue {
         Queue {
             items: self.0.to_serialized(),
