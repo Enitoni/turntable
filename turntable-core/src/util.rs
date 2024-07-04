@@ -33,6 +33,10 @@ impl<T> Id<T> {
             kind: PhantomData,
         }
     }
+
+    pub fn value(&self) -> u64 {
+        self.value
+    }
 }
 
 impl<T> Default for Id<T> {
