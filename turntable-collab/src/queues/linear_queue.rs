@@ -27,6 +27,14 @@ impl LinearQueue {
             .find(|t| t.sink_id() == Some(sink_id))
             .cloned()
     }
+
+    /// Gets all the tracks + history
+    pub fn tracks(&self) -> (Vec<Track>, Vec<Track>) {
+        let items: Vec<_> = self.items.lock().iter().cloned().collect();
+        let history: Vec<_> = self.history.lock().iter().cloned().collect();
+
+        (items, history)
+    }
 }
 
 impl Queue for LinearQueue {
