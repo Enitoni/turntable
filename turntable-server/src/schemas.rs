@@ -60,6 +60,16 @@ pub struct JoinWithInviteSchema {
     pub token: String,
 }
 
+#[derive(Debug, ToSchema, Deserialize)]
+#[serde(rename_all = "camelCase", tag = "action", deny_unknown_fields)]
+pub enum RoomActionSchema {
+    Play,
+    Pause,
+    Next,
+    Previous,
+    Seek { to: f32 },
+}
+
 pub struct ValidatedJson<T>(pub T);
 
 #[async_trait]

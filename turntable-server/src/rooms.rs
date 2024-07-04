@@ -1,16 +1,13 @@
 use axum::{extract::Path, response::IntoResponse, routing::{get, post}, Json};
 use turntable_collab::{Input, NewRoom, Track as CollabTrack};
+use turntable_core::Queue as CoreQueue;
 
 use crate::{
     auth::Session,
     context::ServerContext,
     errors::ServerResult,
     schemas::{
-        InputSchema,
-        JoinWithInviteSchema,
-        NewRoomSchema,
-        NewStreamKeySchema,
-        ValidatedJson
+        InputSchema, JoinWithInviteSchema, NewRoomSchema, NewStreamKeySchema, RoomActionSchema, ValidatedJson
     },
     serialized::{Queue, Room, RoomInvite, StreamKey, ToSerialized}, Router
 };
@@ -209,6 +206,32 @@ async fn join_with_invite(session: Session, context: ServerContext, ValidatedJso
     Ok(())
 }
 
+#[utoipa::path(
+    post,
+    path = "/v1/rooms/{id}/actions",
+    tag = "rooms",
+    request_body = RoomActionSchema,
+    security(
+        ("BearerAuth" = [])
+    ),
+    responses(
+        (status = 200, description = "Action was performed.")
+    )
+)]
+async fn perform_room_action(_session: Session, context: ServerContext, Path(room_id): Path<i32>, Json(body): Json<RoomActionSchema>) -> ServerResult<()> {
+    let room = context.collab.rooms.room_by_id(room_id)?;
+
+    match body {
+        RoomActionSchema::Play => { room.player()?.play() },
+        RoomActionSchema::Pause => { room.player()?.pause() },
+        RoomActionSchema::Next => { room.queue()?.next() },
+        RoomActionSchema::Previous => { room.queue()?.previous() },
+        RoomActionSchema::Seek { to } => { room.player()?.seek(to) }
+    };
+
+    Ok(())
+}
+
 pub fn router() -> Router {
     Router::new()
         .route("/", get(list_rooms))
@@ -221,4 +244,5 @@ pub fn router() -> Router {
         .route("/:id/queue", get(queue))
         .route("/:id/queue", post(add_to_queue))
         .route("/:id/invites", post(create_invite))
+        .route("/:id/actions", post(perform_room_action))
 }
