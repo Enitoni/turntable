@@ -8,6 +8,7 @@ use turntable_collab::{
     Room as CollabRoom, RoomConnection as CollabRoomConnection, RoomInviteData, RoomMemberData,
     SessionData, StreamKeyData, Track as CollabTrack, UserData,
 };
+use turntable_core::PlayerState as CorePlayerState;
 use utoipa::ToSchema;
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -33,6 +34,7 @@ pub struct Room {
     description: Option<String>,
     members: Vec<RoomMember>,
     connections: Vec<RoomConnection>,
+    player: Option<Player>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -89,6 +91,23 @@ pub struct Queue {
     history: Vec<Track>,
 }
 
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct Player {
+    state: PlayerState,
+    total_time: f32,
+    current_time: f32,
+    current_track: Option<Track>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum PlayerState {
+    Idle,
+    Playing,
+    Buffering,
+}
+
 /// Helper trait to convert any type into a serialized version
 pub trait ToSerialized<T>
 where
@@ -130,12 +149,24 @@ impl ToSerialized<Room> for Arc<CollabRoom> {
     fn to_serialized(&self) -> Room {
         let data = self.data();
 
+        let track = self.current_track();
+        let player = self
+            .player()
+            .map(|p| Player {
+                current_time: p.current_time(),
+                total_time: p.current_total_time(),
+                current_track: track.map(|t| t.to_serialized()),
+                state: p.current_state().to_serialized(),
+            })
+            .ok();
+
         Room {
             id: data.id,
             title: data.title,
             description: data.description,
             members: data.members.to_serialized(),
             connections: self.current_connections().to_serialized(),
+            player,
         }
     }
 }
@@ -204,6 +235,16 @@ impl ToSerialized<Queue> for (Vec<CollabTrack>, Vec<CollabTrack>) {
         Queue {
             items: self.0.to_serialized(),
             history: self.1.to_serialized(),
+        }
+    }
+}
+
+impl ToSerialized<PlayerState> for CorePlayerState {
+    fn to_serialized(&self) -> PlayerState {
+        match self {
+            Self::Idle => PlayerState::Idle,
+            Self::Playing => PlayerState::Playing,
+            Self::Buffering => PlayerState::Buffering,
         }
     }
 }
