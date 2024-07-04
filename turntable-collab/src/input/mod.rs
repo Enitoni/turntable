@@ -33,6 +33,19 @@ pub enum InputError {
     Unknown,
 }
 
+/// Represents metadata of the input
+#[derive(Debug, Clone)]
+pub struct Metadata {
+    pub title: String,
+    pub artist: Option<String>,
+
+    pub canonical: String,
+    pub source: String,
+
+    pub duration: f32,
+    pub artwork: Option<String>,
+}
+
 /// Represents any resource that can be used as an input for turntable
 pub enum Input {
     YouTube(youtube::YouTubeVideoInput),
@@ -67,6 +80,13 @@ impl Input {
             Input::File(input) => input.length(),
         }
     }
+
+    pub fn metadata(&self) -> Metadata {
+        match self {
+            Input::YouTube(input) => input.metadata(),
+            Input::File(input) => input.metadata(),
+        }
+    }
 }
 
 /// Represents a type that can be used as an input to turntable
@@ -86,4 +106,7 @@ pub trait Inputable {
 
     /// "Activates" the resource, returning a loadable that can be used to play it.
     async fn loadable(&self) -> Result<BoxedLoadable, InputError>;
+
+    /// Returns the metadata of the input
+    fn metadata(&self) -> Metadata;
 }

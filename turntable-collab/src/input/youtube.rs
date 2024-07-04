@@ -10,6 +10,8 @@ use tokio::{io::AsyncReadExt, process::Command};
 use turntable_core::{BoxedLoadable, Loadable};
 use turntable_impls::LoadableNetworkStream;
 
+use crate::Metadata;
+
 use super::{InputError, Inputable};
 
 lazy_static! {
@@ -44,6 +46,7 @@ struct FlatYouTubeVideo {
     id: String,
     title: String,
     channel: String,
+    thumbnail: String,
     duration: f32,
 }
 
@@ -154,6 +157,17 @@ impl Inputable for YouTubeVideoInput {
 
         Ok(boxed)
     }
+
+    fn metadata(&self) -> Metadata {
+        Metadata {
+            title: self.title.clone(),
+            artist: Some(self.channel.clone()),
+            duration: self.duration,
+            artwork: Some(self.thumbnail.clone()),
+            canonical: format!("https://youtube.com/v/{}", self.id),
+            source: "youtube".to_string(),
+        }
+    }
 }
 
 impl YouTubeResource {
@@ -200,7 +214,7 @@ impl From<FlatYouTubeVideo> for YouTubeVideoInput {
             id: video.id,
             title: video.title,
             duration: video.duration,
-            thumbnail: "".to_string(),
+            thumbnail: video.thumbnail,
             channel: video.channel,
         }
     }

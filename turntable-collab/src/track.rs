@@ -3,7 +3,7 @@ use parking_lot::Mutex;
 use std::{error::Error, sync::Arc};
 use turntable_core::{BoxedLoadable, Id, QueueItem, SinkId};
 
-use crate::input::Input;
+use crate::{input::Input, Metadata};
 
 pub type TrackId = Id<Track>;
 
@@ -11,6 +11,7 @@ pub type TrackId = Id<Track>;
 #[derive(Clone)]
 pub struct Track {
     pub id: TrackId,
+    pub metadata: Metadata,
 
     input: Arc<Input>,
     state: Arc<Mutex<TrackState>>,
@@ -53,9 +54,10 @@ impl QueueItem for Track {
 impl From<Input> for Track {
     fn from(input: Input) -> Self {
         Self {
-            id: TrackId::new(),
-            input: Arc::new(input),
             state: Default::default(),
+            metadata: input.metadata(),
+            input: Arc::new(input),
+            id: TrackId::new(),
         }
     }
 }

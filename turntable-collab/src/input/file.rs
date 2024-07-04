@@ -6,7 +6,7 @@ use tokio::fs::File;
 use turntable_core::{BoxedLoadable, Loadable};
 use turntable_impls::LoadableFile;
 
-use crate::{InputError, Inputable};
+use crate::{InputError, Inputable, Metadata};
 
 lazy_static! {
     static ref REGEX: Regex = Regex::new(r"^file://([a-zA-Z0-9_/\\:-]+\.[a-zA-Z0-9_]+)$").unwrap();
@@ -15,6 +15,7 @@ lazy_static! {
 // A file that can be played by turntable.
 pub struct FileInput {
     file: Mutex<Option<File>>,
+    path: String,
 }
 
 #[async_trait]
@@ -38,6 +39,7 @@ impl Inputable for FileInput {
             .map_err(|e| InputError::Other(e.to_string()))?;
 
         Ok(vec![Self {
+            path: path.to_string(),
             file: Mutex::new(Some(file)),
         }])
     }
@@ -51,5 +53,16 @@ impl Inputable for FileInput {
         let boxed = LoadableFile::new(file).boxed();
 
         Ok(boxed)
+    }
+
+    fn metadata(&self) -> Metadata {
+        Metadata {
+            title: self.path.clone(),
+            artist: None,
+            canonical: self.path.clone(),
+            source: "file".to_string(),
+            duration: 0.,
+            artwork: None,
+        }
     }
 }
