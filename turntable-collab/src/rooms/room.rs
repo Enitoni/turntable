@@ -4,9 +4,7 @@ use parking_lot::Mutex;
 use turntable_core::PlayerContext as Player;
 use turntable_impls::WaveEncoder;
 
-use crate::{
-    CollabContext, LinearQueue, LinearQueueItem, PrimaryKey, RoomData, RoomMemberData, Track,
-};
+use crate::{CollabContext, LinearQueue, LinearQueueItem, PrimaryKey, RoomData, RoomMemberData};
 
 use super::{RoomConnection, RoomConnectionHandle, RoomConnectionId, RoomError};
 
