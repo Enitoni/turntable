@@ -44,6 +44,7 @@ pub enum CollabEvent {
     },
     /// A queue was modified and updated
     RoomQueueUpdate {
+        room_id: PrimaryKey,
         history: Vec<LinearQueueItem>,
         items: Vec<LinearQueueItem>,
     },
