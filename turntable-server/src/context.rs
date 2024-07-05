@@ -7,9 +7,12 @@ use axum::{
 };
 use turntable_collab::Collab;
 
+use crate::sse::ServerSentEvents;
+
 #[derive(Clone, FromRef)]
 pub struct ServerContext {
     pub collab: Arc<Collab>,
+    pub sse: Arc<ServerSentEvents>,
 }
 
 #[async_trait]
