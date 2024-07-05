@@ -19,5 +19,6 @@ tower-http = { version = "0.5.2", features = ["cors"] }
 tokio = { workspace = true }
 serde = { workspace = true }
 async-trait = { workspace = true }
+parking_lot = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
