@@ -9,12 +9,13 @@ mod util;
 
 use auth::Auth;
 use crossbeam::channel::unbounded;
-use events::{CollabEvent, EventReceiver, EventSender};
+use events::{EventReceiver, EventSender};
 use rooms::{RoomId, RoomManager};
 use std::{sync::Arc, thread};
 
 pub use auth::{AuthError, Credentials, NewPlainUser};
 pub use db::*;
+pub use events::CollabEvent;
 pub use input::*;
 pub use queues::*;
 pub use rooms::{Room, RoomConnection, RoomConnectionHandle, RoomError, RoomState};
