@@ -3,7 +3,7 @@ use std::collections::VecDeque;
 use parking_lot::Mutex;
 use turntable_core::{BoxedQueueItem, Queue, QueueItem, QueueNotifier, SinkId};
 
-use crate::{PrimaryKey, Track};
+use crate::{events::CollabEvent, CollabContext, PrimaryKey, Track};
 
 #[derive(Clone)]
 pub struct LinearQueueItem {
@@ -11,16 +11,23 @@ pub struct LinearQueueItem {
     pub track: Track,
 }
 
+/// Wraps the [QueueNotifier] to also emit a collab event when the queue updates
+pub struct WrappedQueueNotifier {
+    pub room_id: PrimaryKey,
+    pub context: CollabContext,
+    pub notifier: QueueNotifier,
+}
+
 /// A linear queue of items.
 pub struct LinearQueue {
-    notifier: QueueNotifier,
+    notifier: WrappedQueueNotifier,
 
     history: Mutex<Vec<LinearQueueItem>>,
     items: Mutex<VecDeque<LinearQueueItem>>,
 }
 
 impl LinearQueue {
-    pub fn new(notifier: QueueNotifier) -> Self {
+    pub fn new(notifier: WrappedQueueNotifier) -> Self {
         Self {
             notifier,
             history: Default::default(),
@@ -34,8 +41,11 @@ impl LinearQueue {
             track: item,
         };
 
-        self.items.lock().push_back(item);
-        self.notifier.notify();
+        {
+            self.items.lock().push_back(item);
+        }
+
+        self.notify();
     }
 
     /// Get a track by sink id, if it exists
@@ -53,6 +63,11 @@ impl LinearQueue {
         let history: Vec<_> = self.history.lock().iter().cloned().collect();
 
         (items, history)
+    }
+
+    fn notify(&self) {
+        let tracks = self.tracks();
+        self.notifier.notify(tracks.0, tracks.1);
     }
 }
 
@@ -72,33 +87,48 @@ impl Queue for LinearQueue {
             self.history.lock().push(item);
         }
 
-        self.notifier.notify();
+        self.notify();
     }
 
     fn previous(&self) {
-        let mut items = self.items.lock();
-        let mut history = self.history.lock();
+        {
+            let mut items = self.items.lock();
+            let mut history = self.history.lock();
 
-        if let Some(item) = history.pop() {
-            items.push_front(item);
+            if let Some(item) = history.pop() {
+                items.push_front(item);
+            }
         }
 
-        self.notifier.notify();
+        self.notify();
     }
 
     fn reset(&self) {
-        let mut items = self.items.lock();
-        let mut history = self.history.lock();
+        {
+            let mut items = self.items.lock();
+            let mut history = self.history.lock();
 
-        for item in history.drain(..) {
-            items.push_front(item);
+            for item in history.drain(..) {
+                items.push_front(item);
+            }
         }
 
-        self.notifier.notify();
+        self.notify();
     }
 
     fn skip(&self, id: &str) {
         let mut items = self.items.lock();
         items.retain(|item| item.track.item_id() != id);
+    }
+}
+
+impl WrappedQueueNotifier {
+    fn notify(&self, items: Vec<LinearQueueItem>, history: Vec<LinearQueueItem>) {
+        self.context.emit(CollabEvent::RoomQueueUpdate {
+            room_id: self.room_id,
+            history,
+            items,
+        });
+        self.notifier.notify();
     }
 }

@@ -4,7 +4,10 @@ use parking_lot::Mutex;
 use turntable_core::PlayerContext as Player;
 use turntable_impls::WaveEncoder;
 
-use crate::{CollabContext, LinearQueue, LinearQueueItem, PrimaryKey, RoomData, RoomMemberData};
+use crate::{
+    events::CollabEvent, CollabContext, LinearQueue, LinearQueueItem, PrimaryKey, RoomData,
+    RoomMemberData, WrappedQueueNotifier,
+};
 
 use super::{RoomConnection, RoomConnectionHandle, RoomConnectionId, RoomError};
 
@@ -42,10 +45,17 @@ impl Room {
     /// Activates the room, which means it has an active player and queue associated.
     pub fn activate(&self) {
         let new_player = self.context.pipeline.create_player();
+
         let new_queue = self
             .context
             .pipeline
-            .create_queue(new_player.id, LinearQueue::new);
+            .create_queue(new_player.id, |notifier| {
+                LinearQueue::new(WrappedQueueNotifier {
+                    room_id: self.id(),
+                    context: self.context.clone(),
+                    notifier,
+                })
+            });
 
         *self.state.lock() = RoomState::Active {
             player: new_player.into(),
@@ -99,7 +109,12 @@ impl Room {
 
     /// Registers an added member to the room
     pub fn add_member(&self, new_member: RoomMemberData) {
-        self.data.lock().members.push(new_member)
+        self.data.lock().members.push(new_member.clone());
+
+        self.context.emit(CollabEvent::UserJoined {
+            room_id: self.id(),
+            new_member,
+        });
     }
 
     /// Returns the member if it exists in the room
@@ -125,7 +140,7 @@ impl Room {
         // For now, just activate a room if it's not active when a user wants to connect
         self.ensure_activation();
 
-        let connection = RoomConnection::new(user_id, source);
+        let connection = RoomConnection::new(user_id, source.clone());
         let connection_id = connection.id;
 
         self.connections.lock().push(connection);
@@ -135,6 +150,12 @@ impl Room {
             .context
             .pipeline
             .consume_player::<WaveEncoder>(player.id);
+
+        self.context.emit(CollabEvent::UserConnected {
+            room_id: self.id(),
+            user_id,
+            source,
+        });
 
         Ok(RoomConnectionHandle::new(
             &self.context,
@@ -146,7 +167,20 @@ impl Room {
 
     /// Called when a [RoomConnectionHandle] is dropped
     pub fn remove_connection(&self, connection_id: RoomConnectionId) {
-        self.connections.lock().retain(|c| c.id != connection_id)
+        let mut connections = self.connections.lock();
+
+        let connection = connections
+            .iter()
+            .find(|c| c.id == connection_id)
+            .expect("connection exists when trying to remove it");
+
+        self.context.emit(CollabEvent::UserDisconnected {
+            room_id: self.id(),
+            user_id: connection.user_id,
+            source: connection.source.to_owned(),
+        });
+
+        connections.retain(|c| c.id != connection_id)
     }
 
     /// Returns the current connections. This can be the same member multiple times.
