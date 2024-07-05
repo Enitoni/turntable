@@ -81,10 +81,12 @@ impl Queue for LinearQueue {
     }
 
     fn next(&self) {
-        let mut items = self.items.lock();
+        {
+            let mut items = self.items.lock();
 
-        if let Some(item) = items.pop_front() {
-            self.history.lock().push(item);
+            if let Some(item) = items.pop_front() {
+                self.history.lock().push(item);
+            }
         }
 
         self.notify();
