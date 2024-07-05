@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM sessions WHERE timezone('UTC', now()) > expires_at",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "63b977c7ee813ec5a7acb37f45a91a390c71a0a392173661a9def837f7cd37dc"
+}

@@ -1,0 +1,14 @@
+[package]
+name = "turntable-core"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[dependencies]
+spin_sleep = "1.2.0"
+
+async-trait = { workspace = true }
+parking_lot = { workspace = true }
+crossbeam = { workspace = true }
+dashmap = { workspace = true }
+tokio = { workspace = true }

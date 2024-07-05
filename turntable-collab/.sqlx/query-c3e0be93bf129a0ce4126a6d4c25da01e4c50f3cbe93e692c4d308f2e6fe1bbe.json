@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE rooms SET\n                title = $1,\n                description = $2\n            WHERE id = $3",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c3e0be93bf129a0ce4126a6d4c25da01e4c50f3cbe93e692c4d308f2e6fe1bbe"
+}

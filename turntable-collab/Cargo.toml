@@ -1,0 +1,31 @@
+[package]
+name = "turntable-collab"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+turntable-core = { path = "../turntable-core" }
+turntable-impls = { path = "../turntable-impls" }
+
+lazy_static = "1.4.0"
+regex = "1.10.5"
+argon2 = "0.5.3"
+sqlx = { version = "0.7.4", features = [
+  "runtime-tokio",
+  "postgres",
+  "chrono",
+  "macros",
+] }
+
+rand = { workspace = true }
+chrono = { workspace = true }
+async-trait = { workspace = true }
+futures-util = { workspace = true }
+parking_lot = { workspace = true }
+serde_json = { workspace = true }
+crossbeam = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
