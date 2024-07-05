@@ -11,7 +11,7 @@ use turntable_collab::{
 use turntable_core::PlayerState as CorePlayerState;
 use utoipa::ToSchema;
 
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct User {
     id: i32,
@@ -19,14 +19,14 @@ pub struct User {
     display_name: String,
 }
 
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct LoginResult {
     token: String,
     user: User,
 }
 
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Room {
     id: i32,
@@ -37,7 +37,7 @@ pub struct Room {
     player: Option<Player>,
 }
 
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct RoomMember {
     id: i32,
@@ -45,14 +45,14 @@ pub struct RoomMember {
     user: User,
 }
 
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct RoomConnection {
     user_id: i32,
     source: String,
 }
 
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct RoomInvite {
     token: String,
@@ -60,7 +60,7 @@ pub struct RoomInvite {
     room_title: String,
 }
 
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct StreamKey {
     id: i32,
@@ -70,7 +70,7 @@ pub struct StreamKey {
     user_id: i32,
 }
 
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Track {
     id: i32,
@@ -84,21 +84,21 @@ pub struct Track {
     artwork: Option<String>,
 }
 
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct QueueItem {
     user_id: i32,
     track: Track,
 }
 
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Queue {
     items: Vec<QueueItem>,
     history: Vec<QueueItem>,
 }
 
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Player {
     state: PlayerState,
@@ -107,7 +107,7 @@ pub struct Player {
     current_item: Option<QueueItem>,
 }
 
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum PlayerState {
     Idle,
@@ -130,6 +130,16 @@ where
 {
     fn to_serialized(&self) -> Vec<O> {
         self.iter().map(|x| x.to_serialized()).collect()
+    }
+}
+
+impl<I, O> ToSerialized<Option<O>> for Option<I>
+where
+    I: ToSerialized<O> + Clone,
+    O: Serialize,
+{
+    fn to_serialized(&self) -> Option<O> {
+        self.clone().map(|t| t.to_serialized())
     }
 }
 
