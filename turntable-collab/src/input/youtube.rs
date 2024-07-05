@@ -5,6 +5,7 @@ use async_trait::async_trait;
 use lazy_static::lazy_static;
 use regex::Regex;
 use serde::Deserialize;
+use std::fmt::Debug;
 use std::process::Stdio;
 use tokio::{io::AsyncReadExt, process::Command};
 use turntable_core::{BoxedLoadable, Loadable};
@@ -21,7 +22,7 @@ lazy_static! {
 }
 
 /// A YouTube video that can be played by turntable.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct YouTubeVideoInput {
     id: String,
     title: String,
@@ -217,5 +218,11 @@ impl From<FlatYouTubeVideo> for YouTubeVideoInput {
             thumbnail: video.thumbnail,
             channel: video.channel,
         }
+    }
+}
+
+impl Debug for YouTubeVideoInput {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "YouTube: {}", &self.id)
     }
 }

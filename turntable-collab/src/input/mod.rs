@@ -47,6 +47,7 @@ pub struct Metadata {
 }
 
 /// Represents any resource that can be used as an input for turntable
+#[derive(Debug)]
 pub enum Input {
     YouTube(youtube::YouTubeVideoInput),
     File(file::FileInput),

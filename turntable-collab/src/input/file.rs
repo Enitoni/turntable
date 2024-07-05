@@ -2,6 +2,7 @@ use async_trait::async_trait;
 use lazy_static::lazy_static;
 use parking_lot::Mutex;
 use regex::Regex;
+use std::fmt::Debug;
 use tokio::fs::File;
 use turntable_core::{BoxedLoadable, Loadable};
 use turntable_impls::LoadableFile;
@@ -64,5 +65,11 @@ impl Inputable for FileInput {
             duration: 0.,
             artwork: None,
         }
+    }
+}
+
+impl Debug for FileInput {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "File: {}", &self.path)
     }
 }

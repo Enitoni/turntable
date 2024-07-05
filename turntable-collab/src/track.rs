@@ -8,7 +8,7 @@ use crate::{input::Input, Metadata};
 pub type TrackId = Id<Track>;
 
 /// A single track in a queue
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Track {
     pub id: TrackId,
     pub metadata: Metadata,

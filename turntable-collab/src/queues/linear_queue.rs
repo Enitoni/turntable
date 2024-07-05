@@ -5,7 +5,7 @@ use turntable_core::{BoxedQueueItem, Queue, QueueItem, QueueNotifier, SinkId};
 
 use crate::{events::CollabEvent, CollabContext, PrimaryKey, Track};
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct LinearQueueItem {
     pub user_id: PrimaryKey,
     pub track: Track,

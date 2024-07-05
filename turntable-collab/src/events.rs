@@ -7,6 +7,7 @@ pub type EventSender = Sender<CollabEvent>;
 pub type EventReceiver = Receiver<CollabEvent>;
 
 /// Events emitted by
+#[derive(Debug)]
 pub enum CollabEvent {
     /// A player's state has changed.
     PlayerStateUpdate {
