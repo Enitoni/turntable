@@ -2,7 +2,6 @@ use axum::{routing::get, Router as AxumRouter};
 use context::ServerContext;
 use sse::ServerSentEvents;
 use std::{
-    env,
     net::{Ipv6Addr, SocketAddr},
     sync::Arc,
     thread,
@@ -21,21 +20,14 @@ mod serialized;
 mod sse;
 mod streaming;
 
-/// The default port the server will listen on.
-pub const DEFAULT_PORT: u16 = 9050;
-
 type Router = AxumRouter<ServerContext>;
 
 /// Starts the turntable server
-pub async fn run_server(collab: &Arc<Collab>) {
+pub async fn run_server(collab: &Arc<Collab>, port: u16) {
     let context = ServerContext {
         collab: collab.to_owned(),
         sse: ServerSentEvents::new(),
     };
-
-    let port = env::var("TURNTABLE_SERVER_PORT")
-        .map(|x| x.parse::<u16>().expect("Port must be a number"))
-        .unwrap_or(DEFAULT_PORT);
 
     let addr: SocketAddr = (Ipv6Addr::UNSPECIFIED, port).into();
 

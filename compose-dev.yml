@@ -1,9 +1,7 @@
-version: "3"
-
 services:
   db:
     image: docker.io/library/postgres:latest
-    container-name: turntable_postgres
+    container_name: turntable_postgres
     restart: always
     ports:
       - 5432:5432
