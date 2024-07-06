@@ -4,6 +4,9 @@ use turntable_collab::Collab;
 use turntable_core::Config;
 use turntable_server::run_server;
 
+/// The default port the server will listen on.
+pub const DEFAULT_PORT: u16 = 9050;
+
 #[tokio::main]
 async fn main() {
     dotenvy::dotenv().ok();
@@ -14,6 +17,10 @@ async fn main() {
 
     let collab = Arc::new(Collab::new(Config::default(), &database_url).await);
 
-    println!("Server running.");
-    run_server(&collab).await
+    let port = env::var("TURNTABLE_SERVER_PORT")
+        .map(|x| x.parse::<u16>().expect("Port must be a number"))
+        .unwrap_or(DEFAULT_PORT);
+
+    println!("Server running on http://localhost:{}", port);
+    run_server(&collab, port).await
 }
