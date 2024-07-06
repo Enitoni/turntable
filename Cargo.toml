@@ -13,6 +13,7 @@ turntable-collab = { path = "turntable-collab" }
 turntable-server = { path = "turntable-server" }
 
 fern = { version = "0.6.1", features = ["colored"] }
+dotenvy = "0.15.7"
 
 
 [workspace]
