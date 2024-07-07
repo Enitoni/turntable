@@ -1,3 +1,4 @@
+use log::{info, warn};
 use std::{
     sync::Arc,
     thread,
@@ -37,6 +38,8 @@ impl Playback {
     pub fn create_player(&self) -> PlayerContext {
         let player = Player::new(&self.context, self.output.clone());
         let context = player.context();
+
+        info!("Created player with id {}", player.id);
 
         self.output.register_player(player.id);
         self.context.players.insert(player.id, player.into());
@@ -104,11 +107,10 @@ fn wait_for_next(now: Instant, config: Config) {
     let duration_micros = duration.as_micros();
 
     if elapsed_millis > config.samples_per_sec() as u128 / 10000 {
-        // Todo: Warn if it took too long to process samples
-        println!(
-            "Warning: Took too long to process samples: {}ms",
+        warn!(
+            "Stream took too long ({}ms) to process samples!",
             elapsed_millis
-        );
+        )
     }
 
     let corrected = duration_micros

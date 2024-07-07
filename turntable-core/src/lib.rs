@@ -124,6 +124,7 @@ impl PipelineContext {
     }
 
     pub fn emit(&self, event: PipelineEvent) {
+        event.log();
         self.event_sender.send(event).expect("event is sent");
     }
 

@@ -12,3 +12,4 @@ parking_lot = { workspace = true }
 crossbeam = { workspace = true }
 dashmap = { workspace = true }
 tokio = { workspace = true }
+log = { workspace = true }

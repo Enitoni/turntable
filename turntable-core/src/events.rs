@@ -1,4 +1,5 @@
 use crossbeam::channel::{Receiver, Sender};
+use log::{error, info, trace};
 
 use crate::{PlayerId, PlayerState, SinkId, SinkLoadState};
 
@@ -69,4 +70,46 @@ pub enum PipelineAction {
         /// The position to seek to, in seconds.
         position: f32,
     },
+}
+
+impl PipelineEvent {
+    pub fn log(&self) {
+        match self {
+            PipelineEvent::SinkLoadStateUpdate { sink_id, new_state } => {
+                info!("Sink #{} load state updated: {:?}", sink_id, new_state,);
+            }
+            PipelineEvent::PlayerStateUpdate {
+                player_id,
+                new_state,
+            } => {
+                info!("Player #{} state update: {:?}", player_id, new_state)
+            }
+            PipelineEvent::PlayerTimeUpdate {
+                player_id,
+                position,
+                total_position: _,
+            } => {
+                trace!("Player #{} time update: {}", player_id, position)
+            }
+            PipelineEvent::PlayerAdvanced { player_id } => {
+                info!("Player #{} advanced", player_id)
+            }
+            PipelineEvent::QueueItemActivated {
+                player_id,
+                new_sink_id,
+                item_id,
+            } => info!(
+                "Queue item {} of player #{} activated with sink #{}",
+                item_id, player_id, new_sink_id
+            ),
+            PipelineEvent::QueueItemActivationError {
+                player_id,
+                item_id,
+                error,
+            } => error!(
+                "Queue item {} of player #{} failed to activate: {}",
+                item_id, player_id, error
+            ),
+        }
+    }
 }
