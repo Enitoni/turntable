@@ -4,7 +4,6 @@ use std::ops::{Add, Mul};
 use std::{marker::PhantomData, vec};
 
 use crossbeam::atomic::AtomicCell;
-use parking_lot::RwLock;
 use tokio::runtime::{Handle, Runtime};
 
 use crate::{Config, Sample};
