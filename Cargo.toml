@@ -6,15 +6,17 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tokio = { workspace = true }
-
 turntable-core = { path = "turntable-core" }
 turntable-collab = { path = "turntable-collab" }
 turntable-server = { path = "turntable-server" }
 
-fern = { version = "0.6.1", features = ["colored"] }
-dotenvy = "0.15.7"
+chrono = { workspace = true }
+tokio = { workspace = true }
+log = { workspace = true }
 
+fern = { version = "0.6.1", features = ["colored"] }
+colored = "2.1.0"
+dotenvy = "0.15.7"
 
 [workspace]
 members = [
