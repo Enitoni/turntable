@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use colored::Colorize;
+use colored::{control::set_override, Colorize};
 use log::Level;
 
 /// External crates only need to log warnings and errors
@@ -8,6 +8,10 @@ const ALLOWED_EXTERNAL_LEVELS: [Level; 2] = [Level::Warn, Level::Error];
 const ALLOWED_LEVELS: [Level; 3] = [Level::Info, Level::Warn, Level::Error];
 
 pub fn init_logger() {
+    if let Ok(value) = std::env::var("COLOR") {
+        set_override(value != "0")
+    }
+
     fern::Dispatch::new()
         .format(move |out, message, record| {
             let target = Target::from_str(record.target());
