@@ -4,12 +4,15 @@ use turntable_collab::Collab;
 use turntable_core::Config;
 use turntable_server::run_server;
 
+mod logging;
+
 /// The default port the server will listen on.
 pub const DEFAULT_PORT: u16 = 9050;
 
 #[tokio::main]
 async fn main() {
     dotenvy::dotenv().ok();
+    logging::init_logger();
 
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
