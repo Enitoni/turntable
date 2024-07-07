@@ -169,9 +169,7 @@ impl RangeBuffer {
 
     /// Merges two intersecting or adjacent ranges, then returns the new merged range.
     fn merge_with(self, other: Self) -> Self {
-        let mut new_data = vec![];
-
-        let (mut first, mut second) = if self.offset.load() < other.offset.load() {
+        let (mut first, second) = if self.offset.load() < other.offset.load() {
             (self, other)
         } else {
             (other, self)
@@ -180,16 +178,17 @@ impl RangeBuffer {
         let (start, end) = first.range();
         let (other_start, _) = second.range();
 
-        let first_data: Vec<_> = first.data.drain(..).collect();
-        let second_data: Vec<_> = second.data.drain(..).collect();
         let intersection = (end + 1).saturating_sub(other_start);
 
-        new_data.extend_from_slice(&first_data[..first_data.len().saturating_sub(intersection)]);
-        new_data.extend_from_slice(&second_data);
+        first
+            .data
+            .truncate(first.data.len().saturating_sub(intersection));
+
+        first.data.extend_from_slice(&second.data);
 
         Self {
             offset: AtomicCell::new(start),
-            data: new_data,
+            data: first.data,
         }
     }
 
