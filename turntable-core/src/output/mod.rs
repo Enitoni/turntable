@@ -10,6 +10,7 @@ mod stream;
 
 pub use consumer::*;
 pub use encoder::*;
+use log::info;
 pub use stream::*;
 
 /// Manages streams for consuming a [Player].
@@ -54,7 +55,16 @@ impl Output {
             .get(&player_id)
             .expect("consume_player() is not called with a player that does not exist");
 
-        stream.consume::<E>()
+        let consumer = stream.consume::<E>();
+
+        info!(
+            "Created {} consumer #{} of player #{}",
+            E::name(),
+            consumer.id,
+            player_id,
+        );
+
+        consumer
     }
 
     /// Pushes samples to the associated player's stream.

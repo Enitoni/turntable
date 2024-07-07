@@ -4,6 +4,7 @@ use crate::{
     BufferRead, BufferVoidDistance, Id, MultiRangeBuffer, PipelineContext, PipelineEvent, Sample,
 };
 use crossbeam::atomic::AtomicCell;
+use log::info;
 use parking_lot::{Mutex, RwLock};
 
 pub type SinkId = Id<Sink>;
@@ -195,6 +196,13 @@ impl Sink {
     /// Writes samples to the sink at the given offset.
     fn internal_write(&self, offset: usize, samples: &[Sample]) {
         self.buffer.write().write(offset, samples);
+
+        info!(
+            "Wrote {} samples at offset {} into sink #{}",
+            samples.len(),
+            offset,
+            self.id
+        );
     }
 }
 

@@ -39,7 +39,7 @@ impl Playback {
         let player = Player::new(&self.context, self.output.clone());
         let context = player.context();
 
-        info!("Created player with id {}", player.id);
+        info!("Created player #{}", player.id);
 
         self.output.register_player(player.id);
         self.context.players.insert(player.id, player.into());

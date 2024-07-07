@@ -4,6 +4,7 @@ mod queue_item;
 use std::{sync::Arc, thread};
 
 use crossbeam::channel::{unbounded, Receiver, Sender};
+use log::info;
 pub use queue::*;
 pub use queue_item::*;
 
@@ -127,6 +128,12 @@ where
         if let Some(sink) = existing_sink {
             new_sinks.push(sink.clone());
         } else {
+            info!(
+                "Activating queue item {} of player #{}...",
+                item.item_id(),
+                player_id
+            );
+
             let loader = item.loadable().await;
 
             let sink = match loader {

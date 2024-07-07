@@ -1,6 +1,7 @@
 use std::sync::{Arc, Weak};
 
 use dashmap::DashMap;
+use log::info;
 use parking_lot::Mutex;
 
 use super::{Consumer, ConsumerId, Encoder};
@@ -46,6 +47,7 @@ impl Stream {
 
     /// Removes a producer from this stream.
     pub fn remove(&self, consumer_id: ConsumerId) {
+        info!("Dropped consumer #{}", consumer_id);
         self.producers.remove(&consumer_id);
     }
 
