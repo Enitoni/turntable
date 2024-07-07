@@ -10,15 +10,14 @@ use std::process::Stdio;
 use tokio::{io::AsyncReadExt, process::Command};
 use turntable_core::{BoxedLoadable, Loadable};
 use turntable_impls::LoadableNetworkStream;
+use url::Url;
 
 use crate::Metadata;
 
 use super::{InputError, Inputable};
 
 lazy_static! {
-    static ref REGEX: Regex =
-        Regex::new(r"^(?:https?://)?(?:[a-z]+\.)?youtube\.com/(?:(?:playlist\?list=)|(?:watch\?v=|v/))[A-Za-z\d_\-&=]+$")
-            .unwrap();
+    static ref REGEX: Regex = Regex::new(r"^(https?://)?").unwrap();
 }
 
 /// A YouTube video that can be played by turntable.
@@ -85,7 +84,52 @@ enum YouTubeResource {
 #[async_trait]
 impl Inputable for YouTubeVideoInput {
     fn test(query: &str) -> bool {
-        REGEX.is_match(query)
+        let query = REGEX.replace(query, "https://");
+        let url = Url::parse(&query);
+
+        match url {
+            Ok(url) => {
+                // Test youtube.com
+                if url
+                    .host_str()
+                    .filter(|s| s.ends_with("youtube.com"))
+                    .is_some()
+                {
+                    // Test /watch?v=...
+                    if url.path().starts_with("/watch")
+                        && url
+                            .query_pairs()
+                            .into_iter()
+                            .any(|(k, v)| k == "v" && !v.is_empty())
+                    {
+                        return true;
+                    }
+
+                    // Test /v/...
+                    if url.path().starts_with("/v/") {
+                        return true;
+                    }
+
+                    // Test playlists
+                    if url.path() == "playlist"
+                        && url
+                            .query_pairs()
+                            .into_iter()
+                            .any(|(k, v)| k == "list" && !v.is_empty())
+                    {
+                        return true;
+                    }
+                }
+
+                // Test youtu.be/...
+                if url.host_str() == Some("youtu.be") && !url.path().is_empty() {
+                    return true;
+                }
+
+                false
+            }
+            Err(_) => false,
+        }
     }
 
     async fn fetch(query: &str) -> Result<Vec<Self>, InputError>
@@ -224,5 +268,32 @@ impl From<FlatYouTubeVideo> for YouTubeVideoInput {
 impl Debug for YouTubeVideoInput {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "YouTube: {}", &self.id)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_url_testing() {
+        assert!(YouTubeVideoInput::test(
+            "https://www.youtube.com/watch?v=JwRWf3ho4B8&list=PL23A657E4BD523733&index=45"
+        ));
+        assert!(YouTubeVideoInput::test(
+            "www.youtube.com/watch?v=z09GolEktUw&feature=youtu.be"
+        ));
+        assert!(YouTubeVideoInput::test(
+            "https://music.youtube.com/watch?v=-t-75CCdM2o"
+        ));
+        assert!(YouTubeVideoInput::test(
+            "https://www.youtube.com/watch?v=z09GolEktUw"
+        ));
+        assert!(YouTubeVideoInput::test("https://youtube.com/v/z09GolEktUw"));
+        assert!(YouTubeVideoInput::test("youtu.be/z09GolEktUw"));
+
+        assert!(!YouTubeVideoInput::test("https://www.youtube.com/"));
+        assert!(!YouTubeVideoInput::test("https://www.youtube.com/@Ayrun"));
+        assert!(!YouTubeVideoInput::test("youtube.com/"));
     }
 }
