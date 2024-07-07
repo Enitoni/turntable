@@ -2696,6 +2696,7 @@ dependencies = [
  "async-trait",
  "axum",
  "futures-util",
+ "log",
  "parking_lot",
  "serde",
  "serde_json",

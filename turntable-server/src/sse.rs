@@ -6,6 +6,7 @@ use axum::{
     routing::get,
 };
 use futures_util::Stream;
+use log::info;
 use parking_lot::Mutex;
 use serde::Serialize;
 use std::{
@@ -204,11 +205,14 @@ impl ServerSentEvents {
         let connection = Connection::new();
         let handle = connection.handle(self.me.clone());
 
+        info!("SSE connection #{} created", connection.id);
+
         self.connections.lock().push(connection);
         handle
     }
 
     fn disconnect(&self, id: ConnectionId) {
+        info!("SSE connection #{} dropped", id);
         self.connections.lock().retain(|c| c.id != id)
     }
 }

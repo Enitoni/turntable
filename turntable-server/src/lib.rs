@@ -1,5 +1,6 @@
 use axum::{routing::get, Router as AxumRouter};
 use context::ServerContext;
+use log::info;
 use sse::ServerSentEvents;
 use std::{
     net::{Ipv6Addr, SocketAddr},
@@ -51,6 +52,8 @@ pub async fn run_server(collab: &Arc<Collab>, port: u16) {
     let listener = TcpListener::bind(&addr).await.expect("listens on address");
 
     spawn_event_thread(&context);
+
+    info!("Listening on http://localhost:{}", port);
 
     axum::serve(listener, root_router.into_make_service())
         .await

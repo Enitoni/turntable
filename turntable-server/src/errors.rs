@@ -2,6 +2,7 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
+use log::error;
 use thiserror::Error;
 use turntable_collab::{AuthError, DatabaseError, InputError, RoomError};
 
@@ -81,6 +82,11 @@ impl ServerError {
 
 impl IntoResponse for ServerError {
     fn into_response(self) -> Response {
+        // Log unknown errors when they happen
+        if let Self::Unknown(err) = &self {
+            error!("Request failed: {}", err)
+        }
+
         (self.as_status_code(), self.to_string()).into_response()
     }
 }
