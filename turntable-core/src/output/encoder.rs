@@ -17,4 +17,9 @@ where
 
     /// Returns the content type of the encoded data.
     fn content_type(&self) -> String;
+
+    /// Returns a human friendly name
+    fn name() -> String
+    where
+        Self: Sized;
 }

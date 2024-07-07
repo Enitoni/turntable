@@ -114,6 +114,13 @@ impl Encoder for WaveEncoder {
     fn content_type(&self) -> String {
         "audio/wav".to_string()
     }
+
+    fn name() -> String
+    where
+        Self: Sized,
+    {
+        "WaveEncoder".to_string()
+    }
 }
 
 impl Read for WaveEncoder {
