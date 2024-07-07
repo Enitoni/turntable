@@ -4,7 +4,7 @@ use crate::{
     BufferRead, BufferVoidDistance, Id, MultiRangeBuffer, PipelineContext, PipelineEvent, Sample,
 };
 use crossbeam::atomic::AtomicCell;
-use parking_lot::Mutex;
+use parking_lot::{Mutex, RwLock};
 
 pub type SinkId = Id<Sink>;
 
@@ -13,7 +13,7 @@ pub struct Sink {
     pub id: SinkId,
     context: PipelineContext,
     /// The samples stored in this sink.
-    buffer: MultiRangeBuffer,
+    buffer: RwLock<MultiRangeBuffer>,
     /// The expected length of the samples. If this is `None`, the length is unknown.
     expected_length: Option<usize>,
     /// The current load state of the sink.
@@ -60,7 +60,7 @@ impl Sink {
             has_guard: Default::default(),
             has_write_ref: Default::default(),
             duration_since_interaction: Instant::now().into(),
-            buffer: MultiRangeBuffer::new(buffer_expected_length),
+            buffer: MultiRangeBuffer::new(buffer_expected_length).into(),
         }
     }
 
@@ -78,7 +78,7 @@ impl Sink {
 
     /// Reads samples from the sink at the given offset.
     pub fn read(&self, offset: usize, buf: &mut [Sample]) -> BufferRead {
-        self.buffer.read(offset, buf)
+        self.buffer.read().read(offset, buf)
     }
 
     /// Returns a write reference to the sink.
@@ -121,7 +121,7 @@ impl Sink {
 
     /// Returns how many samples are left in the sink until a void at the current offset.
     fn distance_from_void(&self, offset: usize) -> BufferVoidDistance {
-        self.buffer.distance_from_void(offset)
+        self.buffer.read().distance_from_void(offset)
     }
 
     /// Returns how many expected samples are left from the given offset.
@@ -133,7 +133,9 @@ impl Sink {
 
     /// Clears the samples in the sink outside the given window.
     fn clear_outside(&self, offset: usize, window: usize, chunk_size: usize) {
-        self.buffer.retain_window(offset, window, chunk_size)
+        self.buffer
+            .write()
+            .retain_window(offset, window, chunk_size)
     }
 
     /// Returns the expected length of the sink. [None] if unknown.
@@ -192,7 +194,7 @@ impl Sink {
 
     /// Writes samples to the sink at the given offset.
     fn internal_write(&self, offset: usize, samples: &[Sample]) {
-        self.buffer.write(offset, samples);
+        self.buffer.write().write(offset, samples);
     }
 }
 

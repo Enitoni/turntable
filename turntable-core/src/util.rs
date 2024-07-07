@@ -84,7 +84,7 @@ struct RangeBuffer {
     /// The offset in samples of the start of the buffer.
     offset: AtomicCell<usize>,
     /// The samples in the buffer.
-    data: RwLock<Vec<Sample>>,
+    data: Vec<Sample>,
 }
 
 impl RangeBuffer {
@@ -95,32 +95,30 @@ impl RangeBuffer {
         }
     }
 
-    fn write(&self, buf: &[Sample]) {
-        let mut data = self.data.write();
-        data.extend_from_slice(buf);
+    fn write(&mut self, buf: &[Sample]) {
+        self.data.extend_from_slice(buf);
     }
 
     /// Reads samples to the provided slice at the given absolute offset.
     fn read(&self, offset: usize, buf: &mut [Sample]) -> usize {
-        let data = self.data.read();
+        let len = self.data.len();
 
         let absolute_start = self.offset.load();
-        let absolute_end = (absolute_start + data.len()).min(data.len());
+        let absolute_end = (absolute_start + len).min(len);
         let requested_length = buf.len();
 
         let start = offset.saturating_sub(absolute_start);
         let end = start.saturating_add(requested_length).min(absolute_end);
         let amount = end.saturating_sub(start);
 
-        buf[..amount].copy_from_slice(&data[start..end]);
+        buf[..amount].copy_from_slice(&self.data[start..end]);
         amount
     }
 
     /// Clears all samples outside the given window.
     /// End and start are clamped to chunk_size's start and end.
-    fn retain_range(&self, start: usize, end: usize, chunk_size: usize) {
-        let mut data = self.data.write();
-        let total_length = data.len();
+    fn retain_range(&mut self, start: usize, end: usize, chunk_size: usize) {
+        let total_length = self.data.len();
 
         let absolute_start = self.offset.load();
         let absolute_end = (absolute_start + total_length).saturating_sub(1);
@@ -138,15 +136,15 @@ impl RangeBuffer {
 
         let relative_start = safe_start.saturating_sub(absolute_start);
         let relative_end = safe_end.saturating_sub(absolute_start);
-        let remainder: Vec<_> = data.drain(relative_start..=relative_end).collect();
+        let remainder: Vec<_> = self.data.drain(relative_start..=relative_end).collect();
 
-        *data = remainder;
+        self.data = remainder;
         self.offset.store(relative_start + absolute_start);
     }
 
     /// Returns the amount of samples in the buffer so far.
     fn length(&self) -> usize {
-        self.data.read().len()
+        self.data.len()
     }
 
     /// Returns the start and end of the range.
@@ -174,7 +172,7 @@ impl RangeBuffer {
     fn merge_with(self, other: Self) -> Self {
         let mut new_data = vec![];
 
-        let (first, second) = if self.offset.load() < other.offset.load() {
+        let (mut first, mut second) = if self.offset.load() < other.offset.load() {
             (self, other)
         } else {
             (other, self)
@@ -183,8 +181,8 @@ impl RangeBuffer {
         let (start, end) = first.range();
         let (other_start, _) = second.range();
 
-        let first_data: Vec<_> = first.data.write().drain(..).collect();
-        let second_data: Vec<_> = second.data.write().drain(..).collect();
+        let first_data: Vec<_> = first.data.drain(..).collect();
+        let second_data: Vec<_> = second.data.drain(..).collect();
         let intersection = (end + 1).saturating_sub(other_start);
 
         new_data.extend_from_slice(&first_data[..first_data.len().saturating_sub(intersection)]);
@@ -192,14 +190,13 @@ impl RangeBuffer {
 
         Self {
             offset: AtomicCell::new(start),
-            data: RwLock::new(new_data),
+            data: new_data,
         }
     }
 
     #[cfg(test)]
-    fn consume_to_vec(&self) -> Vec<Sample> {
-        let mut data = self.data.write();
-        data.drain(..).collect()
+    fn consume_to_vec(&mut self) -> Vec<Sample> {
+        self.data.drain(..).collect()
     }
 }
 
@@ -207,7 +204,7 @@ impl RangeBuffer {
 /// This is needed for seeking, because it has to be possible to write and read samples at any offset.
 #[derive(Debug)]
 pub struct MultiRangeBuffer {
-    ranges: RwLock<Vec<RangeBuffer>>,
+    ranges: Vec<RangeBuffer>,
     /// The amount of samples that is expected to be written to the buffer.
     expected_size: usize,
 }
@@ -248,9 +245,8 @@ impl MultiRangeBuffer {
     }
 
     /// Writes samples to the buffer at the given offset, creating a new range if necessary.
-    pub fn write(&self, offset: usize, buf: &[Sample]) {
-        let mut guard = self.ranges.write();
-        let mut ranges: Vec<_> = guard.drain(..).collect();
+    pub fn write(&mut self, offset: usize, buf: &[Sample]) {
+        let mut ranges: Vec<_> = self.ranges.drain(..).collect();
 
         let range = ranges.iter_mut().find(|x| x.offset.load() == offset);
 
@@ -261,7 +257,7 @@ impl MultiRangeBuffer {
             ranges.last_mut().unwrap().write(buf);
         }
 
-        *guard = Self::merge_ranges(ranges);
+        self.ranges = Self::merge_ranges(ranges);
     }
 
     /// Reads samples from the buffer at the given offset. Returns a [BufferReadResult], which describes the result of the read operation.
@@ -269,10 +265,8 @@ impl MultiRangeBuffer {
     /// - If the range has a gap after the requested amount, or there isn't any range at all, the end is set to `Gap`
     /// - If the requested amount is larger or equal to the expected size, the end is set to `End`
     pub fn read(&self, offset: usize, buf: &mut [Sample]) -> BufferRead {
-        let ranges = self.ranges.read();
-
         let end_offset = offset + buf.len();
-        let range = ranges.iter().find(|x| x.is_within(offset));
+        let range = self.ranges.iter().find(|x| x.is_within(offset));
 
         let mut amount_read = 0;
         let mut end = BufferReadEnd::More;
@@ -302,11 +296,14 @@ impl MultiRangeBuffer {
 
     /// Returns the distance in samples from the offset to the first gap or end of the buffer.
     pub fn distance_from_void(&self, offset: usize) -> BufferVoidDistance {
-        let ranges = self.ranges.read();
-        let range = ranges.iter().enumerate().find(|(_, x)| x.is_within(offset));
+        let range = self
+            .ranges
+            .iter()
+            .enumerate()
+            .find(|(_, x)| x.is_within(offset));
 
         if let Some((i, range)) = range {
-            let has_more = ranges.get(i + 1).is_some();
+            let has_more = self.ranges.get(i + 1).is_some();
             let (_, end) = range.range();
 
             BufferVoidDistance {
@@ -323,20 +320,19 @@ impl MultiRangeBuffer {
     }
 
     /// Clears all samples outside the given window.
-    pub fn retain_window(&self, offset: usize, window: usize, chunk_size: usize) {
-        let mut guard = self.ranges.write();
-        let mut ranges: Vec<_> = guard.drain(..).collect();
+    pub fn retain_window(&mut self, offset: usize, window: usize, chunk_size: usize) {
+        let mut ranges: Vec<_> = self.ranges.drain(..).collect();
 
         let start = offset.saturating_sub(window);
         let end = offset + window;
 
         ranges.retain(|x| x.is_within(start) || x.is_within(end));
 
-        for range in ranges.iter() {
+        for range in ranges.iter_mut() {
             range.retain_range(start, end, chunk_size);
         }
 
-        *guard = Self::merge_ranges(ranges);
+        self.ranges = Self::merge_ranges(ranges);
     }
 
     /// Merges all ranges that are intersecting or adjacent to each other.
@@ -365,9 +361,11 @@ impl MultiRangeBuffer {
     }
 
     #[cfg(test)]
-    fn consume_to_vec(&self) -> Vec<Vec<Sample>> {
-        let mut ranges = self.ranges.write();
-        ranges.drain(..).map(|x| x.consume_to_vec()).collect()
+    fn consume_to_vec(&mut self) -> Vec<Vec<Sample>> {
+        self.ranges
+            .drain(..)
+            .map(|mut x| x.consume_to_vec())
+            .collect()
     }
 }
 
@@ -410,8 +408,8 @@ mod test {
 
     #[test]
     fn test_intersecting_or_adjacent() {
-        let first = RangeBuffer::new(0);
-        let second = RangeBuffer::new(5);
+        let mut first = RangeBuffer::new(0);
+        let mut second = RangeBuffer::new(5);
 
         first.write(&[1., 2., 3., 4., 5.]);
         second.write(&[6., 7., 8., 9., 10.]);
@@ -426,8 +424,8 @@ mod test {
         );
 
         // With a gap
-        let first = RangeBuffer::new(0);
-        let second = RangeBuffer::new(6);
+        let mut first = RangeBuffer::new(0);
+        let mut second = RangeBuffer::new(6);
 
         first.write(&[1., 2., 3., 4., 5.]);
         second.write(&[6., 7., 8., 9., 10.]);
@@ -446,26 +444,26 @@ mod test {
     fn test_merge_with() {
         let end_result = [1., 2., 3., 4., 5., 6., 7., 8., 9., 10.];
 
-        let first = RangeBuffer::new(0);
-        let second = RangeBuffer::new(5);
+        let mut first = RangeBuffer::new(0);
+        let mut second = RangeBuffer::new(5);
 
         first.write(&[1., 2., 3., 4., 5.]);
         second.write(&[6., 7., 8., 9., 10.]);
 
-        let merged = first.merge_with(second);
+        let mut merged = first.merge_with(second);
         assert_eq!(
             merged.consume_to_vec(),
             end_result,
             "first should be merged with second"
         );
 
-        let first = RangeBuffer::new(0);
-        let second = RangeBuffer::new(5);
+        let mut first = RangeBuffer::new(0);
+        let mut second = RangeBuffer::new(5);
 
         first.write(&[1., 2., 3., 4., 5.]);
         second.write(&[6., 7., 8., 9., 10.]);
 
-        let merged = second.merge_with(first);
+        let mut merged = second.merge_with(first);
         assert_eq!(
             merged.consume_to_vec(),
             end_result,
@@ -473,13 +471,13 @@ mod test {
         );
 
         // Check with an intersecting range
-        let first = RangeBuffer::new(0);
-        let second = RangeBuffer::new(5);
+        let mut first = RangeBuffer::new(0);
+        let mut second = RangeBuffer::new(5);
 
         first.write(&[1., 2., 3., 4., 5., 6., 7.]);
         second.write(&[6., 7., 8., 9., 10.]);
 
-        let merged = second.merge_with(first);
+        let mut merged = second.merge_with(first);
         assert_eq!(
             merged.consume_to_vec(),
             end_result,
@@ -495,7 +493,7 @@ mod test {
         let absolute_offset = 6;
 
         // Create the buffer at the specified offset.
-        let buffer = RangeBuffer::new(absolute_offset);
+        let mut buffer = RangeBuffer::new(absolute_offset);
 
         // Write some initial samples
         // Since we start at 6, which is an even offset (odd since arrays starts at 0), the first sample is left channel, followed by right channel, and so on.
@@ -504,7 +502,7 @@ mod test {
         //             L   R   L   R   L   R   L   R   L   R
         buffer.write(&[1., 2., 3., 4., 5., 6., 7., 8., 9., 10.]);
 
-        let get_samples = || {
+        let get_samples = |buffer: &RangeBuffer| {
             let mut buf = vec![0.; 2];
 
             // Get the fifth and sixth sample
@@ -512,7 +510,7 @@ mod test {
             buf
         };
 
-        let expected_samples = get_samples();
+        let expected_samples = get_samples(&buffer);
         assert_eq!(&expected_samples, &[5., 6.], "sample is correct");
 
         // Define our offsets. Odd/and even are swapped because arrays start at 0.
@@ -526,7 +524,7 @@ mod test {
 
         // A channel shift due to an incorrect new absolute offset should not happen, so we get the same samples.
         assert_eq!(
-            get_samples(),
+            get_samples(&buffer),
             expected_samples,
             "received samples are correct"
         );
@@ -546,7 +544,7 @@ mod test {
 
         // Check the overflowing, and check that it handles off-by-one offset.
         let absolute_offset = absolute_offset + 1;
-        let buffer = RangeBuffer::new(absolute_offset);
+        let mut buffer = RangeBuffer::new(absolute_offset);
 
         // Samples are shifted a channel because we added one to the offset.
         //             R   L   R   L   R   L   R   L   R   L
@@ -572,7 +570,7 @@ mod test {
 
     #[test]
     fn test_is_within() {
-        let buffer = RangeBuffer::new(0);
+        let mut buffer = RangeBuffer::new(0);
         buffer.write(&[1., 2., 3., 4., 5., 6., 7., 8., 9., 10.]);
 
         // Remember, offset starts at 0.
@@ -583,7 +581,7 @@ mod test {
 
     #[test]
     fn test_merge_multi_ranges() {
-        let buffer = MultiRangeBuffer::new(0);
+        let mut buffer = MultiRangeBuffer::new(0);
 
         buffer.write(0, &[1., 2., 3., 4., 5., 6., 7., 8., 9., 10.]);
         buffer.write(5, &[0., 0., 0.]);
@@ -597,7 +595,7 @@ mod test {
 
     #[test]
     fn test_read() {
-        let buffer = MultiRangeBuffer::new(29);
+        let mut buffer = MultiRangeBuffer::new(29);
 
         buffer.write(0, &[1., 2., 3., 4., 5., 6., 7., 8., 9., 10.]);
         buffer.write(20, &[1., 2., 3., 4., 5., 6., 7., 8., 9., 10.]);
@@ -633,7 +631,7 @@ mod test {
 
     #[test]
     fn test_distance_from_void() {
-        let buffer = MultiRangeBuffer::new(0);
+        let mut buffer = MultiRangeBuffer::new(0);
 
         buffer.write(0, &[1., 2., 3., 4., 5., 6., 7., 8., 9., 10.]);
         buffer.write(20, &[1., 2., 3., 4., 5., 6., 7., 8., 9., 10.]);
@@ -662,7 +660,7 @@ mod test {
 
     #[test]
     fn test_retain_window() {
-        let buffer = MultiRangeBuffer::new(0);
+        let mut buffer = MultiRangeBuffer::new(0);
 
         //                L   R   L   R   L   R   L   R   L   R
         buffer.write(0, &[1., 2., 3., 4., 5., 6., 7., 8., 9., 10.]);
