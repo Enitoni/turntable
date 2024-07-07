@@ -14,7 +14,7 @@ pub fn init_logger() {
             let now = chrono::Local::now();
 
             out.finish(format_args!(
-                "{:^5} {} {:^8} {}",
+                "{:^5} {} {:^6} {}",
                 level_to_string(&record.level()),
                 now.format("%H:%M:%S").to_string().bright_black(),
                 target,
@@ -62,7 +62,7 @@ impl Target {
 impl Display for Target {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let result = match self {
-            Target::External(x) => x.as_str().clear(),
+            Target::External(x) => x.as_str().bright_cyan(),
             Target::Server => "SERVER".bright_green(),
             Target::Collab => "COLLAB".bright_purple(),
             Target::Core => "CORE".blue(),
