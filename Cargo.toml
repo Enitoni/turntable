@@ -25,6 +25,8 @@ members = [
 ]
 
 [workspace.dependencies]
+log = "0.4.22"
+
 dashmap = "5.5.3"
 crossbeam = "0.8.4"
 thiserror = "1.0.61"
