@@ -37,4 +37,6 @@ where
 
     /// Clears all inactive sinks from memory.
     fn clear_inactive(&self);
+
+    fn name() -> String;
 }

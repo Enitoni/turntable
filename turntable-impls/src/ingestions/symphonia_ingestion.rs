@@ -164,6 +164,10 @@ impl Ingestion for SymphoniaIngestion {
             .sinks
             .retain(|id, _| !clearable_sink_ids.contains(id));
     }
+
+    fn name() -> String {
+        "Symphonia".to_string()
+    }
 }
 
 /// Loads the samples from a [Decoder] into a [Sink].
