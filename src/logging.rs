@@ -14,7 +14,7 @@ pub fn init_logger() {
             let now = chrono::Local::now();
 
             out.finish(format_args!(
-                "{:^5} {} {:^6} {}",
+                "{:^5} {} {} {}",
                 level_to_string(&record.level()),
                 now.format("%H:%M:%S").to_string().bright_black(),
                 target,
