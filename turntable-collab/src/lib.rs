@@ -10,6 +10,7 @@ mod util;
 use auth::Auth;
 use crossbeam::channel::unbounded;
 use events::{EventReceiver, EventSender};
+use log::info;
 use rooms::{RoomId, RoomManager};
 use std::{sync::Arc, thread};
 
@@ -47,6 +48,8 @@ pub struct CollabContext {
 
 impl Collab {
     pub async fn new(config: Config, database_url: &str) -> Self {
+        info!("Connecting to database...");
+
         let database = Arc::new(
             CollabDatabase::new(database_url)
                 .await
@@ -74,7 +77,9 @@ impl Collab {
 
         spawn_pipeline_event_conversion_thread(&context, &event_sender);
 
+        info!("Initializing...");
         new.init().await;
+
         new
     }
 

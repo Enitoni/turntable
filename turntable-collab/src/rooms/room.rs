@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use log::info;
 use parking_lot::Mutex;
 use turntable_core::PlayerContext as Player;
 use turntable_impls::WaveEncoder;
@@ -44,6 +45,7 @@ impl Room {
 
     /// Activates the room, which means it has an active player and queue associated.
     pub fn activate(&self) {
+        info!("Activating room...");
         let new_player = self.context.pipeline.create_player();
 
         let new_queue = self
@@ -56,6 +58,8 @@ impl Room {
                     notifier,
                 })
             });
+
+        info!("Room {} activated", self.data().title);
 
         *self.state.lock() = RoomState::Active {
             player: new_player.into(),
@@ -135,7 +139,7 @@ impl Room {
         source: String,
     ) -> Result<RoomConnectionHandle, RoomError> {
         // Ensure the user is actually in the room before doing anything else
-        let _ = self.member_by_user_id(user_id)?;
+        let member = self.member_by_user_id(user_id)?;
 
         // For now, just activate a room if it's not active when a user wants to connect
         self.ensure_activation();
@@ -150,6 +154,13 @@ impl Room {
             .context
             .pipeline
             .consume_player::<WaveEncoder>(player.id);
+
+        info!(
+            "User {} connected to room {} via {}",
+            member.user.display_name,
+            self.data().title,
+            source
+        );
 
         self.context.emit(CollabEvent::UserConnected {
             room_id: self.id(),
@@ -173,6 +184,19 @@ impl Room {
             .iter()
             .find(|c| c.id == connection_id)
             .expect("connection exists when trying to remove it");
+
+        let member = self
+            .member_by_user_id(connection.user_id)
+            .ok()
+            .map(|m| m.user.display_name.clone())
+            .unwrap_or_else(|| "Unknown".to_string());
+
+        info!(
+            "User {} disconnected from room {} via {}",
+            member,
+            self.data().title,
+            connection.source
+        );
 
         self.context.emit(CollabEvent::UserDisconnected {
             room_id: self.id(),

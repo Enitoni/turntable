@@ -10,6 +10,7 @@ use crate::{
 
 pub use connection::*;
 use futures_util::TryFutureExt;
+use log::info;
 pub use room::*;
 use thiserror::Error;
 
@@ -42,6 +43,8 @@ impl RoomManager {
 
     /// Restores the rooms from the database on init
     pub async fn restore(&self) -> Result<(), DatabaseError> {
+        info!("Restoring rooms...");
+
         let rooms: Vec<_> = self
             .context
             .database
@@ -52,6 +55,7 @@ impl RoomManager {
             .collect();
 
         for (id, room) in rooms {
+            info!("Restored room \"{}\"", room.data().title);
             self.context.rooms.insert(id, room.into());
         }
 

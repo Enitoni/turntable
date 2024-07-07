@@ -2648,6 +2648,7 @@ dependencies = [
  "crossbeam",
  "futures-util",
  "lazy_static",
+ "log",
  "parking_lot",
  "rand",
  "regex",
