@@ -1,5 +1,6 @@
 use crossbeam::channel::unbounded;
 use dashmap::DashMap;
+use log::info;
 use std::{error::Error, sync::Arc, thread};
 
 mod config;
@@ -70,6 +71,8 @@ where
         let playback = Playback::new(&context, ingestion.clone(), output.clone());
 
         spawn_action_handler_thread(&context, queuing.clone(), action_receiver);
+
+        info!("Initialized pipeline with ingestion {}", I::name());
 
         Pipeline {
             output,
