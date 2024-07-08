@@ -33,7 +33,7 @@ impl Inputable for FileInput {
             .captures(query)
             .and_then(|c| c.get(1))
             .map(|m| m.as_str())
-            .ok_or(InputError::Invalid)?;
+            .ok_or(InputError::Invalid("Invalid path".to_string()))?;
 
         let file = File::open(path)
             .await

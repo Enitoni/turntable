@@ -41,6 +41,8 @@ pub enum ServerError {
     // Inputs
     #[error("Input did not match")]
     InputNoMatch,
+    #[error("Input is invalid: {0}")]
+    InputInvalid(String),
     #[error("Input type is supported but resource was not found")]
     InputNotFound,
     #[error("Resource was found but is unavailable")]
@@ -51,8 +53,6 @@ pub enum ServerError {
     InputFetchError,
     #[error("Failed to parse resource: {0}")]
     InputParseError(String),
-    #[error("Resource is invalid")]
-    InputInvalid,
 }
 
 impl ServerError {
@@ -76,7 +76,7 @@ impl ServerError {
             Self::InputNotFound => StatusCode::NOT_FOUND,
             Self::InputNoMatch => StatusCode::BAD_REQUEST,
             Self::UnsupportedInputType => StatusCode::BAD_REQUEST,
-            Self::InputInvalid => StatusCode::BAD_REQUEST,
+            Self::InputInvalid(_) => StatusCode::BAD_REQUEST,
             Self::InputUnavailable => StatusCode::BAD_REQUEST,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         }
@@ -147,7 +147,7 @@ impl From<RoomError> for ServerError {
 impl From<InputError> for ServerError {
     fn from(value: InputError) -> Self {
         match value {
-            InputError::Invalid => Self::InputInvalid,
+            InputError::Invalid(e) => Self::InputInvalid(e),
             InputError::FetchError => Self::InputFetchError,
             InputError::NoMatch => Self::InputNoMatch,
             InputError::NotFound => Self::InputNotFound,

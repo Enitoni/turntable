@@ -11,6 +11,9 @@ pub enum InputError {
     #[error("Input did not match")]
     NoMatch,
 
+    #[error("Input is invalid: {0}")]
+    Invalid(String),
+
     #[error("Input type is supported but resource was not found")]
     NotFound,
 
@@ -25,9 +28,6 @@ pub enum InputError {
 
     #[error("Failed to parse resource: {0}")]
     ParseError(String),
-
-    #[error("Resource is invalid")]
-    Invalid,
 
     #[error("{0}")]
     Other(String),
