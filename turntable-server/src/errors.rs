@@ -39,10 +39,12 @@ pub enum ServerError {
     #[error("Stream key does not exist")]
     StreamKeyNotFound,
     // Inputs
-    #[error("Input type is supported but resource was not found")]
-    InputNotFound,
     #[error("Input did not match")]
     InputNoMatch,
+    #[error("Input type is supported but resource was not found")]
+    InputNotFound,
+    #[error("Resource was found but is unavailable")]
+    InputUnavailable,
     #[error("Unsupported input type")]
     UnsupportedInputType,
     #[error("Failed to fetch resource")]
@@ -150,7 +152,8 @@ impl From<InputError> for ServerError {
             InputError::NotFound => Self::InputNotFound,
             InputError::UnsupportedType => Self::UnsupportedInputType,
             InputError::ParseError(e) => Self::InputParseError(e),
-            e => Self::Unknown(e.to_string()),
+            InputError::Unavailable => Self::InputUnavailable,
+            InputError::Other(e) => Self::Unknown(e),
         }
     }
 }

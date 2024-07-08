@@ -8,11 +8,14 @@ mod youtube;
 
 #[derive(Debug, Error)]
 pub enum InputError {
+    #[error("Input did not match")]
+    NoMatch,
+
     #[error("Input type is supported but resource was not found")]
     NotFound,
 
-    #[error("Input did not match")]
-    NoMatch,
+    #[error("Resource was found but is unavailable")]
+    Unavailable,
 
     #[error("Unsupported input type")]
     UnsupportedType,
@@ -28,9 +31,6 @@ pub enum InputError {
 
     #[error("{0}")]
     Other(String),
-
-    #[error("An unknown error occurred")]
-    Unknown,
 }
 
 /// Represents metadata of the input
