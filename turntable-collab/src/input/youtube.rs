@@ -51,7 +51,7 @@ struct FlatYouTubeVideo {
 #[derive(Debug, Deserialize)]
 struct Thumbnail {
     url: String,
-    width: u32,
+    width: Option<u32>,
 }
 
 #[derive(Debug, Deserialize)]
