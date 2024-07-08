@@ -85,12 +85,15 @@ impl ServerError {
 
 impl IntoResponse for ServerError {
     fn into_response(self) -> Response {
-        // Log unknown errors when they happen
-        if let Self::Unknown(err) = &self {
-            error!("Request failed: {}", err)
+        let status = self.as_status_code();
+
+        // Log server errors when they happen
+        if status.as_u16() >= 500 {
+            error!("Request failed: {}", self.to_string());
+            return (status, "Internal Server Error".to_string()).into_response();
         }
 
-        (self.as_status_code(), self.to_string()).into_response()
+        (status, self.to_string()).into_response()
     }
 }
 
