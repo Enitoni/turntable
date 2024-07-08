@@ -2652,6 +2652,7 @@ dependencies = [
  "parking_lot",
  "rand",
  "regex",
+ "reqwest",
  "serde",
  "serde_json",
  "sqlx",
