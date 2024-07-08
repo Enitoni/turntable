@@ -2,8 +2,6 @@
 // There are many fields we wanna use here, but we're not using them yet. The warnings are annoying, so they're disabled for now.
 
 use async_trait::async_trait;
-use lazy_static::lazy_static;
-use regex::Regex;
 use serde::Deserialize;
 use std::fmt::Debug;
 use std::process::Stdio;
@@ -12,13 +10,9 @@ use turntable_core::{BoxedLoadable, Loadable};
 use turntable_impls::LoadableNetworkStream;
 use url::Url;
 
-use crate::Metadata;
+use crate::{util::URL_SCHEME_REGEX, Metadata};
 
 use super::{InputError, Inputable};
-
-lazy_static! {
-    static ref REGEX: Regex = Regex::new(r"^(https?://)?").unwrap();
-}
 
 const YT_UNAVAILABLE: &str = "Video unavailable. This video is not available";
 const YT_NOT_FOUND: &str = "Video unavailable";
@@ -94,7 +88,7 @@ enum YouTubeResource {
 #[async_trait]
 impl Inputable for YouTubeVideoInput {
     fn test(query: &str) -> bool {
-        let query = REGEX.replace(query, "https://");
+        let query = URL_SCHEME_REGEX.replace(query, "https://");
         let url = Url::parse(&query);
 
         match url {
