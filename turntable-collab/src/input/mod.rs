@@ -1,9 +1,11 @@
 use async_trait::async_trait;
 use thiserror::Error;
 use turntable_core::BoxedLoadable;
+use wavedistrict::WaveDistrictTrackInput;
 use youtube::YouTubeVideoInput;
 
 mod file;
+mod wavedistrict;
 mod youtube;
 
 #[derive(Debug, Error)]
@@ -49,6 +51,7 @@ pub struct Metadata {
 /// Represents any resource that can be used as an input for turntable
 #[derive(Debug)]
 pub enum Input {
+    WaveDistrict(wavedistrict::WaveDistrictTrackInput),
     YouTube(youtube::YouTubeVideoInput),
     File(file::FileInput),
 }
@@ -58,6 +61,11 @@ impl Input {
         if YouTubeVideoInput::test(input) {
             let results = YouTubeVideoInput::fetch(input).await?;
             return Ok(results.into_iter().map(Input::YouTube).collect());
+        }
+
+        if WaveDistrictTrackInput::test(input) {
+            let results = WaveDistrictTrackInput::fetch(input).await?;
+            return Ok(results.into_iter().map(Input::WaveDistrict).collect());
         }
 
         if file::FileInput::test(input) {
@@ -70,6 +78,7 @@ impl Input {
 
     pub async fn loadable(&self) -> Result<BoxedLoadable, InputError> {
         match self {
+            Input::WaveDistrict(input) => input.loadable().await,
             Input::YouTube(input) => input.loadable().await,
             Input::File(input) => input.loadable().await,
         }
@@ -77,6 +86,7 @@ impl Input {
 
     pub fn length(&self) -> Option<f32> {
         match self {
+            Input::WaveDistrict(input) => input.length(),
             Input::YouTube(input) => input.length(),
             Input::File(input) => input.length(),
         }
@@ -84,6 +94,7 @@ impl Input {
 
     pub fn metadata(&self) -> Metadata {
         match self {
+            Input::WaveDistrict(input) => input.metadata(),
             Input::YouTube(input) => input.metadata(),
             Input::File(input) => input.metadata(),
         }
