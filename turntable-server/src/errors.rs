@@ -77,6 +77,7 @@ impl ServerError {
             Self::InputNoMatch => StatusCode::BAD_REQUEST,
             Self::UnsupportedInputType => StatusCode::BAD_REQUEST,
             Self::InputInvalid => StatusCode::BAD_REQUEST,
+            Self::InputUnavailable => StatusCode::BAD_REQUEST,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
