@@ -18,7 +18,7 @@ pub enum InputError {
     UnsupportedType,
 
     #[error("Failed to fetch resource")]
-    NetworkFailed,
+    FetchError,
 
     #[error("Failed to parse resource: {0}")]
     ParseError(String),

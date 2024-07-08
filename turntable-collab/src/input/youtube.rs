@@ -197,7 +197,7 @@ impl Inputable for YouTubeVideoInput {
 
         let boxed = LoadableNetworkStream::new(stream_url)
             .await
-            .map_err(|_| InputError::NetworkFailed)?
+            .map_err(|_| InputError::FetchError)?
             .boxed();
 
         Ok(boxed)
