@@ -115,7 +115,7 @@ impl Inputable for YouTubeVideoInput {
                     }
 
                     // Test playlists
-                    if url.path() == "playlist"
+                    if url.path() == "/playlist"
                         && url
                             .query_pairs()
                             .into_iter()
@@ -314,6 +314,9 @@ mod test {
         ));
         assert!(YouTubeVideoInput::test(
             "https://music.youtube.com/watch?v=-t-75CCdM2o"
+        ));
+        assert!(YouTubeVideoInput::test(
+            "https://music.youtube.com/playlist?list=OLAK5uy_kKEZSgdsNQxjhnQNwMy63GMNV_ZoTqI0w"
         ));
         assert!(YouTubeVideoInput::test(
             "https://www.youtube.com/watch?v=z09GolEktUw"
