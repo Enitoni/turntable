@@ -51,7 +51,7 @@ pub struct NewStreamKeySchema {
 #[derive(Debug, ToSchema, Validate, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct InputSchema {
-    pub query: String,
+    pub query: Vec<String>,
 }
 
 #[derive(Debug, ToSchema, Validate, Deserialize)]

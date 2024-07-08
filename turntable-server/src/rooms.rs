@@ -1,4 +1,5 @@
 use axum::{extract::Path, response::IntoResponse, routing::{get, post}, Json};
+use futures_util::future::join_all;
 use turntable_collab::{Input, NewRoom, Track as CollabTrack};
 use turntable_core::Queue as CoreQueue;
 
@@ -148,8 +149,17 @@ async fn add_to_queue(session: Session, context: ServerContext, Path(room_id): P
     let room = context.collab.rooms.room_by_id(room_id)?;
     let queue = room.queue()?;
 
-    let input = Input::query(&body.query).await?;
-    let tracks: Vec<CollabTrack> = input.into_iter().map(Into::into).collect();
+    let futs: Vec<_> = body.query.iter().map(|q| Input::query(q)).collect();
+    let results = join_all(futs).await;
+    let mut tracks: Vec<CollabTrack> = vec![];
+
+    for result in results {
+        let inputs = result?;
+
+        for input in inputs {
+            tracks.push(input.into())
+        }
+    }
 
     for track in tracks {
         queue.push(track, session.user.id)
