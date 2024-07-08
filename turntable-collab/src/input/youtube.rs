@@ -20,6 +20,10 @@ lazy_static! {
     static ref REGEX: Regex = Regex::new(r"^(https?://)?").unwrap();
 }
 
+const YT_UNAVAILABLE: &str = "Video unavailable. This video is not available";
+const YT_NOT_FOUND: &str = "Video unavailable";
+const YT_ID_ERROR: &str = "Incomplete YouTube ID";
+
 /// A YouTube video that can be played by turntable.
 #[derive(Clone)]
 pub struct YouTubeVideoInput {
@@ -193,7 +197,7 @@ impl Inputable for YouTubeVideoInput {
             .iter()
             .find(|f| f.format_id == entry.format_id)
             .map(|f| f.url.to_owned())
-            .ok_or(InputError::Invalid)?;
+            .ok_or(InputError::Other("No supported format found".to_string()))?;
 
         let boxed = LoadableNetworkStream::new(stream_url)
             .await
@@ -227,11 +231,12 @@ impl YouTubeResource {
             .arg("-J")
             .args(["--", url])
             .stdout(Stdio::piped())
-            .stderr(Stdio::null())
+            .stderr(Stdio::piped())
             .spawn()
             .map_err(|e| InputError::Other(e.to_string()))?;
 
         let mut output = String::new();
+        let mut error_output = String::new();
 
         child
             .stdout
@@ -242,9 +247,33 @@ impl YouTubeResource {
             .map_err(|e| InputError::Other(e.to_string()))?;
 
         child
+            .stderr
+            .take()
+            .unwrap()
+            .read_to_string(&mut error_output)
+            .await
+            .ok();
+
+        let exit = child
             .wait()
             .await
             .map_err(|e| InputError::Other(e.to_string()))?;
+
+        if !exit.success() {
+            if error_output.contains(YT_UNAVAILABLE) {
+                return Err(InputError::Unavailable);
+            }
+
+            if error_output.contains(YT_NOT_FOUND) {
+                return Err(InputError::NotFound);
+            }
+
+            if error_output.contains(YT_ID_ERROR) {
+                return Err(InputError::Invalid("Invalid Video ID".to_string()));
+            }
+
+            return Err(InputError::Other(error_output));
+        }
 
         let entry: YouTubeResource =
             serde_json::from_str(&output).map_err(|e| InputError::ParseError(e.to_string()))?;
