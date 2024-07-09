@@ -170,11 +170,12 @@ impl Inputable for YouTubeVideoInput {
             .arg("--")
             .arg(url)
             .stdout(Stdio::piped())
-            .stderr(Stdio::null())
+            .stderr(Stdio::piped())
             .spawn()
             .map_err(|e| InputError::Other(e.to_string()))?;
 
         let mut output = String::new();
+        let mut error_output = String::new();
 
         child
             .stdout
@@ -185,9 +186,21 @@ impl Inputable for YouTubeVideoInput {
             .map_err(|e| InputError::Other(e.to_string()))?;
 
         child
+            .stderr
+            .take()
+            .unwrap()
+            .read_to_string(&mut error_output)
+            .await
+            .ok();
+
+        let exit = child
             .wait()
             .await
             .map_err(|e| InputError::Other(e.to_string()))?;
+
+        if !exit.success() {
+            return Err(handle_error(error_output));
+        }
 
         let entry: PlayableYouTubeVideo =
             serde_json::from_str(&output).map_err(|e| InputError::ParseError(e.to_string()))?;
@@ -260,19 +273,7 @@ impl YouTubeResource {
             .map_err(|e| InputError::Other(e.to_string()))?;
 
         if !exit.success() {
-            if error_output.contains(YT_UNAVAILABLE) {
-                return Err(InputError::Unavailable);
-            }
-
-            if error_output.contains(YT_NOT_FOUND) {
-                return Err(InputError::NotFound);
-            }
-
-            if error_output.contains(YT_ID_ERROR) {
-                return Err(InputError::Invalid("Invalid Video ID".to_string()));
-            }
-
-            return Err(InputError::Other(error_output));
+            return Err(handle_error(error_output));
         }
 
         let entry: YouTubeResource =
@@ -308,6 +309,22 @@ fn determine_thumbnail(mut thumbnails: Vec<Thumbnail>) -> String {
         .pop()
         .map(|t| t.url.replace("hqdefault", "maxresdefault"))
         .unwrap_or_default()
+}
+
+fn handle_error(error_output: String) -> InputError {
+    if error_output.contains(YT_UNAVAILABLE) {
+        return InputError::Unavailable;
+    }
+
+    if error_output.contains(YT_NOT_FOUND) {
+        return InputError::NotFound;
+    }
+
+    if error_output.contains(YT_ID_ERROR) {
+        return InputError::Invalid("Invalid Video ID".to_string());
+    }
+
+    InputError::Other(error_output)
 }
 
 #[cfg(test)]
