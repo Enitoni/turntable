@@ -149,7 +149,7 @@ impl Ingestion for SymphoniaIngestion {
             .await;
     }
 
-    fn clear_inactive(&self) {
+    fn clear_inactive(&self) -> Vec<SinkId> {
         let clearable_sink_ids: Vec<_> = self
             .context
             .sinks
@@ -163,6 +163,8 @@ impl Ingestion for SymphoniaIngestion {
         self.context
             .sinks
             .retain(|id, _| !clearable_sink_ids.contains(id));
+
+        clearable_sink_ids
     }
 
     fn name() -> String {

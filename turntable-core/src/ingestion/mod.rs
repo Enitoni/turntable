@@ -36,7 +36,9 @@ where
     async fn request_load(&self, sink_id: SinkId, offset: usize, amount: usize);
 
     /// Clears all inactive sinks from memory.
-    fn clear_inactive(&self);
+    ///
+    /// Returns the sinks that were cleared.
+    fn clear_inactive(&self) -> Vec<SinkId>;
 
     fn name() -> String;
 }
