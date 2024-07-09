@@ -145,9 +145,9 @@ impl RangeBuffer {
         let relative_start = safe_start.saturating_sub(absolute_start);
         let relative_end = safe_end.saturating_sub(absolute_start);
 
-        let remainder: VecDeque<_> = self.data.drain(relative_start..=relative_end).collect();
+        drop(self.data.drain(..relative_start));
+        self.data.truncate(relative_end - relative_start + 1);
 
-        self.data = remainder;
         self.offset = relative_start + absolute_start;
     }
 
