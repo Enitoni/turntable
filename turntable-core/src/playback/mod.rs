@@ -77,7 +77,12 @@ where
             player.clear_superflous();
         }
 
-        ingestion.clear_inactive();
+        let cleared_sinks = ingestion.clear_inactive();
+
+        if !cleared_sinks.is_empty() {
+            info!("Cleared Sinks: {:?}", cleared_sinks)
+        }
+
         thread::sleep(Duration::from_secs(30))
     };
 
