@@ -121,11 +121,7 @@ impl RangeBuffer {
             relative_start.saturating_add(requested_amount.min(available_amount_at_offset));
 
         let amount_to_read = relative_end - relative_start;
-
         let (first, second) = self.data.range_as_slices(relative_start..relative_end);
-
-        let first_slice = &first[relative_start..(relative_end.min(first.len()))];
-        let second_slice = &second[..(amount_to_read - first_slice.len())];
 
         buf[..first.len()].copy_from_slice(first);
         buf[first.len()..first.len() + second.len()].copy_from_slice(second);
@@ -436,7 +432,6 @@ impl<T> VecDequeExt<T> for VecDeque<T> {
             Bound::Excluded(&i) => i,
             Bound::Unbounded => self.len(),
         };
-        let size = end - start;
 
         let (head, tail) = self.as_slices();
         let head_len = head.len();
