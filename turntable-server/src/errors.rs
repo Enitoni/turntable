@@ -49,8 +49,8 @@ pub enum ServerError {
     InputUnavailable,
     #[error("Unsupported input type")]
     UnsupportedInputType,
-    #[error("Failed to fetch resource")]
-    InputFetchError,
+    #[error("Failed to fetch resource: {0}")]
+    InputFetchError(String),
     #[error("Failed to parse resource: {0}")]
     InputParseError(String),
 }
@@ -151,7 +151,7 @@ impl From<InputError> for ServerError {
     fn from(value: InputError) -> Self {
         match value {
             InputError::Invalid(e) => Self::InputInvalid(e),
-            InputError::FetchError => Self::InputFetchError,
+            InputError::FetchError(e) => Self::InputFetchError(e),
             InputError::NoMatch => Self::InputNoMatch,
             InputError::NotFound => Self::InputNotFound,
             InputError::UnsupportedType => Self::UnsupportedInputType,

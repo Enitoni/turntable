@@ -137,7 +137,7 @@ impl Inputable for WaveDistrictTrackInput {
     async fn loadable(&self) -> Result<BoxedLoadable, InputError> {
         let boxed = LoadableNetworkStream::new(self.0.audio.to_path().unwrap_or_default())
             .await
-            .map_err(|_| InputError::FetchError)?
+            .map_err(|e| InputError::FetchError(e.to_string()))?
             .boxed();
 
         Ok(boxed)
@@ -169,7 +169,7 @@ async fn fetch_track(user: &str, slug: &str) -> Result<Track, InputError> {
         .get(url)
         .send()
         .await
-        .map_err(|_| InputError::FetchError)?;
+        .map_err(|e| InputError::FetchError(e.to_string()))?;
 
     let status = response.status();
     if !status.is_success() {
@@ -192,7 +192,7 @@ async fn fetch_collection(user: &str, slug: &str) -> Result<Vec<Track>, InputErr
         .get(url)
         .send()
         .await
-        .map_err(|_| InputError::FetchError)?;
+        .map_err(|e| InputError::FetchError(e.to_string()))?;
 
     let status = response.status();
     if !status.is_success() {
@@ -212,7 +212,7 @@ async fn fetch_collection(user: &str, slug: &str) -> Result<Vec<Track>, InputErr
         .get(url)
         .send()
         .await
-        .map_err(|_| InputError::FetchError)?;
+        .map_err(|e| InputError::FetchError(e.to_string()))?;
 
     let status = response.status();
     if !status.is_success() {

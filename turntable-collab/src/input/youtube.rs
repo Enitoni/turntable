@@ -15,6 +15,7 @@ use crate::{util::URL_SCHEME_REGEX, Metadata};
 use super::{InputError, Inputable};
 
 const YT_UNAVAILABLE: &str = "Video unavailable. This video is not available";
+const YT_TOO_MANY_REQUESTS: &str = "Too Many Requests";
 const YT_NOT_FOUND: &str = "Video unavailable";
 const YT_ID_ERROR: &str = "Incomplete YouTube ID";
 
@@ -214,7 +215,7 @@ impl Inputable for YouTubeVideoInput {
 
         let boxed = LoadableNetworkStream::new(stream_url)
             .await
-            .map_err(|_| InputError::FetchError)?
+            .map_err(|e| InputError::FetchError(e.to_string()))?
             .boxed();
 
         Ok(boxed)
@@ -322,6 +323,10 @@ fn handle_error(error_output: String) -> InputError {
 
     if error_output.contains(YT_ID_ERROR) {
         return InputError::Invalid("Invalid Video ID".to_string());
+    }
+
+    if error_output.contains(YT_TOO_MANY_REQUESTS) {
+        return InputError::FetchError("Too Many Requests".to_string());
     }
 
     InputError::Other(error_output)
