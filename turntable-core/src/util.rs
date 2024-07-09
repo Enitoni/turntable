@@ -101,26 +101,33 @@ impl RangeBuffer {
 
     /// Reads samples to the provided slice at the given absolute offset.
     fn read(&self, offset: usize, buf: &mut [Sample]) -> usize {
-        let len = self.data.len();
+        let available_amount = self.data.len();
+        let requested_amount = buf.len();
 
         let absolute_start = self.offset;
-        let absolute_end = (absolute_start + len).min(len);
-        let requested_length = buf.len();
+        let absolute_end = absolute_start + available_amount;
 
-        let start = offset.saturating_sub(absolute_start);
-        let end = start.saturating_add(requested_length).min(absolute_end);
-        let amount = end.saturating_sub(start);
+        assert!(
+            offset <= absolute_end,
+            "attempt to read from RangeBuffer at offset beyond end"
+        );
 
+        let relative_start = offset.saturating_sub(absolute_start);
+        let relative_end = relative_start
+            .saturating_add(requested_amount)
+            .min(absolute_end);
+
+        let amount_to_read = relative_end - relative_start;
         let (first, second) = self.data.as_slices();
 
-        let first_slice = &first[start..(end.min(first.len()))];
-        let second_slice = &second[..(end - start).min(second.len())];
+        let first_slice = &first[relative_start..(relative_end.min(first.len()))];
+        let second_slice = &second[..(amount_to_read - first_slice.len())];
 
         buf[..first_slice.len()].copy_from_slice(first_slice);
         buf[first_slice.len()..(first_slice.len() + second_slice.len())]
             .copy_from_slice(second_slice);
 
-        amount
+        amount_to_read
     }
 
     /// Clears all samples outside the given window.
@@ -603,6 +610,27 @@ mod test {
 
     #[test]
     fn test_read() {
+        let mut buffer = RangeBuffer::new(0);
+
+        buffer.write(&[1., 2., 3., 4., 5.]);
+
+        // Read the 5 written samples
+        let mut buf = vec![0.; 10];
+        let amount = buffer.read(0, &mut buf);
+
+        assert_eq!(amount, 5);
+        assert_eq!(&buf[..amount], &[1., 2., 3., 4., 5.]);
+
+        // Read at offset
+        let mut buf = vec![0.; 10];
+        let amount = buffer.read(3, &mut buf);
+
+        assert_eq!(amount, 2);
+        assert_eq!(&buf[..amount], &[4., 5.]);
+    }
+
+    #[test]
+    fn test_read_multi() {
         let mut buffer = MultiRangeBuffer::new(29);
 
         buffer.write(0, &[1., 2., 3., 4., 5., 6., 7., 8., 9., 10.]);
