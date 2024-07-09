@@ -441,7 +441,8 @@ impl<T> VecDequeExt<T> for VecDeque<T> {
         let (head, tail) = self.as_slices();
         let head_len = head.len();
         let head = &head[start.min(head.len())..end.min(head.len())];
-        let tail = &tail[start.saturating_sub(head_len)..(size - head.len()).min(tail.len())];
+        let tail =
+            &tail[start.saturating_sub(head_len)..(end.saturating_sub(head_len)).min(tail.len())];
         (head, tail)
     }
 }
