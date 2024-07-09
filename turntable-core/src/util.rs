@@ -113,9 +113,7 @@ impl RangeBuffer {
         );
 
         let relative_start = offset.saturating_sub(absolute_start);
-        let relative_end = relative_start
-            .saturating_add(requested_amount)
-            .min(absolute_end);
+        let relative_end = relative_start.saturating_add(requested_amount);
 
         let amount_to_read = relative_end - relative_start;
         let (first, second) = self.data.as_slices();
