@@ -415,6 +415,32 @@ pub fn get_or_create_handle() -> Handle {
         .unwrap_or_else(|| Runtime::new().unwrap().handle().clone())
 }
 
+pub trait VecDequeExt<T> {
+    fn range_as_slices<R: RangeBounds<usize>>(&self, range: R) -> (&[T], &[T]);
+}
+
+impl<T> VecDequeExt<T> for VecDeque<T> {
+    fn range_as_slices<R: RangeBounds<usize>>(&self, range: R) -> (&[T], &[T]) {
+        let start = match range.start_bound() {
+            Bound::Included(&i) => i,
+            Bound::Excluded(&i) => i + 1,
+            Bound::Unbounded => 0,
+        };
+        let end = match range.end_bound() {
+            Bound::Included(&i) => i + 1,
+            Bound::Excluded(&i) => i,
+            Bound::Unbounded => self.len(),
+        };
+        let size = end - start;
+
+        let (head, tail) = self.as_slices();
+        let head_len = head.len();
+        let head = &head[start.min(head.len())..end.min(head.len())];
+        let tail = &tail[start.saturating_sub(head_len)..(size - head.len()).min(tail.len())];
+        (head, tail)
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -744,5 +770,25 @@ mod test {
             &[0.0, 0.0, 1.0, 2.0, 3.0, 4.0, 1.0, 2.0, 3.0, 4.0,],
             "buf is assigned correctly"
         );
+    }
+
+    #[test]
+    fn test_range_as_slices() {
+        let mut deque = VecDeque::new();
+
+        deque.push_back(0);
+        deque.push_back(1);
+        deque.push_back(2);
+
+        assert_eq!(deque.range_as_slices(1..), (&[1, 2][..], &[][..]));
+        assert_eq!(deque.range_as_slices(1..2), (&[1][..], &[][..]));
+
+        deque.push_front(-1);
+        deque.push_front(-2);
+
+        assert_eq!(deque.range_as_slices(1..), (&[-1][..], &[0, 1, 2][..]));
+        assert_eq!(deque.range_as_slices(1..4), (&[-1][..], &[0, 1][..]));
+        assert_eq!(deque.range_as_slices(2..), (&[][..], &[0, 1, 2][..]));
+        assert_eq!(deque.range_as_slices(..2), (&[-2, -1][..], &[][..]));
     }
 }
