@@ -24,7 +24,7 @@ impl LoadableNetworkStream {
     const MAX_CHUNK_SIZE: usize = 50_000_000; // 50MB
     const MIN_CHUNK_SIZE: usize = 10_000_000; // 10MB
 
-    pub async fn new<S>(url: S) -> Result<Self, reqwest::Error>
+    pub async fn new<S>(url: S) -> Result<Self, Box<dyn Error>>
     where
         S: Into<String>,
     {
@@ -32,7 +32,12 @@ impl LoadableNetworkStream {
         let client = Client::new();
 
         let response = client.head(&url).send().await?;
+        let status = response.status();
         let headers = response.headers();
+
+        if !status.is_success() {
+            return Err(format!("Stream initialization failed with {}", status).into());
+        }
 
         let supports_byte_ranges = headers
             .get("Accept-Ranges")
@@ -68,9 +73,10 @@ impl LoadableNetworkStream {
         }
 
         let response = request.send().await?;
+        let status = response.status();
 
-        if !response.status().is_success() {
-            return Err(format!("Request failed with status code {}", response.status()).into());
+        if !status.is_success() {
+            return Err(format!("Stream load failed with {}", status).into());
         }
 
         let new_bytes = response.bytes().await?;
