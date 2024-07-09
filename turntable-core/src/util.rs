@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 use std::fmt::{Debug, Display};
 use std::hash::{Hash, Hasher};
-use std::ops::{Add, Mul};
+use std::ops::{Add, Bound, Mul, RangeBounds};
 use std::{marker::PhantomData, vec};
 
 use crossbeam::atomic::AtomicCell;
@@ -101,11 +101,15 @@ impl RangeBuffer {
 
     /// Reads samples to the provided slice at the given absolute offset.
     fn read(&self, offset: usize, buf: &mut [Sample]) -> usize {
-        let available_amount = self.data.len();
+        let available_amount_at_offset = self
+            .data
+            .len()
+            .saturating_sub(offset.saturating_sub(self.offset));
+
         let requested_amount = buf.len();
 
         let absolute_start = self.offset;
-        let absolute_end = absolute_start + available_amount;
+        let absolute_end = absolute_start + self.data.len();
 
         assert!(
             offset <= absolute_end,
@@ -113,17 +117,18 @@ impl RangeBuffer {
         );
 
         let relative_start = offset.saturating_sub(absolute_start);
-        let relative_end = relative_start.saturating_add(requested_amount);
+        let relative_end =
+            relative_start.saturating_add(requested_amount.min(available_amount_at_offset));
 
         let amount_to_read = relative_end - relative_start;
-        let (first, second) = self.data.as_slices();
+
+        let (first, second) = self.data.range_as_slices(relative_start..relative_end);
 
         let first_slice = &first[relative_start..(relative_end.min(first.len()))];
         let second_slice = &second[..(amount_to_read - first_slice.len())];
 
-        buf[..first_slice.len()].copy_from_slice(first_slice);
-        buf[first_slice.len()..(first_slice.len() + second_slice.len())]
-            .copy_from_slice(second_slice);
+        buf[..first.len()].copy_from_slice(first);
+        buf[first.len()..first.len() + second.len()].copy_from_slice(second);
 
         amount_to_read
     }
@@ -634,23 +639,24 @@ mod test {
 
     #[test]
     fn test_read() {
-        let mut buffer = RangeBuffer::new(0);
+        let offset = 20;
+        let mut buffer = RangeBuffer::new(offset);
 
         buffer.write(&[1., 2., 3., 4., 5.]);
 
         // Read the 5 written samples
         let mut buf = vec![0.; 10];
-        let amount = buffer.read(0, &mut buf);
+        let amount = buffer.read(offset, &mut buf);
 
-        assert_eq!(amount, 5);
-        assert_eq!(&buf[..amount], &[1., 2., 3., 4., 5.]);
+        assert_eq!(&buf[..amount], &[1., 2., 3., 4., 5.], "buf is correct");
+        assert_eq!(amount, 5, "amount read is correct");
 
         // Read at offset
         let mut buf = vec![0.; 10];
-        let amount = buffer.read(3, &mut buf);
+        let amount = buffer.read(offset + 3, &mut buf);
 
-        assert_eq!(amount, 2);
-        assert_eq!(&buf[..amount], &[4., 5.]);
+        assert_eq!(&buf[..amount], &[4., 5.], "buf is correct");
+        assert_eq!(amount, 2, "amount read is correct");
     }
 
     #[test]
