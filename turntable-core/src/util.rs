@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::fmt::{Debug, Display};
 use std::hash::{Hash, Hasher};
 use std::ops::{Add, Mul};
@@ -81,28 +82,28 @@ impl<T> Eq for Id<T> {}
 #[derive(Debug)]
 struct RangeBuffer {
     /// The offset in samples of the start of the buffer.
-    offset: AtomicCell<usize>,
+    offset: usize,
     /// The samples in the buffer.
-    data: Vec<Sample>,
+    data: VecDeque<Sample>,
 }
 
 impl RangeBuffer {
     fn new(offset: usize) -> Self {
         Self {
-            offset: AtomicCell::new(offset),
+            offset,
             data: Default::default(),
         }
     }
 
     fn write(&mut self, buf: &[Sample]) {
-        self.data.extend_from_slice(buf);
+        self.data.extend(buf)
     }
 
     /// Reads samples to the provided slice at the given absolute offset.
     fn read(&self, offset: usize, buf: &mut [Sample]) -> usize {
         let len = self.data.len();
 
-        let absolute_start = self.offset.load();
+        let absolute_start = self.offset;
         let absolute_end = (absolute_start + len).min(len);
         let requested_length = buf.len();
 
@@ -110,7 +111,15 @@ impl RangeBuffer {
         let end = start.saturating_add(requested_length).min(absolute_end);
         let amount = end.saturating_sub(start);
 
-        buf[..amount].copy_from_slice(&self.data[start..end]);
+        let (first, second) = self.data.as_slices();
+
+        let first_slice = &first[start..(end.min(first.len()))];
+        let second_slice = &second[..(end - start).min(second.len())];
+
+        buf[..first_slice.len()].copy_from_slice(first_slice);
+        buf[first_slice.len()..(first_slice.len() + second_slice.len())]
+            .copy_from_slice(second_slice);
+
         amount
     }
 
@@ -119,7 +128,7 @@ impl RangeBuffer {
     fn retain_range(&mut self, start: usize, end: usize, chunk_size: usize) {
         let total_length = self.data.len();
 
-        let absolute_start = self.offset.load();
+        let absolute_start = self.offset;
         let absolute_end = (absolute_start + total_length).saturating_sub(1);
 
         let absolute_chunk_start = (absolute_start + 1).saturating_div(chunk_size);
@@ -135,10 +144,11 @@ impl RangeBuffer {
 
         let relative_start = safe_start.saturating_sub(absolute_start);
         let relative_end = safe_end.saturating_sub(absolute_start);
-        let remainder: Vec<_> = self.data.drain(relative_start..=relative_end).collect();
+
+        let remainder: VecDeque<_> = self.data.drain(relative_start..=relative_end).collect();
 
         self.data = remainder;
-        self.offset.store(relative_start + absolute_start);
+        self.offset = relative_start + absolute_start;
     }
 
     /// Returns the amount of samples in the buffer so far.
@@ -148,7 +158,7 @@ impl RangeBuffer {
 
     /// Returns the start and end of the range.
     fn range(&self) -> (usize, usize) {
-        let offset = self.offset.load();
+        let offset = self.offset;
 
         (offset, offset + self.length().saturating_sub(1))
     }
@@ -169,7 +179,7 @@ impl RangeBuffer {
 
     /// Merges two intersecting or adjacent ranges, then returns the new merged range.
     fn merge_with(self, other: Self) -> Self {
-        let (mut first, second) = if self.offset.load() < other.offset.load() {
+        let (mut first, second) = if self.offset < other.offset {
             (self, other)
         } else {
             (other, self)
@@ -184,10 +194,10 @@ impl RangeBuffer {
             .data
             .truncate(first.data.len().saturating_sub(intersection));
 
-        first.data.extend_from_slice(&second.data);
+        first.data.extend(&second.data);
 
         Self {
-            offset: AtomicCell::new(start),
+            offset: start,
             data: first.data,
         }
     }
@@ -246,7 +256,7 @@ impl MultiRangeBuffer {
     pub fn write(&mut self, offset: usize, buf: &[Sample]) {
         let mut ranges: Vec<_> = self.ranges.drain(..).collect();
 
-        let range = ranges.iter_mut().find(|x| x.offset.load() == offset);
+        let range = ranges.iter_mut().find(|x| x.offset == offset);
 
         if let Some(range) = range {
             range.write(buf);
@@ -340,7 +350,7 @@ impl MultiRangeBuffer {
             return vec![];
         }
 
-        ranges.sort_by(|a, b| a.offset.load().cmp(&b.offset.load()));
+        ranges.sort_by(|a, b| a.offset.cmp(&b.offset));
 
         let mut merged_ranges = vec![];
         let mut current_range = ranges.remove(0);
@@ -528,7 +538,7 @@ mod test {
         );
         // New absolute offset should be rounded down to the odd (L) sample 3.
         assert_eq!(
-            buffer.offset.load(),
+            buffer.offset,
             odd_start_offset - 1,
             "offset is changed accordingly"
         );
@@ -554,7 +564,7 @@ mod test {
         buffer.retain_range(start, end, chunk_size);
 
         assert_eq!(
-            buffer.offset.load(),
+            buffer.offset,
             absolute_offset + 1,
             "offset is changed accordingly"
         );
