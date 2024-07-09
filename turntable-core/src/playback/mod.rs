@@ -26,7 +26,8 @@ impl Playback {
         I: Ingestion + 'static,
     {
         spawn_processing_thread(context);
-        spawn_preloading_task(context, ingestion);
+        spawn_preloading_task(context, ingestion.clone());
+        spawn_cleanup_thread(context, ingestion);
 
         Self {
             context: context.clone(),
@@ -65,6 +66,24 @@ fn spawn_processing_thread(context: &PipelineContext) {
     thread::spawn(run);
 }
 
+fn spawn_cleanup_thread<I>(context: &PipelineContext, ingestion: Arc<I>)
+where
+    I: Ingestion + 'static,
+{
+    let players = context.players.clone();
+
+    let run = move || loop {
+        for player in players.iter() {
+            player.clear_superflous();
+        }
+
+        ingestion.clear_inactive();
+        thread::sleep(Duration::from_secs(30))
+    };
+
+    thread::spawn(run);
+}
+
 fn spawn_preloading_task<I>(context: &PipelineContext, ingestion: Arc<I>)
 where
     I: Ingestion + 'static,
@@ -86,11 +105,7 @@ where
                             config.preload_size_in_samples(),
                         )
                         .await;
-
-                    player.clear_superflous();
                 }
-
-                ingestion.clear_inactive();
             }
 
             sleep(Duration::from_secs(1)).await;
