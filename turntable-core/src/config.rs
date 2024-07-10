@@ -96,8 +96,8 @@ impl Default for Config {
             preload_threshold_in_seconds: 60.0 * 3.,
             // 100ms of should be enough to avoid buffer underruns
             buffer_size_in_seconds: 0.1,
-            // Half a second of stream latency
-            stream_preload_cache_size_in_seconds: 0.5,
+            // Two seconds of latency should be OK for most modern networks
+            stream_preload_cache_size_in_seconds: 2.,
             // 5 minutes of stored audio is more than enough
             sink_preload_window_in_seconds: 60. * 5.,
         }
