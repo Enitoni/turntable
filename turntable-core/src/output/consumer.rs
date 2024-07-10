@@ -1,7 +1,6 @@
 use crossbeam::channel::{unbounded, Receiver, Sender};
 use parking_lot::Mutex;
 use std::{
-    io::Read,
     sync::{Arc, Weak},
     time::Duration,
 };
@@ -61,22 +60,16 @@ impl Consumer {
         self.encoder.lock().content_type()
     }
 
-    /// Reads the encoded data from the consumer.
-    /// Note: This will block if the requested amount is not available yet
-    pub fn read(&self, buf: &mut [u8]) -> std::io::Result<usize> {
-        let requested_amount = buf.len();
-        let mut amount_read = 0;
-
+    /// Returns the encoded data from the enccoder.
+    /// If no data is available yet, it will block until there is.
+    pub fn bytes(&self) -> Option<Vec<u8>> {
         loop {
             let mut encoder = self.encoder.lock();
+            let bytes = encoder.bytes();
 
-            let slice = &mut buf[amount_read..];
-            amount_read += encoder.read(slice)?;
-
-            let remaining = requested_amount.saturating_sub(amount_read);
-
-            if remaining == 0 {
-                break;
+            // Immediately return bytes if they're available
+            if let Some(bytes) = bytes {
+                return Some(bytes);
             }
 
             // If we don't drop this before waiting, we will deadlock.
@@ -87,11 +80,9 @@ impl Consumer {
 
             // If something goes wrong or it times out, just break out of the loop.
             if result.is_err() {
-                break;
+                return None;
             }
         }
-
-        Ok(amount_read)
     }
 }
 

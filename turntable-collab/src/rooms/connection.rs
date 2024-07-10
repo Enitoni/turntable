@@ -3,9 +3,11 @@ use std::{
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
+    time::Instant,
 };
 
 use futures_util::{FutureExt, Stream};
+use log::warn;
 use parking_lot::Mutex;
 use tokio::task::{spawn_blocking, JoinHandle};
 use turntable_core::{Consumer, Id};
@@ -33,7 +35,7 @@ pub struct RoomConnectionHandle {
     /// The audio stream
     stream: Arc<Consumer>,
     /// The future being polled currently
-    fut: Mutex<Option<JoinHandle<Vec<u8>>>>,
+    fut: Mutex<Option<JoinHandle<Option<Vec<u8>>>>>,
 }
 
 impl RoomConnection {
@@ -47,8 +49,6 @@ impl RoomConnection {
 }
 
 impl RoomConnectionHandle {
-    const BUFFER_SIZE: usize = 1024 * 64;
-
     pub fn new(
         context: &CollabContext,
         connection_id: RoomConnectionId,
@@ -87,17 +87,33 @@ impl Stream for RoomConnectionHandle {
 
         let fut = fut_guard.get_or_insert_with(|| {
             spawn_blocking(move || {
-                let mut buf = vec![0; Self::BUFFER_SIZE];
-                let _ = cloned_stream.read(&mut buf).ok();
+                let now = Instant::now();
+                let bytes = cloned_stream.bytes();
+                let elapsed_millis = now.elapsed().as_millis();
 
-                buf
+                // 100 here is an arbitrary number. In the future this should probably be config.playback_tick_rate()
+                // If this ever is true, it indicates a problem with turntable. Or CPU can't keep up.
+                if elapsed_millis > 100 {
+                    warn!(
+                        "Stream connection took too long ({}ms) to receive bytes!",
+                        elapsed_millis
+                    )
+                }
+
+                bytes
             })
         });
 
         match fut.poll_unpin(cx) {
             Poll::Ready(result) => {
                 fut_guard.take();
-                Poll::Ready(Some(Ok(result.expect("infallible"))))
+
+                let maybe_bytes = result.expect("infallible");
+
+                match maybe_bytes {
+                    Some(bytes) => Poll::Ready(Some(Ok(bytes))),
+                    None => Poll::Ready(None),
+                }
             }
             Poll::Pending => Poll::Pending,
         }

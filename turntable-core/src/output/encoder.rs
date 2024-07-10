@@ -1,8 +1,7 @@
 use crate::{Config, Sample};
-use std::io::Read;
 
 /// Represents a type that encodes [Sample]s into a desired audio format to be consumed by the end-user.
-pub trait Encoder: Read
+pub trait Encoder
 where
     Self: 'static + Send + Sync,
 {
@@ -14,6 +13,9 @@ where
     ///
     /// Note: This is potentially a blocking operation.
     fn encode(&mut self, samples: &[Sample]);
+
+    /// Consumes the bytes currently encoded in the encoder.
+    fn bytes(&mut self) -> Option<Vec<u8>>;
 
     /// Returns the content type of the encoded data.
     fn content_type(&self) -> String;

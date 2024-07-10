@@ -1,10 +1,9 @@
-use std::io::Read;
-use turntable_core::{assign_slice, Config, Encoder, Sample};
+use turntable_core::{Config, Encoder, Sample};
 
 /// Encodes [Sample]s into a .wav file
 pub struct WaveEncoder {
     did_write_header: bool,
-    samples: Vec<Sample>,
+    encoded_bytes: Vec<u8>,
     header: WaveHeader,
 }
 
@@ -102,13 +101,9 @@ impl Encoder for WaveEncoder {
 
         Self {
             did_write_header: false,
-            samples: Vec::new(),
+            encoded_bytes: Vec::new(),
             header,
         }
-    }
-
-    fn encode(&mut self, samples: &[Sample]) {
-        self.samples.extend_from_slice(samples);
     }
 
     fn content_type(&self) -> String {
@@ -121,39 +116,35 @@ impl Encoder for WaveEncoder {
     {
         "WaveEncoder".to_string()
     }
-}
 
-impl Read for WaveEncoder {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        let header = self.header.to_bytes();
-
-        let mut bytes_written = 0;
-
-        if !self.did_write_header {
-            bytes_written = assign_slice(&header, buf);
-            self.did_write_header = true;
-        }
-
-        let body_buf = &mut buf[bytes_written..];
-
-        let amount_to_read = body_buf.len() / (Config::SAMPLES_IN_BYTES / 2);
-        let safe_end = self.samples.len().min(amount_to_read);
-
-        let samples_to_read = &self.samples[..safe_end];
-        let amount_of_samples = samples_to_read.len();
-
-        let samples_in_bytes: Vec<_> = samples_to_read
+    fn encode(&mut self, samples: &[Sample]) {
+        let samples_in_bytes: Vec<_> = samples
             .iter()
             .map(|s| (s * i16::MAX as Sample) as i16)
             .flat_map(|s| s.to_le_bytes())
             .collect();
 
-        assign_slice(&samples_in_bytes, body_buf);
-        bytes_written += samples_in_bytes.len();
+        self.encoded_bytes.extend_from_slice(&samples_in_bytes);
+    }
 
-        // Remove the samples we read
-        self.samples.drain(..amount_of_samples);
+    fn bytes(&mut self) -> Option<Vec<u8>> {
+        let mut bytes = vec![];
 
-        Ok(bytes_written)
+        // Return nothing until there's data available
+        if self.encoded_bytes.is_empty() {
+            return None;
+        }
+
+        if !self.did_write_header {
+            let header_bytes = self.header.to_bytes();
+            bytes.extend_from_slice(&header_bytes);
+
+            self.did_write_header = true;
+        }
+
+        bytes.extend_from_slice(&self.encoded_bytes);
+        self.encoded_bytes.truncate(0);
+
+        Some(bytes)
     }
 }
