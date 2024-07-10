@@ -47,7 +47,7 @@ impl RoomConnection {
 }
 
 impl RoomConnectionHandle {
-    const BUFFER_SIZE: usize = 1024 * 4;
+    const BUFFER_SIZE: usize = 1024 * 64;
 
     pub fn new(
         context: &CollabContext,
