@@ -36,7 +36,7 @@ impl WaveHeader {
     // ChunkID: Contains the letters "RIFF" in ASCII form, change last number to 80 if "RIFX" is used
     const CHUNK_ID: WaveHeaderValue = WaveHeaderValue::Ascii("RIFF");
 
-    // This is set to max because vinyl is a live audio stream
+    // This is set to max because it's a live audio stream.
     const CHUNK_SIZE: WaveHeaderValue = WaveHeaderValue::FourBytes(i32::MAX as u32);
 
     // Format: Contains the letters "WAVE"
