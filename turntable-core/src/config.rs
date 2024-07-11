@@ -72,6 +72,11 @@ impl Config {
         (seconds * self.samples_per_sec() as f32) as usize
     }
 
+    /// Returns the number of samples for any given number of milliseconds
+    pub fn millis_to_samples(&self, millis: u32) -> usize {
+        self.seconds_to_samples(millis as f32 / 1000.)
+    }
+
     /// Returns the number of seconds for any given number of samples
     pub fn samples_to_seconds(&self, samples: usize) -> f32 {
         (samples as f32) / self.samples_per_sec() as f32
