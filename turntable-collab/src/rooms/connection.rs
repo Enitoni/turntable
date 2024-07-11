@@ -3,11 +3,9 @@ use std::{
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
-    time::Instant,
 };
 
 use futures_util::{FutureExt, Stream};
-use log::warn;
 use parking_lot::Mutex;
 use tokio::task::{spawn_blocking, JoinHandle};
 use turntable_core::{Consumer, Id};
@@ -85,24 +83,7 @@ impl Stream for RoomConnectionHandle {
         let mut fut_guard = self.fut.lock();
         let cloned_stream = self.stream.clone();
 
-        let fut = fut_guard.get_or_insert_with(|| {
-            spawn_blocking(move || {
-                let now = Instant::now();
-                let bytes = cloned_stream.bytes();
-                let elapsed_millis = now.elapsed().as_millis();
-
-                // 100 here is an arbitrary number. In the future this should probably be config.playback_tick_rate()
-                // If this ever is true, it indicates a problem with turntable. Or CPU can't keep up.
-                if elapsed_millis > 100 {
-                    warn!(
-                        "Stream connection took too long ({}ms) to receive bytes!",
-                        elapsed_millis
-                    )
-                }
-
-                bytes
-            })
-        });
+        let fut = fut_guard.get_or_insert_with(|| spawn_blocking(move || cloned_stream.bytes()));
 
         match fut.poll_unpin(cx) {
             Poll::Ready(result) => {

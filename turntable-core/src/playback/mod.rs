@@ -1,4 +1,4 @@
-use log::{info, warn};
+use log::info;
 use std::{
     sync::Arc,
     thread,
@@ -12,7 +12,7 @@ mod timeline;
 pub use player::*;
 pub use timeline::*;
 
-use crate::{get_or_create_handle, Config, Ingestion, Output, PipelineContext};
+use crate::{get_or_create_handle, Ingestion, Output, PipelineContext};
 
 /// The playback type is responsible for managing players, processing playback, and preloading sinks as needed.
 pub struct Playback {
@@ -51,16 +51,19 @@ impl Playback {
 
 fn spawn_processing_thread(context: &PipelineContext) {
     let players = context.players.clone();
-    let config = context.config.clone();
+    let tick_rate = Duration::from_secs_f32(context.config.buffer_size_in_seconds);
 
-    let run = move || loop {
-        let now = Instant::now();
+    let run = move || {
+        let mut next = Instant::now();
 
-        for player in players.iter() {
-            player.process();
+        loop {
+            for player in players.iter() {
+                player.process();
+            }
+
+            next += tick_rate;
+            spin_sleep::sleep(next - Instant::now())
         }
-
-        wait_for_next(now, config.clone());
     };
 
     thread::spawn(run);
@@ -116,26 +119,4 @@ where
             sleep(Duration::from_secs(1)).await;
         }
     });
-}
-
-fn wait_for_next(now: Instant, config: Config) {
-    let elapsed = now.elapsed();
-    let elapsed_micros = elapsed.as_micros();
-    let elapsed_millis = elapsed_micros / 1000;
-
-    let duration = Duration::from_secs_f32(config.buffer_size_in_seconds);
-    let duration_micros = duration.as_micros();
-
-    if elapsed_millis > config.samples_per_sec() as u128 / 10000 {
-        warn!(
-            "Stream took too long ({}ms) to process samples!",
-            elapsed_millis
-        )
-    }
-
-    let corrected = duration_micros
-        .checked_sub(elapsed_micros)
-        .unwrap_or_default();
-
-    spin_sleep::sleep(Duration::from_micros(corrected as u64));
 }
