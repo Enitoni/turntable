@@ -137,6 +137,7 @@ impl Room {
         &self,
         user_id: PrimaryKey,
         source: String,
+        with_latency: Option<u32>,
     ) -> Result<RoomConnectionHandle, RoomError> {
         // Ensure the user is actually in the room before doing anything else
         let member = self.member_by_user_id(user_id)?;
@@ -153,7 +154,7 @@ impl Room {
         let stream = self
             .context
             .pipeline
-            .consume_player::<WaveEncoder>(player.id);
+            .consume_player::<WaveEncoder>(player.id, with_latency);
 
         info!(
             "User {} connected to room {} via {}",

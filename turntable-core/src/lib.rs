@@ -106,11 +106,11 @@ where
     }
 
     /// Creates a consumer for a player.
-    pub fn consume_player<E>(&self, player_id: PlayerId) -> Consumer
+    pub fn consume_player<E>(&self, player_id: PlayerId, with_latency: Option<u32>) -> Consumer
     where
         E: Encoder,
     {
-        self.output.consume_player::<E>(player_id)
+        self.output.consume_player::<E>(player_id, with_latency)
     }
 
     /// Receive events from the pipeline.

@@ -46,7 +46,7 @@ impl Output {
     }
 
     /// Gets a consumer for the associated player, with the given encoder.
-    pub fn consume_player<E>(&self, player_id: PlayerId) -> Consumer
+    pub fn consume_player<E>(&self, player_id: PlayerId, with_latency: Option<u32>) -> Consumer
     where
         E: Encoder,
     {
@@ -55,7 +55,7 @@ impl Output {
             .get(&player_id)
             .expect("consume_player() is not called with a player that does not exist");
 
-        let consumer = stream.consume::<E>();
+        let consumer = stream.consume::<E>(with_latency);
 
         info!(
             "Created {} consumer #{} of player #{}",

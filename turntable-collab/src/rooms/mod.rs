@@ -135,7 +135,11 @@ impl RoomManager {
     }
 
     /// Connects to a room and returns a connection handle using a stream key token
-    pub async fn connect(&self, token: String) -> Result<RoomConnectionHandle, RoomError> {
+    pub async fn connect(
+        &self,
+        token: String,
+        with_latency: Option<u32>,
+    ) -> Result<RoomConnectionHandle, RoomError> {
         let stream_key = self
             .context
             .database
@@ -150,7 +154,7 @@ impl RoomManager {
             })?;
 
         let room = self.room_by_id(stream_key.room_id)?;
-        let handle = room.connect(stream_key.user_id, stream_key.source)?;
+        let handle = room.connect(stream_key.user_id, stream_key.source, with_latency)?;
 
         Ok(handle)
     }

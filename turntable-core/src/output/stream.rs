@@ -32,14 +32,23 @@ impl Stream {
     }
 
     /// Gets a new consumer for this stream.
-    pub fn consume<E>(&self) -> Consumer
+    /// - `with_latency` sets the latency to the provided milliseconds. Defaults to preload cache size.
+    pub fn consume<E>(&self, with_latency: Option<u32>) -> Consumer
     where
         E: Encoder,
     {
         let (consumer, producer) = Consumer::new::<E>(self.config.clone(), self.me.clone());
-        let preload_cache = self.preload_cache.lock();
 
-        producer.push(&preload_cache);
+        let max_latency_in_samples = self.config.stream_preload_cache_size();
+        let latency_in_samples = with_latency
+            .map(|l| self.config.millis_to_samples(l))
+            .unwrap_or(max_latency_in_samples)
+            .min(max_latency_in_samples);
+
+        let preload_cache = self.preload_cache.lock();
+        let used_preload_cache = preload_cache.len().saturating_sub(latency_in_samples);
+
+        producer.push(&preload_cache[used_preload_cache..]);
         self.producers.insert(consumer.id, producer);
 
         consumer
