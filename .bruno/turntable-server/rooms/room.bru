@@ -1,0 +1,15 @@
+meta {
+  name: room
+  type: http
+  seq: 11
+}
+
+get {
+  url: {{baseUrl}}/v1/rooms/:slug
+  body: none
+  auth: inherit
+}
+
+params:path {
+  slug: 
+}

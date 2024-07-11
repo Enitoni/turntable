@@ -1,0 +1,15 @@
+meta {
+  name: perform_room_action
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/v1/rooms/:id/actions
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}

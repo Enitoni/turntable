@@ -1,0 +1,15 @@
+meta {
+  name: create_invite
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/v1/rooms/:id/invites
+  body: none
+  auth: inherit
+}
+
+params:path {
+  id: 
+}

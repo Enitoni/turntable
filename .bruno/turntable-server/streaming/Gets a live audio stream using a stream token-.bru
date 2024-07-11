@@ -1,0 +1,15 @@
+meta {
+  name: Gets a live audio stream using a stream token-
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/v1/streams/:token
+  body: none
+  auth: none
+}
+
+query {
+  ~latency: 
+}

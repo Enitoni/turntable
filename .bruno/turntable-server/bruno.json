@@ -1,0 +1,9 @@
+{
+  "version": "1",
+  "name": "turntable-server",
+  "type": "collection",
+  "ignore": [
+    "node_modules",
+    ".git"
+  ]
+}

@@ -1,0 +1,11 @@
+meta {
+  name: list_rooms
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/v1/rooms
+  body: none
+  auth: inherit
+}

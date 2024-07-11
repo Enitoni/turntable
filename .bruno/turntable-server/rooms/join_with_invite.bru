@@ -1,0 +1,17 @@
+meta {
+  name: join_with_invite
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/v1/rooms/members
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "token": ""
+  }
+}

@@ -1,0 +1,19 @@
+meta {
+  name: create_room
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/v1/rooms
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "description": "",
+    "slug": "",
+    "title": ""
+  }
+}

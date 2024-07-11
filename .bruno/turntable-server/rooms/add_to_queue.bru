@@ -1,0 +1,21 @@
+meta {
+  name: add_to_queue
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{baseUrl}}/v1/rooms/:id/queue
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 1
+}
+
+body:json {
+  {
+    "query": ["<link>"]
+  }
+}

@@ -1,0 +1,20 @@
+meta {
+  name: register
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/v1/auth/register
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "displayName": "",
+    "inviteToken": "",
+    "password": "",
+    "username": ""
+  }
+}

@@ -1,0 +1,21 @@
+meta {
+  name: create_stream_key
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/v1/rooms/:id/keys
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "source": ""
+  }
+}
