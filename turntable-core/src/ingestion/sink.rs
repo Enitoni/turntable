@@ -69,7 +69,7 @@ impl Sink {
         assert!(!self.has_guard.load(), "Sink already has a guard");
 
         self.has_guard.store(true);
-        self.duration_since_interaction.store(Instant::now());
+        self.interact();
 
         SinkGuard {
             context: self.context.clone(),
@@ -98,7 +98,7 @@ impl Sink {
 
         self.has_write_ref.store(true);
         self.set_load_state(SinkLoadState::Loading);
-        self.duration_since_interaction.store(Instant::now());
+        self.interact();
 
         SinkWriteRef {
             context: &self.context,
@@ -181,7 +181,8 @@ impl Sink {
     }
 
     fn clear_guard(&self) {
-        self.has_guard.store(false)
+        self.has_guard.store(false);
+        self.interact();
     }
 
     fn clear_write_ref(&self) {
@@ -190,7 +191,8 @@ impl Sink {
             self.set_load_state(SinkLoadState::Idle);
         }
 
-        self.has_write_ref.store(false)
+        self.has_write_ref.store(false);
+        self.interact();
     }
 
     /// Writes samples to the sink at the given offset.
@@ -203,6 +205,10 @@ impl Sink {
             offset,
             self.id
         );
+    }
+
+    fn interact(&self) {
+        self.duration_since_interaction.store(Instant::now());
     }
 }
 
