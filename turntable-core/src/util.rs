@@ -220,7 +220,7 @@ impl RangeBuffer {
 pub struct MultiRangeBuffer {
     ranges: Vec<RangeBuffer>,
     /// The amount of samples that is expected to be written to the buffer.
-    expected_size: usize,
+    expected_size: Option<usize>,
 }
 
 /// Describes the end of a read operation.
@@ -251,7 +251,7 @@ pub struct BufferVoidDistance {
 }
 
 impl MultiRangeBuffer {
-    pub fn new(expected_size: usize) -> Self {
+    pub fn new(expected_size: Option<usize>) -> Self {
         Self {
             ranges: Default::default(),
             expected_size,
@@ -298,7 +298,7 @@ impl MultiRangeBuffer {
             end = BufferReadEnd::Gap;
         }
 
-        if end_offset >= self.expected_size {
+        if self.expected_size.is_some() && Some(end_offset) >= self.expected_size {
             end = BufferReadEnd::End;
         }
 
@@ -621,7 +621,7 @@ mod test {
 
     #[test]
     fn test_merge_multi_ranges() {
-        let mut buffer = MultiRangeBuffer::new(0);
+        let mut buffer = MultiRangeBuffer::new(None);
 
         buffer.write(0, &[1., 2., 3., 4., 5., 6., 7., 8., 9., 10.]);
         buffer.write(5, &[0., 0., 0.]);
@@ -657,7 +657,7 @@ mod test {
 
     #[test]
     fn test_read_multi() {
-        let mut buffer = MultiRangeBuffer::new(29);
+        let mut buffer = MultiRangeBuffer::new(Some(29));
 
         buffer.write(0, &[1., 2., 3., 4., 5., 6., 7., 8., 9., 10.]);
         buffer.write(20, &[1., 2., 3., 4., 5., 6., 7., 8., 9., 10.]);
@@ -693,7 +693,7 @@ mod test {
 
     #[test]
     fn test_distance_from_void() {
-        let mut buffer = MultiRangeBuffer::new(0);
+        let mut buffer = MultiRangeBuffer::new(None);
 
         buffer.write(0, &[1., 2., 3., 4., 5., 6., 7., 8., 9., 10.]);
         buffer.write(20, &[1., 2., 3., 4., 5., 6., 7., 8., 9., 10.]);
@@ -722,7 +722,7 @@ mod test {
 
     #[test]
     fn test_retain_window() {
-        let mut buffer = MultiRangeBuffer::new(0);
+        let mut buffer = MultiRangeBuffer::new(None);
 
         //                L   R   L   R   L   R   L   R   L   R
         buffer.write(0, &[1., 2., 3., 4., 5., 6., 7., 8., 9., 10.]);
