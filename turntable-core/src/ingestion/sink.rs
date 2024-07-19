@@ -130,7 +130,7 @@ impl Sink {
 
     /// Returns a write reference to the sink.
     /// Only one write reference can exist at a time.
-    pub fn write(&self) -> SinkWriteRef {
+    pub fn write(&self) -> WriteGuard {
         assert!(
             !self.has_write_ref.load(),
             "Sink already has a write reference"
@@ -146,8 +146,8 @@ impl Sink {
         self.set_load_state(SinkLoadState::Loading);
         self.interact();
 
-        SinkWriteRef {
-            context: &self.context,
+        WriteGuard {
+            context: self.context.clone(),
             id: self.id,
         }
     }
@@ -306,9 +306,9 @@ pub struct SinkGuard {
 
 /// A reference to a sink that can be written to.
 /// It is used by [Ingestion] and when dropped, the sink can be cleared from memory.
-pub struct SinkWriteRef<'write> {
+pub struct WriteGuard {
     id: SinkId,
-    context: &'write PipelineContext,
+    context: PipelineContext,
 }
 
 /// A reference to a sink that allows activation.
@@ -352,7 +352,7 @@ impl SinkGuard {
     }
 }
 
-impl SinkWriteRef<'_> {
+impl WriteGuard {
     pub fn write(&self, offset: usize, samples: &[Sample]) {
         let sink = self
             .context
@@ -399,7 +399,7 @@ impl Drop for SinkGuard {
     }
 }
 
-impl Drop for SinkWriteRef<'_> {
+impl Drop for WriteGuard {
     fn drop(&mut self) {
         let sink = self
             .context
