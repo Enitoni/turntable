@@ -220,7 +220,7 @@ impl RangeBuffer {
 pub struct MultiRangeBuffer {
     ranges: Vec<RangeBuffer>,
     /// The amount of samples that is expected to be written to the buffer.
-    expected_size: Option<usize>,
+    expected_length: Option<usize>,
 }
 
 /// Describes the end of a read operation.
@@ -251,10 +251,10 @@ pub struct BufferVoidDistance {
 }
 
 impl MultiRangeBuffer {
-    pub fn new(expected_size: Option<usize>) -> Self {
+    pub fn new(expected_length: Option<usize>) -> Self {
         Self {
             ranges: Default::default(),
-            expected_size,
+            expected_length,
         }
     }
 
@@ -298,7 +298,7 @@ impl MultiRangeBuffer {
             end = BufferReadEnd::Gap;
         }
 
-        if self.expected_size.is_some() && Some(end_offset) >= self.expected_size {
+        if self.expected_length.is_some() && Some(end_offset) >= self.expected_length {
             end = BufferReadEnd::End;
         }
 
@@ -347,6 +347,11 @@ impl MultiRangeBuffer {
         }
 
         self.ranges = Self::merge_ranges(ranges);
+    }
+
+    /// Returns the expected length in samples. If length is [None], it is unknown.
+    pub fn expected_length(&self) -> Option<usize> {
+        self.expected_length
     }
 
     /// Merges all ranges that are intersecting or adjacent to each other.
