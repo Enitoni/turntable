@@ -123,12 +123,12 @@ where
 
 impl PipelineContext {
     pub fn dispatch(&self, action: PipelineAction) {
-        self.action_sender.send(action).expect("action is sent");
+        let _ = self.action_sender.send(action);
     }
 
     pub fn emit(&self, event: PipelineEvent) {
         event.log();
-        self.event_sender.send(event).expect("event is sent");
+        let _ = self.event_sender.send(event);
     }
 
     /// Creates a new context with the given config.
