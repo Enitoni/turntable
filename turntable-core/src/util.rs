@@ -333,6 +333,13 @@ impl MultiRangeBuffer {
         }
     }
 
+    /// Returns the distance in samples from the offset to the end of the buffer. If the end is unknown, this number is usize::MAX.
+    pub fn distance_from_end(&self, offset: usize) -> usize {
+        self.expected_length
+            .unwrap_or(usize::MAX)
+            .saturating_sub(offset)
+    }
+
     /// Clears all samples outside the given window.
     pub fn retain_window(&mut self, offset: usize, window: usize, chunk_size: usize) {
         let mut ranges: Vec<_> = self.ranges.drain(..).collect();
