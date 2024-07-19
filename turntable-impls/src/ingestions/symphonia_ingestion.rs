@@ -122,7 +122,7 @@ impl Ingestion for SymphoniaIngestion {
             .map(|s| self.context.config.seconds_to_samples(s))
             .or(potential_sink_length);
 
-        let sink: Arc<_> = Sink::new(&self.context, sink_length).into();
+        let sink: Arc<_> = Sink::with_activation(&self.context, sink_length).into();
 
         let loader = Loader {
             sink: sink.clone(),

@@ -70,7 +70,8 @@ impl Timeline {
 
         for sink in playable_sinks.iter() {
             // We've satisified the amount of samples the player wants to play
-            if remaining == 0 {
+            // Or the sink isn't activated, and we need to wait
+            if remaining == 0 || !sink.is_activated() {
                 break;
             }
 
@@ -128,6 +129,11 @@ impl Timeline {
         let mut result = vec![];
 
         for sink in sinks.iter() {
+            // Wait for sink activation
+            if !sink.is_activated() {
+                break;
+            }
+
             let available_until_void = sink.distance_from_void(offset);
             let available_until_end = sink.distance_from_end(offset);
 
@@ -229,8 +235,12 @@ mod tests {
         let timeline = Timeline::new(context.config.clone());
 
         // Set up our sinks.
-        let first = Arc::new(Sink::new(&context, Some(10)));
-        let second = Arc::new(Sink::new(&context, Some(10)));
+        let first = Arc::new(Sink::with_activation(&context, Some(10)));
+        let second = Arc::new(Sink::with_activation(&context, Some(10)));
+
+        context.sinks.insert(first.id, first.clone());
+        context.sinks.insert(second.id, second.clone());
+
         timeline.set_sinks(vec![first.clone(), second.clone()]);
 
         // First is fully loaded.
@@ -291,8 +301,12 @@ mod tests {
         let timeline = Timeline::new(config);
 
         // Set up our sinks.
-        let first = Arc::new(Sink::new(&context, Some(10)));
-        let second = Arc::new(Sink::new(&context, Some(10)));
+        let first = Arc::new(Sink::with_activation(&context, Some(10)));
+        let second = Arc::new(Sink::with_activation(&context, Some(10)));
+
+        context.sinks.insert(first.id, first.clone());
+        context.sinks.insert(second.id, second.clone());
+
         timeline.set_sinks(vec![first.clone(), second.clone()]);
 
         // Should return the first sink to preload.
@@ -309,7 +323,7 @@ mod tests {
 
         // We don't have any samples, and the offset is now 2, so we need to preload again.
         let preload = timeline.preload();
-        assert_eq!(preload[0].offset, 2, "returns the correct offset");
+        assert_eq!(preload[0].offset, 3, "returns the correct offset");
 
         // Seal the first sink, so we have to preload the second sink.
         first.seal();
@@ -319,8 +333,11 @@ mod tests {
         assert_eq!(preload[0].sink_id, second.id, "returns the second sink");
 
         // Set up case where two should be preloaded at once, since they are below the threshold.
-        let first = Arc::new(Sink::new(&context, Some(2)));
-        let second = Arc::new(Sink::new(&context, Some(2)));
+        let first = Arc::new(Sink::with_activation(&context, Some(2)));
+        let second = Arc::new(Sink::with_activation(&context, Some(2)));
+
+        context.sinks.insert(first.id, first.clone());
+        context.sinks.insert(second.id, second.clone());
 
         timeline.reset();
         timeline.set_sinks(vec![first.clone(), second.clone()]);

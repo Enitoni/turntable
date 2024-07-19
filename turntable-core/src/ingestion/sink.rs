@@ -13,15 +13,13 @@ pub type SinkId = Id<Sink>;
 pub struct Sink {
     pub id: SinkId,
     context: PipelineContext,
-    /// The samples stored in this sink.
-    buffer: RwLock<MultiRangeBuffer>,
-    /// The expected length of the samples. If this is `None`, the length is unknown.
-    expected_length: Option<usize>,
+    activation: RwLock<SinkActivation>,
     /// The current load state of the sink.
     load_state: Mutex<SinkLoadState>,
-
     /// Whether a guard has been created and exists somewhere.
     has_guard: AtomicCell<bool>,
+    /// Whether an activation guard has been created and exists somewhere.
+    has_activation_guard: AtomicCell<bool>,
     /// Whether a write reference has been created and exists somewhere.
     has_write_ref: AtomicCell<bool>,
     /// The time since the sink was last interacted with.
@@ -47,22 +45,41 @@ pub enum SinkLoadState {
     Error(String),
 }
 
-impl Sink {
-    pub fn new(context: &PipelineContext, expected_length: Option<usize>) -> Self {
-        // If we don't have the length, this is probably a live stream.
-        // In that case, allow the buffer to be as big as possible, and allow the [Loadable] to report when the end has been reached instead.
-        let buffer_expected_length = expected_length.unwrap_or(usize::MAX);
+/// Represents the activation state of a sink
+#[derive(Debug, Default)]
+pub enum SinkActivation {
+    /// The sink has been prepared
+    #[default]
+    Inactive,
+    /// The sink is currently being activated
+    Activating,
+    /// The sink has been successfully activated and is ready to be loaded to
+    Activated(MultiRangeBuffer),
+    /// An error occurred with sink activation and the sink will be skipped
+    Error(String),
+}
 
+impl Sink {
+    /// Creates a new inactive sink
+    pub fn prepare(context: &PipelineContext) -> Self {
         Self {
             id: SinkId::new(),
-            expected_length,
             context: context.clone(),
-            load_state: Default::default(),
             has_guard: Default::default(),
+            load_state: Default::default(),
+            activation: Default::default(),
             has_write_ref: Default::default(),
+            has_activation_guard: Default::default(),
             duration_since_interaction: Instant::now().into(),
-            buffer: MultiRangeBuffer::new(buffer_expected_length).into(),
         }
+    }
+
+    /// Creates a new sink that is activated immediately
+    pub fn with_activation(context: &PipelineContext, expected_length: Option<usize>) -> Self {
+        let me = Self::prepare(context);
+
+        *me.activation.write() = SinkActivation::Activated(MultiRangeBuffer::new(expected_length));
+        me
     }
 
     pub fn guard(&self) -> SinkGuard {
@@ -77,9 +94,38 @@ impl Sink {
         }
     }
 
+    /// Prepares activation by returning an activation guard.
+    pub fn activate(&self) -> ActivationGuard {
+        let mut activation = self.activation.write();
+
+        assert!(
+            matches!(
+                *activation,
+                SinkActivation::Inactive | SinkActivation::Error(_)
+            ),
+            "Sink is inactive when trying to activate"
+        );
+
+        assert!(
+            !self.has_activation_guard.load(),
+            "Sink already has activation guard"
+        );
+
+        self.has_activation_guard.store(true);
+        self.interact();
+
+        *activation = SinkActivation::Activating;
+
+        ActivationGuard {
+            id: self.id,
+            context: self.context.clone(),
+            finished: false.into(),
+        }
+    }
+
     /// Reads samples from the sink at the given offset.
     pub fn read(&self, offset: usize, buf: &mut [Sample]) -> BufferRead {
-        self.buffer.read().read(offset, buf)
+        self.read_buffer(|buffer| buffer.read(offset, buf))
     }
 
     /// Returns a write reference to the sink.
@@ -122,26 +168,22 @@ impl Sink {
 
     /// Returns how many samples are left in the sink until a void at the current offset.
     fn distance_from_void(&self, offset: usize) -> BufferVoidDistance {
-        self.buffer.read().distance_from_void(offset)
+        self.read_buffer(|buffer| buffer.distance_from_void(offset))
     }
 
     /// Returns how many expected samples are left from the given offset.
     fn distance_from_end(&self, offset: usize) -> usize {
-        self.expected_length
-            .unwrap_or(usize::MAX)
-            .saturating_sub(offset)
+        self.read_buffer(|buffer| buffer.distance_from_end(offset))
     }
 
     /// Clears the samples in the sink outside the given window.
     fn clear_outside(&self, offset: usize, window: usize, chunk_size: usize) {
-        self.buffer
-            .write()
-            .retain_window(offset, window, chunk_size)
+        self.write_buffer(|buffer| buffer.retain_window(offset, window, chunk_size));
     }
 
     /// Returns the expected length of the sink. [None] if unknown.
     pub fn expected_length(&self) -> Option<usize> {
-        self.expected_length
+        self.read_buffer(|buffer| buffer.expected_length())
     }
 
     /// Returns true if the sink can still be loaded into.
@@ -150,6 +192,16 @@ impl Sink {
             self.load_state(),
             SinkLoadState::Loading | SinkLoadState::Idle
         )
+    }
+
+    /// Returns true if the sink is inactive
+    pub fn is_activatable(&self) -> bool {
+        matches!(*self.activation.read(), SinkActivation::Inactive)
+    }
+
+    /// Returns true if the sink is activated and can be read from
+    pub fn is_activated(&self) -> bool {
+        matches!(*self.activation.read(), SinkActivation::Activated(_))
     }
 
     /// Returns true if the sink can be cleared from memory.
@@ -185,6 +237,11 @@ impl Sink {
         self.interact();
     }
 
+    fn clear_activation_guard(&self) {
+        self.has_activation_guard.store(false);
+        self.interact();
+    }
+
     fn clear_write_ref(&self) {
         // Reset load state to Idle if it is still loading.
         if self.load_state() == SinkLoadState::Loading {
@@ -197,7 +254,9 @@ impl Sink {
 
     /// Writes samples to the sink at the given offset.
     fn internal_write(&self, offset: usize, samples: &[Sample]) {
-        self.buffer.write().write(offset, samples);
+        self.write_buffer(|buffer| {
+            buffer.write(offset, samples);
+        });
 
         info!(
             "Wrote {} samples at offset {} into sink #{}",
@@ -210,20 +269,54 @@ impl Sink {
     fn interact(&self) {
         self.duration_since_interaction.store(Instant::now());
     }
+
+    fn read_buffer<F, O>(&self, cb: F) -> O
+    where
+        F: FnOnce(&MultiRangeBuffer) -> O,
+    {
+        let activation = self.activation.read();
+
+        if let SinkActivation::Activated(buffer) = &*activation {
+            cb(buffer)
+        } else {
+            panic!("Cannot read buffer of sink that is not activated")
+        }
+    }
+
+    fn write_buffer<F, O>(&self, cb: F) -> O
+    where
+        F: FnOnce(&mut MultiRangeBuffer) -> O,
+    {
+        let mut activation = self.activation.write();
+
+        if let SinkActivation::Activated(buffer) = &mut *activation {
+            cb(buffer)
+        } else {
+            panic!("Cannot write buffer of sink that is not activated")
+        }
+    }
 }
 
 /// A reference to a sink that determines if it is used by a [Timeline].
 /// It is held by a [Timeline] and when dropped, the sink can be cleared from memory.
 pub struct SinkGuard {
-    context: PipelineContext,
     pub id: SinkId,
+    context: PipelineContext,
 }
 
 /// A reference to a sink that can be written to.
 /// It is used by [Ingestion] and when dropped, the sink can be cleared from memory.
 pub struct SinkWriteRef<'write> {
-    context: &'write PipelineContext,
     id: SinkId,
+    context: &'write PipelineContext,
+}
+
+/// A reference to a sink that allows activation.
+/// It is used to either finish an activation or fail it. When dropped, the sink can be cleared from memory.
+pub struct ActivationGuard {
+    id: SinkId,
+    context: PipelineContext,
+    finished: AtomicCell<bool>,
 }
 
 impl SinkGuard {
@@ -253,6 +346,10 @@ impl SinkGuard {
     pub fn clear_outside(&self, offset: usize, window: usize, chunk_size: usize) {
         self.get_sink().clear_outside(offset, window, chunk_size);
     }
+
+    pub fn is_activated(&self) -> bool {
+        self.get_sink().is_activated()
+    }
 }
 
 impl SinkWriteRef<'_> {
@@ -264,6 +361,29 @@ impl SinkWriteRef<'_> {
             .expect("SinkWriteRef has associated Sink");
 
         sink.internal_write(offset, samples);
+    }
+}
+
+impl ActivationGuard {
+    fn get_sink(&self) -> Arc<Sink> {
+        self.context
+            .sinks
+            .get(&self.id)
+            .expect("SinkGuard has associated Sink")
+            .clone()
+    }
+
+    pub fn activate(self, expected_length: Option<usize>) {
+        self.finished.store(true);
+
+        *self.get_sink().activation.write() =
+            SinkActivation::Activated(MultiRangeBuffer::new(expected_length));
+    }
+
+    pub fn fail(self, reason: &str) {
+        self.finished.store(true);
+
+        *self.get_sink().activation.write() = SinkActivation::Error(reason.to_string());
     }
 }
 
@@ -288,5 +408,22 @@ impl Drop for SinkWriteRef<'_> {
             .expect("SinkWriteRef about to be dropped has associated Sink");
 
         sink.clear_write_ref();
+    }
+}
+
+impl Drop for ActivationGuard {
+    fn drop(&mut self) {
+        assert!(
+            self.finished.load(),
+            "Activation guard was dropped before being finished"
+        );
+
+        let sink = self
+            .context
+            .sinks
+            .get(&self.id)
+            .expect("SinkGuard about to be dropped has associated Sink");
+
+        sink.clear_activation_guard();
     }
 }
