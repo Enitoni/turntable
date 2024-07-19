@@ -59,6 +59,28 @@ pub enum SinkActivation {
     Error(String),
 }
 
+/// A reference to a sink that determines if it is used by a [Timeline].
+/// It is held by a [Timeline] and when dropped, the sink can be cleared from memory.
+pub struct SinkGuard {
+    pub id: SinkId,
+    context: PipelineContext,
+}
+
+/// A reference to a sink that can be written to.
+/// It is used by [Ingestion] and when dropped, the sink can be cleared from memory.
+pub struct WriteGuard {
+    id: SinkId,
+    context: PipelineContext,
+}
+
+/// A reference to a sink that allows activation.
+/// It is used to either finish an activation or fail it. When dropped, the sink can be cleared from memory.
+pub struct ActivationGuard {
+    id: SinkId,
+    context: PipelineContext,
+    finished: AtomicCell<bool>,
+}
+
 impl Sink {
     /// Creates a new inactive sink
     pub fn prepare(context: &PipelineContext) -> Self {
@@ -295,28 +317,6 @@ impl Sink {
             panic!("Cannot write buffer of sink that is not activated")
         }
     }
-}
-
-/// A reference to a sink that determines if it is used by a [Timeline].
-/// It is held by a [Timeline] and when dropped, the sink can be cleared from memory.
-pub struct SinkGuard {
-    pub id: SinkId,
-    context: PipelineContext,
-}
-
-/// A reference to a sink that can be written to.
-/// It is used by [Ingestion] and when dropped, the sink can be cleared from memory.
-pub struct WriteGuard {
-    id: SinkId,
-    context: PipelineContext,
-}
-
-/// A reference to a sink that allows activation.
-/// It is used to either finish an activation or fail it. When dropped, the sink can be cleared from memory.
-pub struct ActivationGuard {
-    id: SinkId,
-    context: PipelineContext,
-    finished: AtomicCell<bool>,
 }
 
 impl SinkGuard {
