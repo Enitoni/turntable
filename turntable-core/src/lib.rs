@@ -1,7 +1,7 @@
 use crossbeam::channel::unbounded;
 use dashmap::DashMap;
 use log::info;
-use std::{error::Error, sync::Arc, thread};
+use std::{sync::Arc, thread};
 
 mod config;
 mod events;
@@ -24,8 +24,11 @@ pub type Store<Id, T> = Arc<DashMap<Id, T>>;
 pub type ArcedStore<Id, T> = Store<Id, Arc<T>>;
 
 /// The turntable pipeline, facilitating ingestion, playback, and output.
-pub struct Pipeline<I> {
-    ingestion: Arc<I>,
+pub struct Pipeline<I>
+where
+    I: Ingestion,
+{
+    sink_manager: Arc<SinkManager<I>>,
     playback: Playback,
     output: Arc<Output>,
     queuing: Arc<Queuing>,
@@ -65,10 +68,11 @@ where
             queues: Default::default(),
         };
 
-        let ingestion = Arc::new(I::new(&context));
+        let sink_manager = Arc::new(SinkManager::new(&context, I::new(&context)));
+
         let output = Arc::new(Output::new(&context));
-        let queuing = Arc::new(Queuing::new(&context, ingestion.clone()));
-        let playback = Playback::new(&context, ingestion.clone(), output.clone());
+        let queuing = Arc::new(Queuing::new(&context, sink_manager.clone()));
+        let playback = Playback::new(&context, sink_manager.clone(), output.clone());
 
         spawn_action_handler_thread(&context, queuing.clone(), action_receiver);
 
@@ -78,7 +82,7 @@ where
             output,
             queuing,
             playback,
-            ingestion,
+            sink_manager,
             event_receiver,
         }
     }
@@ -95,14 +99,6 @@ where
         F: FnOnce(QueueNotifier) -> T,
     {
         self.queuing.create_queue(player_id, creator)
-    }
-
-    /// Ingests a loader and returns the sink.
-    pub async fn ingest<L>(&self, loader: L) -> Result<Arc<Sink>, Box<dyn Error>>
-    where
-        L: IntoLoadable,
-    {
-        self.ingestion.ingest(loader).await
     }
 
     /// Creates a consumer for a player.

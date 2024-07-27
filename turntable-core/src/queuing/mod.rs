@@ -4,12 +4,11 @@ mod queue_item;
 use std::{sync::Arc, thread};
 
 use crossbeam::channel::{unbounded, Receiver, Sender};
-use log::info;
 pub use queue::*;
 pub use queue_item::*;
 
 use crate::{
-    get_or_create_handle, Ingestion, PipelineAction, PipelineContext, PipelineEvent, PlayerId,
+    get_or_create_handle, Ingestion, PipelineAction, PipelineContext, PlayerId, Sink, SinkManager,
 };
 
 /// A type passed to a queue to allow it to notify the Pipeline that it changed.
@@ -40,14 +39,14 @@ pub struct Queuing {
 }
 
 impl Queuing {
-    pub fn new<I>(context: &PipelineContext, ingestion: Arc<I>) -> Self
+    pub fn new<I>(context: &PipelineContext, manager: Arc<SinkManager<I>>) -> Self
     where
         I: Ingestion + 'static,
     {
         let context = context.clone();
         let (sender, receiver) = unbounded();
 
-        spawn_update_task_thread(&context, ingestion, receiver);
+        spawn_update_task_thread(&context, manager, receiver);
 
         Self { context, sender }
     }
@@ -78,7 +77,7 @@ impl Queuing {
 
 fn spawn_update_task_thread<I>(
     context: &PipelineContext,
-    ingestion: Arc<I>,
+    manager: Arc<SinkManager<I>>,
     receiver: Receiver<PlayerId>,
 ) where
     I: Ingestion + 'static,
@@ -88,7 +87,7 @@ fn spawn_update_task_thread<I>(
 
     let run = move || loop {
         let player_id = receiver.recv().unwrap();
-        let fut = update_sinks(&context, ingestion.clone(), player_id);
+        let fut = update_sinks(&context, manager.clone(), player_id);
 
         handle.block_on(fut)
     };
@@ -97,8 +96,11 @@ fn spawn_update_task_thread<I>(
 }
 
 /// Called when a queue is updated.
-async fn update_sinks<I>(context: &PipelineContext, ingestion: Arc<I>, player_id: PlayerId)
-where
+async fn update_sinks<I>(
+    context: &PipelineContext,
+    manager: Arc<SinkManager<I>>,
+    player_id: PlayerId,
+) where
     I: Ingestion + 'static,
 {
     let queue = context.queues.get(&player_id).expect("queue exists");
@@ -110,9 +112,55 @@ where
         return;
     }
 
+    let sinks_to_play = ensure_sinks_for_items(context, &items, &manager);
+    player.set_sinks(sinks_to_play);
+
+    let context = context.clone();
+    activate_necessary_items(context, items, manager).await;
+}
+
+/// Ensures that all the items have an associated sink before activation
+fn ensure_sinks_for_items<I>(
+    context: &PipelineContext,
+    items: &[BoxedQueueItem],
+    manager: &Arc<SinkManager<I>>,
+) -> Vec<Arc<Sink>>
+where
+    I: Ingestion + 'static,
+{
+    items
+        .iter()
+        .map(|i| {
+            let sink_id = i.sink_id();
+
+            let sink = if let Some(id) = sink_id {
+                context
+                    .sinks
+                    .get(&id)
+                    .expect("sink exists when ensuring sinks")
+                    .clone()
+            } else {
+                let sink = manager.prepare();
+                i.register_sink(sink.id);
+
+                sink
+            };
+
+            sink
+        })
+        .collect()
+}
+
+/// Activates items as necessary
+async fn activate_necessary_items<I>(
+    context: PipelineContext,
+    items: Vec<BoxedQueueItem>,
+    manager: Arc<SinkManager<I>>,
+) where
+    I: Ingestion + 'static,
+{
     // If the item has no length, we don't need more than one sink.
     let mut remaining_length = context.config.preload_size_in_seconds;
-    let mut new_sinks = vec![];
 
     // We don't need to preload sinks past an infinite/unknown length one.
     if let Some(length) = items[0].length() {
@@ -121,57 +169,31 @@ where
         remaining_length = 0.;
     }
 
-    for item in items {
-        let existing_sink = item.sink_id().and_then(|id| context.sinks.get(&id));
+    let pairs: Vec<_> = items
+        .into_iter()
+        .enumerate()
+        .map(|(index, i)| {
+            (
+                index,
+                i.sink_id()
+                    .and_then(|id| context.sinks.get(&id))
+                    .expect("sink exists for activation")
+                    .clone(),
+                i,
+            )
+        })
+        .collect();
 
-        // We activate an item only if it doesn't already have a sink associated with it.
-        if let Some(sink) = existing_sink {
-            new_sinks.push(sink.clone());
-        } else {
-            info!(
-                "Activating queue item {} of player #{}...",
-                item.item_id(),
-                player_id
-            );
-
-            let loader = item.loadable().await;
-
-            let sink = match loader {
-                Ok(loader) => ingestion.ingest(loader).await,
-                Err(err) => Err(err),
-            };
-
-            match sink {
-                Ok(sink) => {
-                    item.register_sink(sink.id);
-
-                    context.emit(PipelineEvent::QueueItemActivated {
-                        player_id,
-                        new_sink_id: sink.id,
-                        item_id: item.item_id(),
-                    });
-
-                    new_sinks.push(sink);
-                    remaining_length -= item.length().unwrap_or_default();
-                }
-                Err(err) => {
-                    let item_id = item.item_id();
-
-                    queue.skip(&item_id);
-                    context.emit(PipelineEvent::QueueItemActivationError {
-                        player_id,
-                        item_id,
-                        error: err.to_string(),
-                    });
-                }
-            }
-        }
-
+    for (checked_sinks, sink, item) in pairs {
         // Always activate at least two ahead.
-        if remaining_length <= 0. && new_sinks.len() >= 3 {
+        if remaining_length <= 0. && checked_sinks >= 3 {
             break;
         }
-    }
 
-    player.set_sinks(new_sinks);
+        remaining_length -= item.length().unwrap_or_default();
+
+        if sink.is_activatable() {
+            manager.activate(sink.id, item.loadable()).await
+        }
+    }
 }

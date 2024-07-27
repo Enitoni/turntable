@@ -76,11 +76,11 @@ impl Input {
         Err(InputError::NoMatch)
     }
 
-    pub async fn loadable(&self) -> Result<BoxedLoadable, InputError> {
+    pub fn loadable(&self) -> BoxedLoadable {
         match self {
-            Input::WaveDistrict(input) => input.loadable().await,
-            Input::YouTube(input) => input.loadable().await,
-            Input::File(input) => input.loadable().await,
+            Input::WaveDistrict(input) => input.loadable(),
+            Input::YouTube(input) => input.loadable(),
+            Input::File(input) => input.loadable(),
         }
     }
 
@@ -117,7 +117,7 @@ pub trait Inputable {
     fn length(&self) -> Option<f32>;
 
     /// "Activates" the resource, returning a loadable that can be used to play it.
-    async fn loadable(&self) -> Result<BoxedLoadable, InputError>;
+    fn loadable(&self) -> BoxedLoadable;
 
     /// Returns the metadata of the input
     fn metadata(&self) -> Metadata;

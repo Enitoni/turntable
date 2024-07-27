@@ -134,13 +134,8 @@ impl Inputable for WaveDistrictTrackInput {
         Some(self.0.duration)
     }
 
-    async fn loadable(&self) -> Result<BoxedLoadable, InputError> {
-        let boxed = LoadableNetworkStream::new(self.0.audio.to_path().unwrap_or_default())
-            .await
-            .map_err(|e| InputError::FetchError(e.to_string()))?
-            .boxed();
-
-        Ok(boxed)
+    fn loadable(&self) -> BoxedLoadable {
+        LoadableNetworkStream::new(self.0.audio.to_path().unwrap_or_default()).boxed()
     }
 
     fn metadata(&self) -> Metadata {

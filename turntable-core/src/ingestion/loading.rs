@@ -99,6 +99,10 @@ impl Loadable for BoxedLoadable {
     async fn seek(&self, seek: SeekFrom) -> Result<usize, Box<dyn Error>> {
         self.0.seek(seek).await
     }
+
+    async fn activate(&self) -> Result<(), Box<dyn Error>> {
+        self.0.activate().await
+    }
 }
 
 pub trait IntoLoadable

@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use parking_lot::Mutex;
-use std::{error::Error, sync::Arc};
+use std::sync::Arc;
 use turntable_core::{BoxedLoadable, Id, QueueItem, SinkId};
 
 use crate::{input::Input, Metadata};
@@ -46,8 +46,8 @@ impl QueueItem for Track {
         }
     }
 
-    async fn loadable(&self) -> Result<BoxedLoadable, Box<dyn Error>> {
-        Ok(self.input.loadable().await?)
+    fn loadable(&self) -> BoxedLoadable {
+        self.input.loadable()
     }
 }
 

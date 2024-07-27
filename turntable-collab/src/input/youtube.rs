@@ -2,11 +2,14 @@
 // There are many fields we wanna use here, but we're not using them yet. The warnings are annoying, so they're disabled for now.
 
 use async_trait::async_trait;
+use parking_lot::Mutex;
 use serde::Deserialize;
-use std::fmt::Debug;
+use std::io::SeekFrom;
 use std::process::Stdio;
+use std::sync::Arc;
+use std::{error::Error, fmt::Debug};
 use tokio::{io::AsyncReadExt, process::Command};
-use turntable_core::{BoxedLoadable, Loadable};
+use turntable_core::{BoxedLoadable, Loadable, LoaderLength, ReadResult};
 use turntable_impls::LoadableNetworkStream;
 use url::Url;
 
@@ -86,6 +89,12 @@ enum YouTubeResource {
     Playlist(YouTubePlaylist),
 }
 
+/// Wraps [LoadableNetworkStream] because the stream url has to be retrieved on demand
+pub struct LoadableYouTubeVideo {
+    id: String,
+    stream: Mutex<Option<Arc<LoadableNetworkStream>>>,
+}
+
 #[async_trait]
 impl Inputable for YouTubeVideoInput {
     fn test(query: &str) -> bool {
@@ -161,64 +170,12 @@ impl Inputable for YouTubeVideoInput {
         Some(self.duration)
     }
 
-    async fn loadable(&self) -> Result<BoxedLoadable, InputError> {
-        let url = format!("https://youtube.com/watch?v={}", self.id);
-
-        let mut child = Command::new("yt-dlp")
-            .arg("-f")
-            .arg("bestaudio[ext=mp3]/best")
-            .arg("-j")
-            .arg("--")
-            .arg(url)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|e| InputError::Other(e.to_string()))?;
-
-        let mut output = String::new();
-        let mut error_output = String::new();
-
-        child
-            .stdout
-            .take()
-            .unwrap()
-            .read_to_string(&mut output)
-            .await
-            .map_err(|e| InputError::Other(e.to_string()))?;
-
-        child
-            .stderr
-            .take()
-            .unwrap()
-            .read_to_string(&mut error_output)
-            .await
-            .ok();
-
-        let exit = child
-            .wait()
-            .await
-            .map_err(|e| InputError::Other(e.to_string()))?;
-
-        if !exit.success() {
-            return Err(handle_error(error_output));
+    fn loadable(&self) -> BoxedLoadable {
+        LoadableYouTubeVideo {
+            id: self.id.clone(),
+            stream: Default::default(),
         }
-
-        let entry: PlayableYouTubeVideo =
-            serde_json::from_str(&output).map_err(|e| InputError::ParseError(e.to_string()))?;
-
-        let stream_url = entry
-            .formats
-            .iter()
-            .find(|f| f.format_id == entry.format_id)
-            .map(|f| f.url.to_owned())
-            .ok_or(InputError::Other("No supported format found".to_string()))?;
-
-        let boxed = LoadableNetworkStream::new(stream_url)
-            .await
-            .map_err(|e| InputError::FetchError(e.to_string()))?
-            .boxed();
-
-        Ok(boxed)
+        .boxed()
     }
 
     fn metadata(&self) -> Metadata {
@@ -281,6 +238,91 @@ impl YouTubeResource {
             serde_json::from_str(&output).map_err(|e| InputError::ParseError(e.to_string()))?;
 
         Ok(entry)
+    }
+}
+
+impl LoadableYouTubeVideo {
+    async fn setup(&self) -> Result<(), Box<dyn Error>> {
+        let url = format!("https://youtube.com/watch?v={}", self.id);
+
+        let mut child = Command::new("yt-dlp")
+            .arg("-f")
+            .arg("bestaudio[ext=mp3]/best")
+            .arg("-j")
+            .arg("--")
+            .arg(url)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()?;
+
+        let mut output = String::new();
+        let mut error_output = String::new();
+
+        child
+            .stdout
+            .take()
+            .unwrap()
+            .read_to_string(&mut output)
+            .await?;
+
+        child
+            .stderr
+            .take()
+            .unwrap()
+            .read_to_string(&mut error_output)
+            .await
+            .ok();
+
+        let exit = child.wait().await?;
+
+        if !exit.success() {
+            return Err(Box::new(handle_error(error_output)));
+        }
+
+        let entry: PlayableYouTubeVideo =
+            serde_json::from_str(&output).map_err(|e| InputError::ParseError(e.to_string()))?;
+
+        let stream_url = entry
+            .formats
+            .iter()
+            .find(|f| f.format_id == entry.format_id)
+            .map(|f| f.url.to_owned())
+            .ok_or(InputError::Other("No supported format found".to_string()))?;
+
+        *self.stream.lock() = Some(Arc::new(LoadableNetworkStream::new(stream_url)));
+        Ok(())
+    }
+
+    fn stream(&self) -> Arc<LoadableNetworkStream> {
+        self.stream
+            .lock()
+            .as_ref()
+            .expect("stream exists")
+            .to_owned()
+    }
+}
+
+#[async_trait]
+impl Loadable for LoadableYouTubeVideo {
+    async fn activate(&self) -> Result<(), Box<dyn Error>> {
+        dbg!("hi");
+
+        self.setup().await?;
+        self.stream().activate().await?;
+
+        Ok(())
+    }
+
+    async fn read(&self, buf: &mut [u8]) -> Result<ReadResult, Box<dyn Error>> {
+        self.stream().read(buf).await
+    }
+
+    async fn length(&self) -> Option<LoaderLength> {
+        self.stream().length().await
+    }
+
+    async fn seek(&self, seek: SeekFrom) -> Result<usize, Box<dyn Error>> {
+        self.stream().seek(seek).await
     }
 }
 

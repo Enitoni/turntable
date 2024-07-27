@@ -49,11 +49,9 @@ impl Inputable for FileInput {
         None
     }
 
-    async fn loadable(&self) -> Result<BoxedLoadable, InputError> {
+    fn loadable(&self) -> BoxedLoadable {
         let file = self.file.lock().take().expect("file is taken");
-        let boxed = LoadableFile::new(file).boxed();
-
-        Ok(boxed)
+        LoadableFile::new(file).boxed()
     }
 
     fn metadata(&self) -> Metadata {

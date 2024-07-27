@@ -1,12 +1,10 @@
 use async_trait::async_trait;
 use crossbeam::atomic::AtomicCell;
-use dashmap::DashMap;
 use parking_lot::Mutex;
 use rubato::{FftFixedInOut, Resampler};
 use std::{
     error::Error,
     io::{ErrorKind as IoErrorKind, Read, Seek, SeekFrom},
-    sync::Arc,
 };
 use symphonia::core::{
     audio::SampleBuffer,
@@ -21,8 +19,8 @@ use symphonia::core::{
 use tokio::runtime::Handle;
 
 use turntable_core::{
-    get_or_create_handle, BoxedLoadable, Config, Ingestion, IntoLoadable, Loadable, LoaderLength,
-    PipelineContext, ReadResult, Sample, Sink, SinkId, SinkWriteRef,
+    get_or_create_handle, BoxedLoadable, Config, Ingest, Ingestion, IntoLoadable, LoadRequest,
+    Loadable, LoaderLength, PipelineContext, ReadResult, Sample, WriteGuard,
 };
 
 type SymphoniaResampler = FftFixedInOut<Sample>;
@@ -32,17 +30,17 @@ pub struct SymphoniaIngestion {
     /// A runtime is needed to bridge synchronous Symphonia with asynchronous turntable.
     rt: Handle,
     context: PipelineContext,
-    loaders: DashMap<SinkId, Arc<Loader>>,
     format_options: FormatOptions,
 }
 
 #[async_trait]
 impl Ingestion for SymphoniaIngestion {
+    type Loader = Loader;
+
     fn new(context: &PipelineContext) -> Self {
         Self {
             rt: get_or_create_handle(),
             context: context.clone(),
-            loaders: DashMap::new(),
             format_options: FormatOptions {
                 enable_gapless: true,
                 prebuild_seek_index: false,
@@ -51,11 +49,13 @@ impl Ingestion for SymphoniaIngestion {
         }
     }
 
-    async fn ingest<L>(&self, input: L) -> Result<Arc<Sink>, Box<dyn Error>>
+    async fn ingest<L>(&self, input: L) -> Result<Ingest<Self::Loader>, Box<dyn Error>>
     where
         L: IntoLoadable + Send + Sync,
     {
         let input = input.into_loadable();
+
+        input.activate().await?;
 
         let potential_sink_length = input
             .length()
@@ -122,10 +122,7 @@ impl Ingestion for SymphoniaIngestion {
             .map(|s| self.context.config.seconds_to_samples(s))
             .or(potential_sink_length);
 
-        let sink: Arc<_> = Sink::with_activation(&self.context, sink_length).into();
-
         let loader = Loader {
-            sink: sink.clone(),
             decoder: decoder.into(),
             track: audio_track.clone(),
             offset: Default::default(),
@@ -134,37 +131,21 @@ impl Ingestion for SymphoniaIngestion {
             format_reader: format_reader.into(),
         };
 
-        self.loaders.insert(sink.id, loader.into());
-        self.context.sinks.insert(sink.id, sink.clone());
-
-        Ok(sink)
+        Ok(Ingest {
+            expected_length: sink_length,
+            loader,
+        })
     }
 
-    async fn request_load(&self, sink_id: SinkId, offset: usize, amount: usize) {
-        let loader = self.loaders.get(&sink_id).expect("loader exists").clone();
-
+    async fn request_load(&self, request: LoadRequest<Self::Loader>) {
         let _ = self
             .rt
-            .spawn_blocking(move || loader.load(offset, amount))
+            .spawn_blocking(move || {
+                request
+                    .loader
+                    .load(request.write_guard, request.offset, request.amount)
+            })
             .await;
-    }
-
-    fn clear_inactive(&self) -> Vec<SinkId> {
-        let clearable_sink_ids: Vec<_> = self
-            .context
-            .sinks
-            .iter()
-            .filter_map(|s| if s.is_clearable() { Some(s.id) } else { None })
-            .collect();
-
-        self.loaders
-            .retain(|id, _| !clearable_sink_ids.contains(id));
-
-        self.context
-            .sinks
-            .retain(|id, _| !clearable_sink_ids.contains(id));
-
-        clearable_sink_ids
     }
 
     fn name() -> String {
@@ -173,10 +154,9 @@ impl Ingestion for SymphoniaIngestion {
 }
 
 /// Loads the samples from a [Decoder] into a [Sink].
-struct Loader {
+pub struct Loader {
     config: Config,
     track: Track,
-    sink: Arc<Sink>,
     offset: AtomicCell<usize>,
     decoder: Mutex<Box<dyn Decoder>>,
     format_reader: Mutex<Box<dyn FormatReader>>,
@@ -184,18 +164,17 @@ struct Loader {
 }
 
 impl Loader {
-    fn load(&self, offset: usize, amount: usize) -> Result<(), ()> {
-        let write_ref = self.sink.write();
-        let result = self.load_into_sink(offset, amount, &write_ref);
+    fn load(&self, guard: WriteGuard, offset: usize, amount: usize) -> Result<(), ()> {
+        let result = self.load_into_sink(offset, amount, &guard);
 
         match result {
             Ok(result) => {
                 if result.end_reached {
-                    self.sink.seal();
+                    guard.seal();
                 }
             }
             Err(e) => {
-                self.sink.error(format!("{:?}", e));
+                guard.error(format!("{:?}", e));
                 return Err(());
             }
         }
@@ -208,7 +187,7 @@ impl Loader {
         &self,
         offset: usize,
         amount: usize,
-        write_ref: &SinkWriteRef,
+        write_ref: &WriteGuard,
     ) -> Result<LoadResult, Box<dyn Error>> {
         let old_offset = self.offset.load();
         let mut seeked_offset = offset;

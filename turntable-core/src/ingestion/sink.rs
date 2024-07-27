@@ -211,6 +211,7 @@ impl Sink {
     /// Returns true if the sink is inactive
     pub fn is_activatable(&self) -> bool {
         matches!(*self.activation.read(), SinkActivation::Inactive)
+            && !self.has_activation_guard.load()
     }
 
     /// Returns true if the sink is activated and can be read from

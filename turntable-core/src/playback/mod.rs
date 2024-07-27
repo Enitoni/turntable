@@ -12,7 +12,7 @@ mod timeline;
 pub use player::*;
 pub use timeline::*;
 
-use crate::{get_or_create_handle, Ingestion, Output, PipelineContext};
+use crate::{get_or_create_handle, Ingestion, Output, PipelineContext, SinkManager};
 
 /// The playback type is responsible for managing players, processing playback, and preloading sinks as needed.
 pub struct Playback {
@@ -21,13 +21,17 @@ pub struct Playback {
 }
 
 impl Playback {
-    pub fn new<I>(context: &PipelineContext, ingestion: Arc<I>, output: Arc<Output>) -> Self
+    pub fn new<I>(
+        context: &PipelineContext,
+        manager: Arc<SinkManager<I>>,
+        output: Arc<Output>,
+    ) -> Self
     where
         I: Ingestion + 'static,
     {
         spawn_processing_thread(context);
-        spawn_preloading_task(context, ingestion.clone());
-        spawn_cleanup_thread(context, ingestion);
+        spawn_preloading_task(context, manager.clone());
+        spawn_cleanup_thread(context, manager);
 
         Self {
             context: context.clone(),
@@ -69,7 +73,7 @@ fn spawn_processing_thread(context: &PipelineContext) {
     thread::spawn(run);
 }
 
-fn spawn_cleanup_thread<I>(context: &PipelineContext, ingestion: Arc<I>)
+fn spawn_cleanup_thread<I>(context: &PipelineContext, manager: Arc<SinkManager<I>>)
 where
     I: Ingestion + 'static,
 {
@@ -80,7 +84,7 @@ where
             player.clear_superflous();
         }
 
-        let cleared_sinks = ingestion.clear_inactive();
+        let cleared_sinks = manager.clear_inactive();
 
         if !cleared_sinks.is_empty() {
             info!("Cleared Sinks: {:?}", cleared_sinks)
@@ -92,7 +96,7 @@ where
     thread::spawn(run);
 }
 
-fn spawn_preloading_task<I>(context: &PipelineContext, ingestion: Arc<I>)
+fn spawn_preloading_task<I>(context: &PipelineContext, manager: Arc<SinkManager<I>>)
 where
     I: Ingestion + 'static,
 {
@@ -106,7 +110,7 @@ where
                 let preloads = player.preload();
 
                 for preload in preloads {
-                    ingestion
+                    manager
                         .request_load(
                             preload.sink_id,
                             preload.offset,
