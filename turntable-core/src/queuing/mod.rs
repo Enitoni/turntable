@@ -131,22 +131,14 @@ where
     items
         .iter()
         .map(|i| {
-            let sink_id = i.sink_id();
+            i.sink_id()
+                .and_then(|id| context.sinks.get(&id).map(|s| s.clone()))
+                .unwrap_or_else(|| {
+                    let sink = manager.prepare();
+                    i.register_sink(sink.id);
 
-            let sink = if let Some(id) = sink_id {
-                context
-                    .sinks
-                    .get(&id)
-                    .expect("sink exists when ensuring sinks")
-                    .clone()
-            } else {
-                let sink = manager.prepare();
-                i.register_sink(sink.id);
-
-                sink
-            };
-
-            sink
+                    sink
+                })
         })
         .collect()
 }
