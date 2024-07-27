@@ -70,11 +70,6 @@ impl LoadableNetworkStream {
 
     /// Loads an amount of bytes from the current load offset.
     async fn load(&self, amount: usize) -> Result<(), Box<dyn Error>> {
-        if !self.is_initialized.load() {
-            self.setup().await?;
-            self.is_initialized.store(true);
-        }
-
         // Set up the offsets that we will load from and to.
         let start = self.loaded_bytes_offset.load();
         let end = (start + amount).min(self.normal_len()).saturating_sub(1);
@@ -151,6 +146,15 @@ impl LoadableNetworkStream {
 
 #[async_trait]
 impl Loadable for LoadableNetworkStream {
+    async fn activate(&self) -> Result<(), Box<dyn Error>> {
+        if !self.is_initialized.load() {
+            self.setup().await?;
+            self.is_initialized.store(true);
+        }
+
+        Ok(())
+    }
+
     async fn read(&self, buf: &mut [u8]) -> Result<ReadResult, Box<dyn Error>> {
         let amount_to_read = buf.len().min(Self::MAX_CHUNK_SIZE);
 

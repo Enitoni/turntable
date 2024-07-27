@@ -10,6 +10,12 @@ pub trait Loadable
 where
     Self: 'static + Sync + Send,
 {
+    /// Attempts to activate the loadable, if it's lazy.
+    /// By default, this does nothing.
+    async fn activate(&self) -> Result<(), Box<dyn Error>> {
+        Ok(())
+    }
+
     /// Attempts to load raw bytes from the source.
     /// If a seek was made, this reads from the seeked position.
     ///
