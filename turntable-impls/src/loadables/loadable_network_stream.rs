@@ -25,14 +25,14 @@ impl LoadableNetworkStream {
     const MAX_CHUNK_SIZE: usize = 50_000_000; // 50MB
     const MIN_CHUNK_SIZE: usize = 3_000_000; // 3MB
 
-    pub fn new<S>(url: S) -> Result<Self, Box<dyn Error>>
+    pub fn new<S>(url: S) -> Self
     where
         S: Into<String>,
     {
         let url = url.into();
         let client = Client::new();
 
-        Ok(Self {
+        Self {
             url,
             client,
             length: Default::default(),
@@ -41,7 +41,7 @@ impl LoadableNetworkStream {
             read_offset: Default::default(),
             loaded_bytes: Default::default(),
             loaded_bytes_offset: Default::default(),
-        })
+        }
     }
 
     async fn setup(&self) -> Result<(), Box<dyn Error>> {
