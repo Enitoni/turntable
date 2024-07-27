@@ -12,6 +12,7 @@ pub struct LoadableNetworkStream {
     url: String,
     client: Client,
     length: Mutex<Option<usize>>,
+    is_initialized: AtomicCell<bool>,
     supports_byte_ranges: AtomicCell<bool>,
     read_offset: AtomicCell<usize>,
     /// A cache of bytes that are preloaded to prevent spamming the network.
@@ -35,6 +36,7 @@ impl LoadableNetworkStream {
             url,
             client,
             length: Default::default(),
+            is_initialized: Default::default(),
             supports_byte_ranges: Default::default(),
             read_offset: Default::default(),
             loaded_bytes: Default::default(),
@@ -68,6 +70,11 @@ impl LoadableNetworkStream {
 
     /// Loads an amount of bytes from the current load offset.
     async fn load(&self, amount: usize) -> Result<(), Box<dyn Error>> {
+        if !self.is_initialized.load() {
+            self.setup().await?;
+            self.is_initialized.store(true);
+        }
+
         // Set up the offsets that we will load from and to.
         let start = self.loaded_bytes_offset.load();
         let end = (start + amount).min(self.normal_len()).saturating_sub(1);
