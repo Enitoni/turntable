@@ -11,8 +11,8 @@ use turntable_core::{assign_slice, Loadable, LoaderLength, ReadResult};
 pub struct LoadableNetworkStream {
     url: String,
     client: Client,
-    length: Option<usize>,
-    supports_byte_ranges: bool,
+    length: Mutex<Option<usize>>,
+    supports_byte_ranges: AtomicCell<bool>,
     read_offset: AtomicCell<usize>,
     /// A cache of bytes that are preloaded to prevent spamming the network.
     /// This is because the ingestion may request very small amounts of data at a time.
@@ -24,14 +24,26 @@ impl LoadableNetworkStream {
     const MAX_CHUNK_SIZE: usize = 50_000_000; // 50MB
     const MIN_CHUNK_SIZE: usize = 3_000_000; // 3MB
 
-    pub async fn new<S>(url: S) -> Result<Self, Box<dyn Error>>
+    pub fn new<S>(url: S) -> Result<Self, Box<dyn Error>>
     where
         S: Into<String>,
     {
         let url = url.into();
         let client = Client::new();
 
-        let response = client.head(&url).send().await?;
+        Ok(Self {
+            url,
+            client,
+            length: Default::default(),
+            supports_byte_ranges: Default::default(),
+            read_offset: Default::default(),
+            loaded_bytes: Default::default(),
+            loaded_bytes_offset: Default::default(),
+        })
+    }
+
+    async fn setup(&self) -> Result<(), Box<dyn Error>> {
+        let response = self.client.head(&self.url).send().await?;
         let status = response.status();
         let headers = response.headers();
 
@@ -48,15 +60,10 @@ impl LoadableNetworkStream {
             .get("Content-Length")
             .map(|v| str::parse::<usize>(v.to_str().unwrap()).unwrap_or_default());
 
-        Ok(Self {
-            url,
-            client,
-            length,
-            supports_byte_ranges,
-            read_offset: Default::default(),
-            loaded_bytes: Default::default(),
-            loaded_bytes_offset: Default::default(),
-        })
+        self.supports_byte_ranges.store(supports_byte_ranges);
+        *self.length.lock() = length;
+
+        Ok(())
     }
 
     /// Loads an amount of bytes from the current load offset.
@@ -67,7 +74,7 @@ impl LoadableNetworkStream {
 
         let mut request = self.client.get(&self.url);
 
-        if self.supports_byte_ranges {
+        if self.supports_byte_ranges.load() {
             let range = format!("bytes={}-{}", start, end);
             request = request.header("Range", range);
         }
@@ -98,6 +105,7 @@ impl LoadableNetworkStream {
         let new_read_offset = current_read_offset + requested_amount;
         let remaining_bytes = self
             .length
+            .lock()
             .unwrap_or(usize::MAX)
             .saturating_sub(current_load_offset);
 
@@ -116,7 +124,7 @@ impl LoadableNetworkStream {
     }
 
     fn normal_len(&self) -> usize {
-        self.length.unwrap_or(usize::MAX)
+        self.length.lock().unwrap_or(usize::MAX)
     }
 
     fn loaded_length(&self) -> usize {
@@ -162,7 +170,7 @@ impl Loadable for LoadableNetworkStream {
     }
 
     async fn length(&self) -> Option<LoaderLength> {
-        self.length.map(LoaderLength::Bytes)
+        self.length.lock().map(LoaderLength::Bytes)
     }
 
     async fn seek(&self, seek: SeekFrom) -> Result<usize, Box<dyn Error>> {

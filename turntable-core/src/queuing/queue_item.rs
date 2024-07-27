@@ -1,5 +1,3 @@
-use std::error::Error;
-
 use async_trait::async_trait;
 
 use crate::{BoxedLoadable, SinkId};
@@ -24,8 +22,7 @@ where
     fn item_id(&self) -> String;
 
     /// Returns the item's loadable.
-    /// This is async because some sources may need to do additional work to create a loadable.
-    async fn loadable(&self) -> Result<BoxedLoadable, Box<dyn Error>>;
+    fn loadable(&self) -> BoxedLoadable;
 }
 
 /// [QueueItem] trait object.
@@ -58,7 +55,7 @@ impl QueueItem for BoxedQueueItem {
         self.0.item_id()
     }
 
-    async fn loadable(&self) -> Result<BoxedLoadable, Box<dyn Error>> {
-        self.0.loadable().await
+    fn loadable(&self) -> BoxedLoadable {
+        self.0.loadable()
     }
 }
