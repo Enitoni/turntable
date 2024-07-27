@@ -248,7 +248,7 @@ mod tests {
             .write()
             .write(0, &[1., 2., 3., 4., 5., 6., 7., 8., 9., 10.]);
 
-        first.seal();
+        first.write().seal();
 
         // Second has a gap after first range.
         second.write().write(0, &[1., 2., 3., 4., 5.]);
@@ -326,7 +326,7 @@ mod tests {
         assert_eq!(preload[0].offset, 3, "returns the correct offset");
 
         // Seal the first sink, so we have to preload the second sink.
-        first.seal();
+        first.write().seal();
 
         // Should return the second sink to preload.
         let preload = timeline.preload();

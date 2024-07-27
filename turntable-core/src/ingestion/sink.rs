@@ -133,6 +133,8 @@ impl Sink {
             "Sink already has activation guard"
         );
 
+        info!("Activating sink #{}", self.id);
+
         self.has_activation_guard.store(true);
         self.interact();
 
@@ -172,16 +174,6 @@ impl Sink {
             context: self.context.clone(),
             id: self.id,
         }
-    }
-
-    /// Seals the sink.
-    pub fn seal(&self) {
-        self.set_load_state(SinkLoadState::Sealed);
-    }
-
-    /// Sets the sink to the given error state.
-    pub fn error(&self, error: String) {
-        self.set_load_state(SinkLoadState::Error(error));
     }
 
     pub fn load_state(&self) -> SinkLoadState {
@@ -353,14 +345,26 @@ impl SinkGuard {
 }
 
 impl WriteGuard {
-    pub fn write(&self, offset: usize, samples: &[Sample]) {
-        let sink = self
-            .context
+    fn get_sink(&self) -> Arc<Sink> {
+        self.context
             .sinks
             .get(&self.id)
-            .expect("SinkWriteRef has associated Sink");
+            .expect("WriteGuard has associated Sink")
+            .clone()
+    }
 
-        sink.internal_write(offset, samples);
+    pub fn write(&self, offset: usize, samples: &[Sample]) {
+        self.get_sink().internal_write(offset, samples);
+    }
+
+    /// Seals the sink.
+    pub fn seal(&self) {
+        self.get_sink().set_load_state(SinkLoadState::Sealed);
+    }
+
+    /// Sets the sink to the given error state.
+    pub fn error(&self, error: String) {
+        self.get_sink().set_load_state(SinkLoadState::Error(error));
     }
 }
 
@@ -376,12 +380,19 @@ impl ActivationGuard {
     pub fn activate(self, expected_length: Option<usize>) {
         self.finished.store(true);
 
+        info!(
+            "Sink #{} activated with length: {:?}",
+            self.id, expected_length
+        );
+
         *self.get_sink().activation.write() =
             SinkActivation::Activated(MultiRangeBuffer::new(expected_length));
     }
 
     pub fn fail(self, reason: &str) {
         self.finished.store(true);
+
+        info!("Sink #{} failed to activate: {}", self.id, reason);
 
         *self.get_sink().activation.write() = SinkActivation::Error(reason.to_string());
     }
