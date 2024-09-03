@@ -30,6 +30,7 @@ pub struct LoginResult {
 #[serde(rename_all = "camelCase")]
 pub struct Room {
     id: i32,
+    slug: String,
     title: String,
     description: Option<String>,
     members: Vec<RoomMember>,
@@ -179,6 +180,7 @@ impl ToSerialized<Room> for Arc<CollabRoom> {
 
         Room {
             id: data.id,
+            slug: data.slug,
             title: data.title,
             description: data.description,
             members: data.members.to_serialized(),
