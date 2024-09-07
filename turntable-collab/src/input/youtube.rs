@@ -4,6 +4,7 @@
 use async_trait::async_trait;
 use parking_lot::Mutex;
 use serde::Deserialize;
+use std::env;
 use std::io::SeekFrom;
 use std::process::Stdio;
 use std::sync::Arc;
@@ -193,7 +194,9 @@ impl Inputable for YouTubeVideoInput {
 impl YouTubeResource {
     /// Attempts to fetch a video or several videos from the given URL using yt-dlp.
     pub async fn fetch(url: &str) -> Result<Self, InputError> {
-        let mut child = Command::new("yt-dlp")
+        let mut command = Command::new("yt-dlp");
+
+        command
             // Don't try to get a stream url for playlists.
             .arg("--flat-playlist")
             // Or videos.
@@ -202,7 +205,14 @@ impl YouTubeResource {
             .arg("-J")
             .args(["--", url])
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
+            .stderr(Stdio::piped());
+
+        // Workaround for YouTube blocking anonymous VPS
+        if let Ok(cookie_path) = env::var("YOUTUBE_COOKIE_FILE") {
+            command.args(["--cookies", &cookie_path]);
+        }
+
+        let mut child = command
             .spawn()
             .map_err(|e| InputError::Other(e.to_string()))?;
 
@@ -245,15 +255,23 @@ impl LoadableYouTubeVideo {
     async fn setup(&self) -> Result<(), Box<dyn Error>> {
         let url = format!("https://youtube.com/watch?v={}", self.id);
 
-        let mut child = Command::new("yt-dlp")
+        let mut command = Command::new("yt-dlp");
+
+        command
             .arg("-f")
             .arg("bestaudio[ext=mp3]/best")
             .arg("-j")
             .arg("--")
             .arg(url)
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()?;
+            .stderr(Stdio::piped());
+
+        // Workaround for YouTube blocking anonymous VPS
+        if let Ok(cookie_path) = env::var("YOUTUBE_COOKIE_FILE") {
+            command.args(["--cookies", &cookie_path]);
+        }
+
+        let mut child = command.spawn()?;
 
         let mut output = String::new();
         let mut error_output = String::new();
