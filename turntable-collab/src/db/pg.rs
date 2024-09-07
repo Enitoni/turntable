@@ -476,7 +476,7 @@ impl Database for PgDatabase {
         query!(
             "
             SELECT id FROM stream_keys
-            WHERE token = $1 OR (room_id = $2 AND user_id = $3)",
+            WHERE token = $1 AND room_id = $2 AND user_id = $3",
             new_key.token,
             new_key.room_id,
             new_key.user_id,
