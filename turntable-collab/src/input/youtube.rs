@@ -196,6 +196,11 @@ impl YouTubeResource {
     pub async fn fetch(url: &str) -> Result<Self, InputError> {
         let mut command = Command::new("yt-dlp");
 
+        // Workaround for YouTube blocking anonymous VPS
+        if let Ok(cookie_path) = env::var("YOUTUBE_COOKIE_FILE") {
+            command.args(["--cookies", &cookie_path]);
+        }
+
         command
             // Don't try to get a stream url for playlists.
             .arg("--flat-playlist")
@@ -206,11 +211,6 @@ impl YouTubeResource {
             .args(["--", url])
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
-
-        // Workaround for YouTube blocking anonymous VPS
-        if let Ok(cookie_path) = env::var("YOUTUBE_COOKIE_FILE") {
-            command.args(["--cookies", &cookie_path]);
-        }
 
         let mut child = command
             .spawn()
@@ -257,6 +257,11 @@ impl LoadableYouTubeVideo {
 
         let mut command = Command::new("yt-dlp");
 
+        // Workaround for YouTube blocking anonymous VPS
+        if let Ok(cookie_path) = env::var("YOUTUBE_COOKIE_FILE") {
+            command.args(["--cookies", &cookie_path]);
+        }
+
         command
             .arg("-f")
             .arg("bestaudio[ext=mp3]/best")
@@ -265,11 +270,6 @@ impl LoadableYouTubeVideo {
             .arg(url)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
-
-        // Workaround for YouTube blocking anonymous VPS
-        if let Ok(cookie_path) = env::var("YOUTUBE_COOKIE_FILE") {
-            command.args(["--cookies", &cookie_path]);
-        }
 
         let mut child = command.spawn()?;
 
