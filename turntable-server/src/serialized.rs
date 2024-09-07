@@ -59,6 +59,7 @@ pub struct RoomInvite {
     token: String,
     inviter: User,
     room_title: String,
+    room_slug: String,
 }
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
@@ -227,6 +228,7 @@ impl ToSerialized<RoomInvite> for RoomInviteData {
             token: self.token.clone(),
             inviter: self.inviter.to_serialized(),
             room_title: self.room.title.clone(),
+            room_slug: self.room.slug.clone(),
         }
     }
 }
