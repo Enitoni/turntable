@@ -93,6 +93,9 @@ impl Room {
 
     /// Gets the associated queue if the room is active
     pub fn queue(&self) -> Result<Arc<LinearQueue>, RoomError> {
+        // Activate room if queue is accessed
+        self.ensure_activation();
+
         let state = self.state.lock();
 
         match &*state {
