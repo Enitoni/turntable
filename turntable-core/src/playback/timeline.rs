@@ -164,15 +164,17 @@ impl Timeline {
 
     /// Clears samples that are not needed, to save memory.
     pub fn clear_superflous(&self) {
-        let first_sink = self.sinks.lock();
+        let sinks = self.sinks.lock();
         let offset = self.offset.load();
 
-        if let Some(first_sink) = first_sink.first() {
-            first_sink.clear_outside(
-                offset,
-                self.config.sink_preload_window_size(),
-                self.config.channel_count,
-            );
+        if let Some(first_sink) = sinks.first() {
+            if first_sink.is_activated() {
+                first_sink.clear_outside(
+                    offset,
+                    self.config.sink_preload_window_size(),
+                    self.config.channel_count,
+                );
+            }
         }
     }
 
