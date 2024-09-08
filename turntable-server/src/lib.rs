@@ -68,5 +68,8 @@ fn spawn_event_thread(context: &ServerContext) {
         context.sse.broadcast(event.into());
     };
 
-    thread::spawn(run);
+    thread::Builder::new()
+        .name("server-sent-events".to_string())
+        .spawn(run)
+        .expect("server-sent-events thread spawns");
 }

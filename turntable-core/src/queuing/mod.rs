@@ -92,7 +92,10 @@ fn spawn_update_task_thread<I>(
         handle.block_on(fut)
     };
 
-    thread::spawn(run);
+    thread::Builder::new()
+        .name("queue-update-task".to_string())
+        .spawn(run)
+        .expect("queue-update-task thread is spawned");
 }
 
 /// Called when a queue is updated.

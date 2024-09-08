@@ -122,5 +122,8 @@ fn spawn_pipeline_event_conversion_thread(context: &CollabContext, sender: &Even
         }
     };
 
-    thread::spawn(run);
+    thread::Builder::new()
+        .name("pipeline-event-conversion".to_string())
+        .spawn(run)
+        .expect("pipeline-event-conversion thread is spawned");
 }

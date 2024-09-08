@@ -87,5 +87,8 @@ fn spawn_output_thread(
         }
     };
 
-    thread::spawn(run);
+    thread::Builder::new()
+        .name("output".to_string())
+        .spawn(run)
+        .expect("output thread is spawned");
 }

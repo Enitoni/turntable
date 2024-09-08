@@ -70,7 +70,10 @@ fn spawn_processing_thread(context: &PipelineContext) {
         }
     };
 
-    thread::spawn(run);
+    thread::Builder::new()
+        .name("playback".to_string())
+        .spawn(run)
+        .expect("playback thread spawns");
 }
 
 fn spawn_cleanup_thread<I>(context: &PipelineContext, manager: Arc<SinkManager<I>>)
@@ -90,10 +93,13 @@ where
             info!("Cleared Sinks: {:?}", cleared_sinks)
         }
 
-        thread::sleep(Duration::from_secs(30))
+        thread::sleep(Duration::from_secs(10))
     };
 
-    thread::spawn(run);
+    thread::Builder::new()
+        .name("cleanup".to_string())
+        .spawn(run)
+        .expect("cleanup thread spawns");
 }
 
 fn spawn_preloading_task<I>(context: &PipelineContext, manager: Arc<SinkManager<I>>)

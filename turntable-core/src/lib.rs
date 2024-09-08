@@ -178,7 +178,10 @@ fn spawn_action_handler_thread(
         }
     };
 
-    thread::spawn(run);
+    thread::Builder::new()
+        .name("core-actions".to_string())
+        .spawn(run)
+        .expect("core-actions thread is spawned");
 }
 
 // Realistically, the context should always be created by the pipeline.
