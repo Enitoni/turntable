@@ -185,7 +185,17 @@ impl Timeline {
 
     /// Seeks to a specific offset in the timeline.
     pub fn seek(&self, offset: usize) {
-        self.offset.store(offset);
+        let expected_length = self
+            .sinks
+            .lock()
+            .first()
+            .filter(|s| s.is_activated())
+            .and_then(|s| s.expected_length());
+
+        // Prevents seeking beyond the sink length if it is known
+        let safe_offset = expected_length.map(|l| offset.min(l)).unwrap_or(offset);
+
+        self.offset.store(safe_offset);
     }
 
     /// Returns the offset of the current sink.

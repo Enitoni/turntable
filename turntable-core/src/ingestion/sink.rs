@@ -344,6 +344,10 @@ impl SinkGuard {
     pub fn is_activated(&self) -> bool {
         self.get_sink().is_activated()
     }
+
+    pub fn expected_length(&self) -> Option<usize> {
+        self.get_sink().expected_length()
+    }
 }
 
 impl WriteGuard {
