@@ -118,14 +118,7 @@ impl Player {
 
         // Emit the current time and total time.
         if !was_empty {
-            let current_time = self.timeline.current_offset();
-            let current_total_time = self.timeline.total_offset();
-
-            self.context.emit(PipelineEvent::PlayerTimeUpdate {
-                player_id: self.id,
-                position: self.context.config.samples_to_seconds(current_time),
-                total_position: self.context.config.samples_to_seconds(current_total_time),
-            })
+            self.emit_time()
         }
 
         self.output.push(self.id, samples);
@@ -149,6 +142,7 @@ impl Player {
     /// Seeks to a specific offset.
     pub fn seek(&self, offset: usize) {
         self.timeline.seek(offset);
+        self.emit_time();
     }
 
     /// Returns the context for this player.
@@ -184,6 +178,17 @@ impl Player {
             self.context
                 .emit(PipelineEvent::PlayerAdvanced { player_id: self.id });
         }
+    }
+
+    fn emit_time(&self) {
+        let current_time = self.timeline.current_offset();
+        let current_total_time = self.timeline.total_offset();
+
+        self.context.emit(PipelineEvent::PlayerTimeUpdate {
+            player_id: self.id,
+            position: self.context.config.samples_to_seconds(current_time),
+            total_position: self.context.config.samples_to_seconds(current_total_time),
+        })
     }
 }
 
