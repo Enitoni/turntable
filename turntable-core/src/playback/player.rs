@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{ops::Rem, sync::Arc};
 
 use crossbeam::atomic::AtomicCell;
 
@@ -141,7 +141,11 @@ impl Player {
 
     /// Seeks to a specific offset.
     pub fn seek(&self, offset: usize) {
-        self.timeline.seek(offset);
+        // Prevent seeking to an incomplete frame
+        let remainder = offset.rem(self.context.config.channel_count);
+        let safe_offset = offset.saturating_sub(remainder);
+
+        self.timeline.seek(safe_offset);
         self.emit_time();
     }
 
