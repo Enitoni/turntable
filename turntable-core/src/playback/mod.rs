@@ -93,7 +93,7 @@ where
             info!("Cleared Sinks: {:?}", cleared_sinks)
         }
 
-        thread::sleep(Duration::from_secs(10))
+        thread::sleep(Duration::from_millis(50))
     };
 
     thread::Builder::new()
