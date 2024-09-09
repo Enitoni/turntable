@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crossbeam::atomic::AtomicCell;
 use parking_lot::Mutex;
 
-use crate::{Config, Sink, SinkGuard, SinkId};
+use crate::{Config, IdType, Introspect, Sink, SinkGuard, SinkId};
 
 /// The timeline keeps track of a sequence of sinks, manages advancement of playback, and returns what sinks to preload.
 #[derive(Default)]
@@ -224,6 +224,23 @@ pub struct TimelinePreload {
     pub sink_id: SinkId,
     // The offset in samples to start preloading from.
     pub offset: usize,
+}
+
+#[derive(Debug)]
+pub struct TimelineIntrospection {
+    pub sinks: Vec<IdType>,
+    pub offset: usize,
+    pub total_offset: usize,
+}
+
+impl Introspect<TimelineIntrospection> for Timeline {
+    fn introspect(&self) -> TimelineIntrospection {
+        TimelineIntrospection {
+            sinks: self.sinks.lock().iter().map(|s| s.id.value()).collect(),
+            offset: self.offset.load(),
+            total_offset: self.total_offset.load(),
+        }
+    }
 }
 
 #[cfg(test)]

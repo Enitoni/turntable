@@ -8,7 +8,7 @@ use std::{
 use futures_util::{FutureExt, Stream};
 use parking_lot::Mutex;
 use tokio::task::{spawn_blocking, JoinHandle};
-use turntable_core::{Consumer, Id};
+use turntable_core::{Consumer, ConsumerId, Id};
 
 use crate::{CollabContext, PrimaryKey};
 
@@ -21,6 +21,7 @@ pub type RoomConnectionId = Id<RoomConnection>;
 pub struct RoomConnection {
     pub id: RoomConnectionId,
     pub user_id: PrimaryKey,
+    pub consumer_id: ConsumerId,
     /// Same as StreamKey source.
     pub source: String,
 }
@@ -37,9 +38,10 @@ pub struct RoomConnectionHandle {
 }
 
 impl RoomConnection {
-    pub fn new(user_id: PrimaryKey, source: String) -> Self {
+    pub fn new(user_id: PrimaryKey, consumer_id: ConsumerId, source: String) -> Self {
         Self {
             id: RoomConnectionId::new(),
+            consumer_id,
             user_id,
             source,
         }

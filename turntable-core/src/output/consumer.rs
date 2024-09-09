@@ -5,8 +5,8 @@ use std::{
     time::Duration,
 };
 
-use super::{Encoder, Stream};
-use crate::{Config, Id, Sample};
+use super::{Encoder, EncoderIntrospection, Stream};
+use crate::{Config, Id, IdType, Introspect, Sample};
 
 pub type ConsumerId = Id<Consumer>;
 
@@ -93,6 +93,21 @@ impl Producer {
 
         // Notify the consumer of new samples so we can avoid busywaiting
         self.sender.send(()).expect("notifies consumer");
+    }
+}
+
+#[derive(Debug)]
+pub struct ConsumerPairIntrospection {
+    pub id: IdType,
+    pub encoder: EncoderIntrospection,
+}
+
+impl Introspect<ConsumerPairIntrospection> for (&ConsumerId, &Producer) {
+    fn introspect(&self) -> ConsumerPairIntrospection {
+        ConsumerPairIntrospection {
+            id: self.0.value(),
+            encoder: self.1.encoder.lock().introspect(),
+        }
     }
 }
 

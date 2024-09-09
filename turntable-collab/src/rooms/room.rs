@@ -148,16 +148,16 @@ impl Room {
         // For now, just activate a room if it's not active when a user wants to connect
         self.ensure_activation();
 
-        let connection = RoomConnection::new(user_id, source.clone());
-        let connection_id = connection.id;
-
-        self.connections.lock().push(connection);
-
         let player = self.player()?;
         let stream = self
             .context
             .pipeline
             .consume_player::<WaveEncoder>(player.id, with_latency);
+
+        let connection = RoomConnection::new(user_id, stream.id, source.clone());
+        let connection_id = connection.id;
+
+        self.connections.lock().push(connection);
 
         info!(
             "User {} connected to room {} via {}",

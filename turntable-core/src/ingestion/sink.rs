@@ -1,7 +1,8 @@
 use std::{sync::Arc, time::Instant};
 
 use crate::{
-    BufferRead, BufferVoidDistance, Id, MultiRangeBuffer, PipelineContext, PipelineEvent, Sample,
+    BufferRead, BufferVoidDistance, Id, IdType, Introspect, MultiRangeBuffer,
+    MultiRangeBufferIntrospection, PipelineContext, PipelineEvent, Sample,
 };
 use crossbeam::atomic::AtomicCell;
 use log::info;
@@ -437,5 +438,91 @@ impl Drop for ActivationGuard {
             .expect("SinkGuard about to be dropped has associated Sink");
 
         sink.clear_activation_guard();
+    }
+}
+
+/// See [SinkActivation].
+#[derive(Debug)]
+pub enum ActivationIntrospection {
+    Inactive,
+    Activating,
+    Activated {
+        buffer: MultiRangeBufferIntrospection,
+    },
+    Error {
+        reason: String,
+    },
+}
+
+/// See [SinkLoadState].
+#[derive(Debug)]
+pub enum LoadStateIntrospection {
+    Idle,
+    Loading,
+    Sealed,
+    Error { reason: String },
+}
+
+#[derive(Debug)]
+pub struct SinkIntrospection {
+    pub id: IdType,
+    pub activation_state: ActivationIntrospection,
+    pub load_state: LoadStateIntrospection,
+    /// The time since the sink was last interacted with, in seconds
+    pub duration_since_interaction: f32,
+    pub is_clearable: bool,
+}
+
+impl Introspect<ActivationIntrospection> for SinkActivation {
+    fn introspect(&self) -> ActivationIntrospection {
+        match self {
+            SinkActivation::Inactive => ActivationIntrospection::Inactive,
+            SinkActivation::Activating => ActivationIntrospection::Activating,
+            SinkActivation::Activated(buffer) => ActivationIntrospection::Activated {
+                buffer: buffer.introspect(),
+            },
+            SinkActivation::Error(err) => ActivationIntrospection::Error {
+                reason: err.clone(),
+            },
+        }
+    }
+}
+
+impl Introspect<LoadStateIntrospection> for SinkLoadState {
+    fn introspect(&self) -> LoadStateIntrospection {
+        match self {
+            SinkLoadState::Idle => LoadStateIntrospection::Idle,
+            SinkLoadState::Loading => LoadStateIntrospection::Loading,
+            SinkLoadState::Sealed => LoadStateIntrospection::Sealed,
+            SinkLoadState::Error(err) => LoadStateIntrospection::Error {
+                reason: err.clone(),
+            },
+        }
+    }
+}
+
+impl Introspect<SinkIntrospection> for Sink {
+    fn introspect(&self) -> SinkIntrospection {
+        SinkIntrospection {
+            id: self.id.value(),
+            activation_state: self.activation.read().introspect(),
+            load_state: self.load_state.lock().introspect(),
+            is_clearable: self.is_clearable(),
+            duration_since_interaction: self
+                .duration_since_interaction
+                .load()
+                .elapsed()
+                .as_secs_f32(),
+        }
+    }
+}
+
+impl SinkIntrospection {
+    pub fn size(&self) -> usize {
+        if let ActivationIntrospection::Activated { buffer } = &self.activation_state {
+            buffer.current_size
+        } else {
+            0
+        }
     }
 }

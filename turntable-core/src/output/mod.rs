@@ -1,6 +1,6 @@
 use std::{sync::Arc, thread};
 
-use crate::{Config, PipelineContext, PlayerId, Sample};
+use crate::{Config, Introspect, PipelineContext, PlayerId, Sample};
 use crossbeam::channel::{unbounded, Receiver, Sender};
 use dashmap::DashMap;
 
@@ -91,4 +91,13 @@ fn spawn_output_thread(
         .name("output".to_string())
         .spawn(run)
         .expect("output thread is spawned");
+}
+
+impl Introspect<Vec<StreamIntrospection>> for Output {
+    fn introspect(&self) -> Vec<StreamIntrospection> {
+        self.streams
+            .iter()
+            .map(|x| (x.key(), x.value()).introspect())
+            .collect()
+    }
 }

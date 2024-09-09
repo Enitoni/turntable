@@ -34,6 +34,7 @@ where
     queuing: Arc<Queuing>,
 
     event_receiver: EventReceiver,
+    context: PipelineContext,
 }
 
 /// A type passed to various components of the pipeline, to access state, emit events, and dispatch actions.
@@ -80,6 +81,7 @@ where
 
         Pipeline {
             output,
+            context,
             queuing,
             playback,
             sink_manager,
@@ -182,6 +184,54 @@ fn spawn_action_handler_thread(
         .name("core-actions".to_string())
         .spawn(run)
         .expect("core-actions thread is spawned");
+}
+
+#[derive(Debug)]
+pub struct PipelineIntrospection {
+    pub config: Config,
+    pub ingestion: String,
+    pub sinks: Vec<SinkIntrospection>,
+    pub players: Vec<PlayerIntrospection>,
+    pub streams: Vec<StreamIntrospection>,
+    /// The amount of bytes the pipeline is taking up in total
+    pub size: usize,
+}
+
+impl<I> Introspect<PipelineIntrospection> for Pipeline<I>
+where
+    I: Ingestion,
+{
+    fn introspect(&self) -> PipelineIntrospection {
+        let streams = self.output.introspect();
+        let sinks: Vec<_> = self.context.sinks.iter().map(|s| s.introspect()).collect();
+        let players: Vec<_> = self
+            .context
+            .players
+            .iter()
+            .map(|p| p.introspect())
+            .collect();
+
+        let sinks_size: usize = sinks.iter().map(|s| s.size()).sum();
+        let streams_size: usize = streams
+            .iter()
+            .map(|s| {
+                let consumer_size: usize = s.consumers.iter().map(|c| c.encoder.size).sum();
+
+                consumer_size + s.preload_size
+            })
+            .sum();
+
+        let size = streams_size + sinks_size;
+
+        PipelineIntrospection {
+            config: self.context.config.clone(),
+            ingestion: I::name(),
+            streams,
+            players,
+            sinks,
+            size,
+        }
+    }
 }
 
 // Realistically, the context should always be created by the pipeline.

@@ -4,8 +4,8 @@ use dashmap::DashMap;
 use log::info;
 use parking_lot::Mutex;
 
-use super::{Consumer, ConsumerId, Encoder};
-use crate::{Config, Producer, Sample};
+use super::{Consumer, ConsumerId, ConsumerPairIntrospection, Encoder};
+use crate::{Config, IdType, Introspect, PlayerId, Producer, Sample};
 
 /// A stream is the destination of a [Player], and manages consumers for said player.
 ///
@@ -82,6 +82,31 @@ impl Stream {
 
         if amount_overflowing > 0 {
             preload_cache.drain(..amount_overflowing);
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct StreamIntrospection {
+    pub player_id: IdType,
+    pub preload_size: usize,
+    pub consumers: Vec<ConsumerPairIntrospection>,
+}
+
+impl Introspect<StreamIntrospection> for (&PlayerId, &Arc<Stream>) {
+    fn introspect(&self) -> StreamIntrospection {
+        let preload_size = self.1.preload_cache.lock().len() * Config::SAMPLES_IN_BYTES;
+        let consumers: Vec<_> = self
+            .1
+            .producers
+            .iter()
+            .map(|x| (x.key(), x.value()).introspect())
+            .collect();
+
+        StreamIntrospection {
+            player_id: self.0.value(),
+            preload_size,
+            consumers,
         }
     }
 }

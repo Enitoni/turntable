@@ -3,9 +3,11 @@ use std::sync::Arc;
 use crossbeam::atomic::AtomicCell;
 
 use crate::{
-    Id, Output, PipelineAction, PipelineContext, PipelineEvent, Queue, Sink, SinkId, Timeline,
-    TimelinePreload,
+    Id, IdType, Introspect, Output, PipelineAction, PipelineContext, PipelineEvent, Queue, Sink,
+    SinkId, Timeline, TimelinePreload,
 };
+
+use super::TimelineIntrospection;
 
 pub type PlayerId = Id<Player>;
 
@@ -230,5 +232,24 @@ impl PlayerContext {
     /// Returns the current state of the player
     pub fn current_state(&self) -> PlayerState {
         self.state.load()
+    }
+}
+
+#[derive(Debug)]
+pub struct PlayerIntrospection {
+    pub id: IdType,
+    pub state: PlayerState,
+    pub should_play: bool,
+    pub timeline: TimelineIntrospection,
+}
+
+impl Introspect<PlayerIntrospection> for Player {
+    fn introspect(&self) -> PlayerIntrospection {
+        PlayerIntrospection {
+            id: self.id.value(),
+            state: self.state.load(),
+            should_play: self.should_play.load(),
+            timeline: self.timeline.introspect(),
+        }
     }
 }

@@ -9,11 +9,31 @@ use tokio::runtime::{Handle, Runtime};
 
 use crate::{Config, Sample};
 
-pub static ID_COUNTER: AtomicCell<u64> = AtomicCell::new(1);
+pub type IdType = u64;
+pub static ID_COUNTER: AtomicCell<IdType> = AtomicCell::new(1);
+
+/// Provides diagnostic information about any given type.
+/// Implementors are expected to return a dummy object with all public fields.
+pub trait Introspect<T>
+where
+    T: Debug,
+{
+    fn introspect(&self) -> T;
+}
+
+impl<I, O> Introspect<Vec<O>> for Vec<I>
+where
+    I: Introspect<O>,
+    O: Debug,
+{
+    fn introspect(&self) -> Vec<O> {
+        self.iter().map(|x| x.introspect()).collect()
+    }
+}
 
 /// A unique identifier for any type.
 pub struct Id<T> {
-    value: u64,
+    value: IdType,
     kind: PhantomData<T>,
 }
 
@@ -392,6 +412,45 @@ impl MultiRangeBuffer {
             .drain(..)
             .map(|mut x| x.consume_to_vec())
             .collect()
+    }
+}
+
+#[derive(Debug)]
+pub struct RangeInstrospection {
+    pub offset: usize,
+    pub length: usize,
+}
+
+#[derive(Debug)]
+pub struct MultiRangeBufferIntrospection {
+    pub ranges: Vec<RangeInstrospection>,
+    pub expected_length: Option<usize>,
+    /// The size of the buffer in bytes
+    pub current_size: usize,
+}
+
+impl Introspect<RangeInstrospection> for RangeBuffer {
+    fn introspect(&self) -> RangeInstrospection {
+        RangeInstrospection {
+            offset: self.offset,
+            length: self.length(),
+        }
+    }
+}
+
+impl Introspect<MultiRangeBufferIntrospection> for MultiRangeBuffer {
+    fn introspect(&self) -> MultiRangeBufferIntrospection {
+        let ranges = self.ranges.introspect();
+        let current_size: usize = ranges
+            .iter()
+            .map(|r| r.length * Config::SAMPLES_IN_BYTES)
+            .sum();
+
+        MultiRangeBufferIntrospection {
+            ranges,
+            current_size,
+            expected_length: self.expected_length,
+        }
     }
 }
 

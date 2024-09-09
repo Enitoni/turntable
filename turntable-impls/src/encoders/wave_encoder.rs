@@ -1,4 +1,4 @@
-use turntable_core::{Config, Encoder, Sample};
+use turntable_core::{Config, Encoder, EncoderIntrospection, Introspect, Sample};
 
 /// Encodes [Sample]s into a .wav file
 pub struct WaveEncoder {
@@ -146,5 +146,14 @@ impl Encoder for WaveEncoder {
         self.encoded_bytes.truncate(0);
 
         Some(bytes)
+    }
+}
+
+impl Introspect<EncoderIntrospection> for WaveEncoder {
+    fn introspect(&self) -> EncoderIntrospection {
+        EncoderIntrospection {
+            name: Self::name(),
+            size: self.encoded_bytes.len(),
+        }
     }
 }
