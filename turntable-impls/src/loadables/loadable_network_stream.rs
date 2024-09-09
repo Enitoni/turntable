@@ -22,8 +22,8 @@ pub struct LoadableNetworkStream {
 }
 
 impl LoadableNetworkStream {
-    const MAX_CHUNK_SIZE: usize = 50_000_000; // 50MB
-    const MIN_CHUNK_SIZE: usize = 3_000_000; // 3MB
+    const MAX_CHUNK_SIZE: usize = 3_000_000; // 3MB
+    const MIN_CHUNK_SIZE: usize = 500_000; // 500KB
 
     pub fn new<S>(url: S) -> Self
     where

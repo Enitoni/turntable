@@ -96,9 +96,9 @@ impl Default for Config {
             // Stereo audio
             channel_count: 2,
             // A small preload size ensures quick loading
-            preload_size_in_seconds: 10.0,
-            // Keep short songs fully loaded for a nicer seeking experience
-            preload_threshold_in_seconds: 60.0 * 3.,
+            preload_size_in_seconds: 5.0,
+            // One minute should be enough
+            preload_threshold_in_seconds: 60.0,
             // 100ms of should be enough to avoid buffer underruns
             buffer_size_in_seconds: 0.1,
             // One second of latency should be OK for most modern networks
