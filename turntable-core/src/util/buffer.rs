@@ -1,106 +1,15 @@
-use std::collections::VecDeque;
-use std::fmt::{Debug, Display};
-use std::hash::{Hash, Hasher};
-use std::ops::{Add, Bound, Mul, RangeBounds};
-use std::{marker::PhantomData, vec};
+use std::{
+    collections::VecDeque,
+    ops::{Add, Mul},
+};
 
-use crossbeam::atomic::AtomicCell;
-use tokio::runtime::{Handle, Runtime};
+use crate::{Config, Sample, VecDequeExt};
 
-use crate::{Config, Sample};
-
-pub type IdType = u64;
-pub static ID_COUNTER: AtomicCell<IdType> = AtomicCell::new(1);
-
-/// Provides diagnostic information about any given type.
-/// Implementors are expected to return a dummy object with all public fields.
-pub trait Introspect<T>
-where
-    T: Debug,
-{
-    fn introspect(&self) -> T;
-}
-
-impl<I, O> Introspect<Vec<O>> for Vec<I>
-where
-    I: Introspect<O>,
-    O: Debug,
-{
-    fn introspect(&self) -> Vec<O> {
-        self.iter().map(|x| x.introspect()).collect()
-    }
-}
-
-/// A unique identifier for any type.
-pub struct Id<T> {
-    value: IdType,
-    kind: PhantomData<T>,
-}
-
-impl<T> Id<T> {
-    /// Creates a new id.
-    pub fn new() -> Self {
-        Self {
-            value: ID_COUNTER.fetch_add(1),
-            kind: PhantomData,
-        }
-    }
-
-    /// Returns an empty id.
-    pub fn none() -> Self {
-        Self {
-            value: 0,
-            kind: PhantomData,
-        }
-    }
-
-    pub fn value(&self) -> u64 {
-        self.value
-    }
-}
-
-impl<T> Default for Id<T> {
-    fn default() -> Self {
-        Self::none()
-    }
-}
-
-impl<T> Debug for Id<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.value)
-    }
-}
-
-impl<T> Display for Id<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.value)
-    }
-}
-
-impl<T> PartialEq for Id<T> {
-    fn eq(&self, other: &Self) -> bool {
-        self.value == other.value
-    }
-}
-
-impl<T> Hash for Id<T> {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.value.hash(state)
-    }
-}
-
-impl<T> Clone for Id<T> {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-
-impl<T> Copy for Id<T> {}
-impl<T> Eq for Id<T> {}
+use super::Introspect;
 
 /// A buffer that stores a single range of data. Used in [MultiRangeBuffer].
 #[derive(Debug)]
-struct RangeBuffer {
+pub struct RangeBuffer {
     /// The offset in samples of the start of the buffer.
     offset: usize,
     /// The samples in the buffer.
@@ -454,67 +363,10 @@ impl Introspect<MultiRangeBufferIntrospection> for MultiRangeBuffer {
     }
 }
 
-/// Converts a slice of bytes into a vec of [Sample].
-pub fn raw_samples_from_bytes(bytes: &[u8]) -> Vec<Sample> {
-    bytes
-        .chunks_exact(Config::SAMPLES_IN_BYTES)
-        .map(|b| {
-            let arr: [u8; Config::SAMPLES_IN_BYTES] = [b[0], b[1], b[2], b[3]];
-            Sample::from_le_bytes(arr)
-        })
-        .collect()
-}
-
-/// A utility function to safely assign a slice to a mutable slice.
-/// Returns the amount of elements that were assigned.
-pub fn assign_slice<T: Copy>(from: &[T], to: &mut [T]) -> usize {
-    let safe_end = from.len().min(to.len());
-    to[..safe_end].copy_from_slice(&from[..safe_end]);
-    safe_end
-}
-
-/// Same as `assign_slice`, but with an offset.
-/// If the offset is larger than the length of the slice, data is truncated.
-pub fn assign_slice_with_offset<T: Copy>(offset: usize, from: &[T], to: &mut [T]) -> usize {
-    let offset = offset.min(to.len());
-    assign_slice(from, &mut to[offset..])
-}
-
-/// Returns the current tokio handle, or creates a new one if none exists.
-pub fn get_or_create_handle() -> Handle {
-    Handle::try_current()
-        .ok()
-        .unwrap_or_else(|| Runtime::new().unwrap().handle().clone())
-}
-
-pub trait VecDequeExt<T> {
-    fn range_as_slices<R: RangeBounds<usize>>(&self, range: R) -> (&[T], &[T]);
-}
-
-impl<T> VecDequeExt<T> for VecDeque<T> {
-    fn range_as_slices<R: RangeBounds<usize>>(&self, range: R) -> (&[T], &[T]) {
-        let start = match range.start_bound() {
-            Bound::Included(&i) => i,
-            Bound::Excluded(&i) => i + 1,
-            Bound::Unbounded => 0,
-        };
-        let end = match range.end_bound() {
-            Bound::Included(&i) => i + 1,
-            Bound::Excluded(&i) => i,
-            Bound::Unbounded => self.len(),
-        };
-
-        let (head, tail) = self.as_slices();
-        let head_len = head.len();
-        let head = &head[start.min(head.len())..end.min(head.len())];
-        let tail =
-            &tail[start.saturating_sub(head_len)..(end.saturating_sub(head_len)).min(tail.len())];
-        (head, tail)
-    }
-}
-
 #[cfg(test)]
 mod test {
+    use crate::{assign_slice, assign_slice_with_offset};
+
     use super::*;
 
     #[test]

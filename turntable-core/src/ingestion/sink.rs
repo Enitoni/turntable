@@ -1,8 +1,8 @@
 use std::{sync::Arc, time::Instant};
 
 use crate::{
-    BufferRead, BufferVoidDistance, Id, IdType, Introspect, MultiRangeBuffer,
-    MultiRangeBufferIntrospection, PipelineContext, PipelineEvent, Sample,
+    util::MultiRangeBufferIntrospection, BufferRead, BufferVoidDistance, Id, IdType, Introspect,
+    MultiRangeBuffer, PipelineContext, PipelineEvent, Sample,
 };
 use crossbeam::atomic::AtomicCell;
 use log::info;

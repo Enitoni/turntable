@@ -8,7 +8,8 @@ pub use queue::*;
 pub use queue_item::*;
 
 use crate::{
-    get_or_create_handle, Ingestion, PipelineAction, PipelineContext, PlayerId, Sink, SinkManager,
+    util::get_or_create_handle, Ingestion, PipelineAction, PipelineContext, PlayerId, Sink,
+    SinkManager,
 };
 
 /// A type passed to a queue to allow it to notify the Pipeline that it changed.
