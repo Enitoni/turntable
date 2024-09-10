@@ -1,3 +1,4 @@
 /target
 /processed
 .env
+.bruno/turntable-server/environments/dev.bru
