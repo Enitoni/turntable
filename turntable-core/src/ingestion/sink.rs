@@ -227,8 +227,8 @@ impl Sink {
 
         let elapsed_secs = self.duration_since_interaction.load().elapsed().as_secs();
 
-        // Three minutes should be enough to clear sinks before too much memory is used.
-        if elapsed_secs < 60 * 3 {
+        // One minute should be enough to clear sinks before too much memory is used.
+        if elapsed_secs < 60 {
             return false;
         }
 
