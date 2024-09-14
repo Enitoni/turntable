@@ -716,6 +716,18 @@ mod test {
     }
 
     #[test]
+    fn test_truncate() {
+        let mut buffer = MultiRangeBuffer::new(Some(10));
+
+        buffer.write(0, &[0.; 2]);
+        buffer.write(5, &[0.1; 4]);
+        buffer.truncate();
+
+        assert_eq!(buffer.length(), Some(9));
+        assert!(buffer.in_full_end_range(5));
+    }
+
+    #[test]
     fn test_assign_slice() {
         let mut buf = vec![0.; 10];
 
