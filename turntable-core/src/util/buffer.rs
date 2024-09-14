@@ -181,6 +181,13 @@ pub struct BufferVoidDistance {
     pub is_end: bool,
 }
 
+/// Describes the ranges of data in the buffer
+#[derive(Debug, Clone, Copy)]
+pub struct BufferRange {
+    pub start: usize,
+    pub end: usize,
+}
+
 impl MultiRangeBuffer {
     pub fn new(expected_length: Option<usize>) -> Self {
         Self {
@@ -326,6 +333,17 @@ impl MultiRangeBuffer {
         let actual_length = self.actual_length.unwrap_or_default();
 
         actual_length as i32 - expected_length as i32
+    }
+
+    /// Returns the ranges of data in this buffer
+    pub fn ranges(&self) -> Vec<BufferRange> {
+        self.ranges
+            .iter()
+            .map(|r| BufferRange {
+                start: r.offset,
+                end: r.offset + r.length(),
+            })
+            .collect()
     }
 
     /// Merges all ranges that are intersecting or adjacent to each other.
