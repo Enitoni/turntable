@@ -291,7 +291,7 @@ impl MultiRangeBuffer {
         self.expected_length
     }
 
-    /// Returns true if the offset is within a range that ends at the buffer's expected length
+    /// Returns true if the offset is within a range that ends at the buffer's length
     pub fn in_full_end_range(&self, offset: usize) -> bool {
         let range = self.ranges.iter().find(|x| x.is_within(offset));
 

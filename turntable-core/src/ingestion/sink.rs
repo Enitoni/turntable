@@ -203,8 +203,9 @@ impl Sink {
             buffer.truncate();
 
             info!(
-                "Sink #{} ended with discrepancy of {}",
+                "Sink #{} ended at length {} with discrepancy of {}",
                 self.id,
+                buffer.length().unwrap_or_default(),
                 buffer.discrepancy()
             );
         })
