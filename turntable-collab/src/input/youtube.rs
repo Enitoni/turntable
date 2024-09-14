@@ -323,8 +323,6 @@ impl LoadableYouTubeVideo {
 #[async_trait]
 impl Loadable for LoadableYouTubeVideo {
     async fn activate(&self) -> Result<(), Box<dyn Error>> {
-        dbg!("hi");
-
         self.setup().await?;
         self.stream().activate().await?;
 

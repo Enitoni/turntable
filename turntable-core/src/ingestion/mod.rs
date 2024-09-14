@@ -95,8 +95,6 @@ where
             .get(&sink_id)
             .expect("sink exists when trying to activate");
 
-        //dbg!(sink.is_activatable());
-
         let guard = sink.activate();
         let ingest = self.ingestion.ingest(loader).await;
 
