@@ -76,6 +76,8 @@ impl Timeline {
             }
 
             let available_until_void = sink.distance_from_void(playback_offset);
+            let available_until_end = sink.distance_from_end(playback_offset);
+
             let amount_to_read = available_until_void.distance.min(remaining);
             let new_offset = playback_offset + amount_to_read;
 
@@ -97,9 +99,11 @@ impl Timeline {
 
             // Let's break down the conditions for moving on to the next sink.
             // 1. The sink is sealed/not loadable, meaning there won't be any more samples to load, and
-            // 2. There are no more remaining samples to read.
-            let should_move_on = !sink.can_load_more()
-                && available_until_void.distance.saturating_sub(amount_to_read) == 0;
+            // 2. There are no more remaining samples to read, or
+            // 3. We're at the end
+            let should_move_on = (!sink.can_load_more()
+                && available_until_void.distance.saturating_sub(amount_to_read) == 0)
+                || available_until_end.saturating_sub(amount_to_read) == 0;
 
             // Stop here if we're not moving on to the next sink.
             if !should_move_on {
@@ -136,9 +140,13 @@ impl Timeline {
 
             let available_until_void = sink.distance_from_void(offset);
             let available_until_end = sink.distance_from_end(offset);
+            let in_full_end_range = sink.in_full_end_range(offset);
 
-            // No need to preload if we're under the threshold, or if we satisfied the remaining to load.
-            if available_until_void.distance >= threshold || remaining_to_load == 0 {
+            // No need to preload if we're under the threshold, or if we satisfied the remaining to load, or if the remaining samples loaded are at the end.
+            if available_until_void.distance >= threshold
+                || remaining_to_load == 0
+                || in_full_end_range
+            {
                 break;
             }
 
@@ -277,8 +285,6 @@ mod tests {
             .write()
             .write(0, &[1., 2., 3., 4., 5., 6., 7., 8., 9., 10.]);
 
-        first.write().seal();
-
         // Second has a gap after first range.
         second.write().write(0, &[1., 2., 3., 4., 5.]);
 
@@ -293,7 +299,10 @@ mod tests {
         // Next offset should be 5 since we requested 5 samples prior.
         let reads = timeline.advance(4);
         assert_eq!(reads.len(), 1, "only one sink needs to be read");
-        assert_eq!(reads[0].offset, 5, "we are at offset 5 of the first sink");
+        assert_eq!(
+            reads[0].offset, 5,
+            "we read from offset 5 of the first sink"
+        );
 
         // Request 5 samples from the timeline.
         // Next offset should be 9 since we requested a total of 9 samples from the first sink.
@@ -354,10 +363,10 @@ mod tests {
         let preload = timeline.preload();
         assert_eq!(preload[0].offset, 3, "returns the correct offset");
 
-        // Seal the first sink, so we have to preload the second sink.
-        first.write().seal();
+        // Cause an unexpected error
+        first.write().error("error".to_string());
 
-        // Should return the second sink to preload.
+        // Should return the second sink to preload, since the first one failed.
         let preload = timeline.preload();
         assert_eq!(preload[0].sink_id, second.id, "returns the second sink");
 

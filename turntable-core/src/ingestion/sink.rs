@@ -35,10 +35,6 @@ pub enum SinkLoadState {
     Idle,
     /// The [Ingestion] is loading samples into the sink.
     Loading,
-    /// The [Ingestion] has finished loading samples into the sink and there is no more data to load.
-    ///
-    /// If the sink is in this state, it will be skipped by the player when it encounters a void.
-    Sealed,
     /// Something went wrong with the sink, or the [Ingestion] loading into it.
     /// Note: This is a string because the error may not be clonable.
     ///
@@ -191,6 +187,11 @@ impl Sink {
         self.read_buffer(|buffer| buffer.distance_from_end(offset))
     }
 
+    // Returns true if the offset is within a full-end range
+    fn in_full_end_range(&self, offset: usize) -> bool {
+        self.read_buffer(|buffer| buffer.in_full_end_range(offset))
+    }
+
     /// Clears the samples in the sink outside the given window.
     fn clear_outside(&self, offset: usize, window: usize, chunk_size: usize) {
         self.write_buffer(|buffer| buffer.retain_window(offset, window, chunk_size));
@@ -332,6 +333,10 @@ impl SinkGuard {
         self.get_sink().distance_from_end(offset)
     }
 
+    pub fn in_full_end_range(&self, offset: usize) -> bool {
+        self.get_sink().in_full_end_range(offset)
+    }
+
     /// Returns true if the sink can still be loaded into.
     pub fn can_load_more(&self) -> bool {
         self.get_sink().can_load_more()
@@ -361,11 +366,6 @@ impl WriteGuard {
 
     pub fn write(&self, offset: usize, samples: &[Sample]) {
         self.get_sink().internal_write(offset, samples);
-    }
-
-    /// Seals the sink.
-    pub fn seal(&self) {
-        self.get_sink().set_load_state(SinkLoadState::Sealed);
     }
 
     /// Sets the sink to the given error state.
@@ -497,7 +497,6 @@ impl Introspect<LoadStateIntrospection> for SinkLoadState {
         match self {
             SinkLoadState::Idle => LoadStateIntrospection::Idle,
             SinkLoadState::Loading => LoadStateIntrospection::Loading,
-            SinkLoadState::Sealed => LoadStateIntrospection::Sealed,
             SinkLoadState::Error(err) => LoadStateIntrospection::Error {
                 reason: err.clone(),
             },

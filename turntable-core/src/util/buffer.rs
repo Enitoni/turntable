@@ -290,6 +290,18 @@ impl MultiRangeBuffer {
         self.expected_length
     }
 
+    /// Returns true if the offset is within a range that ends at the buffer's expected length
+    pub fn in_full_end_range(&self, offset: usize) -> bool {
+        let range = self.ranges.iter().find(|x| x.is_within(offset));
+
+        if let Some(range) = range {
+            let end_offset = range.offset + range.length();
+            return Some(end_offset) >= self.expected_length();
+        }
+
+        false
+    }
+
     /// Merges all ranges that are intersecting or adjacent to each other.
     fn merge_ranges(mut ranges: Vec<RangeBuffer>) -> Vec<RangeBuffer> {
         // Avoid a panic caused by the remove(0) call later on.
@@ -661,6 +673,20 @@ mod test {
             vec![vec![7., 8., 9., 10.], vec![21., 22.]],
             "ranges are correctly retained"
         );
+    }
+
+    #[test]
+    fn test_in_full_end_range() {
+        let mut buffer = MultiRangeBuffer::new(Some(10));
+
+        assert!(!buffer.in_full_end_range(5));
+        assert!(!buffer.in_full_end_range(0));
+
+        // Write range to the last half
+        buffer.write(5, &[0.; 5]);
+
+        assert!(buffer.in_full_end_range(5));
+        assert!(!buffer.in_full_end_range(0));
     }
 
     #[test]
