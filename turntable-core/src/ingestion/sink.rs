@@ -194,7 +194,12 @@ impl Sink {
 
     /// Clears the samples in the sink outside the given window.
     fn clear_outside(&self, offset: usize, window: usize, chunk_size: usize) {
-        self.write_buffer(|buffer| buffer.retain_window(offset, window, chunk_size));
+        self.write_buffer(|buffer| {
+            let start = offset.saturating_sub(window);
+            let end = offset + window;
+
+            buffer.retain_range(start, end, chunk_size);
+        });
     }
 
     /// Finalizes the end of the sink, having it be known
@@ -285,9 +290,7 @@ impl Sink {
 
     /// Writes samples to the sink at the given offset.
     fn internal_write(&self, offset: usize, samples: &[Sample]) {
-        self.write_buffer(|buffer| {
-            buffer.write(offset, samples);
-        });
+        self.write_buffer(|buffer| buffer.write(offset, samples));
 
         info!(
             "Wrote {} samples at offset {} into sink #{}",

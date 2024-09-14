@@ -104,6 +104,13 @@ impl RangeBuffer {
         offset >= start && offset <= end
     }
 
+    /// Returns true if the provided range intersects with this buffer
+    fn is_range_intersecting(&self, start: usize, end: usize) -> bool {
+        let (self_start, self_end) = self.range();
+
+        self_start.max(start) <= self_end.min(end)
+    }
+
     /// Returns true if the given range is intersecting or adjacent to this range.
     fn is_intersecting_or_adjacent(&self, other: &Self) -> bool {
         let (start, end) = self.range();
@@ -277,14 +284,11 @@ impl MultiRangeBuffer {
         self.length().unwrap_or(usize::MAX).saturating_sub(offset)
     }
 
-    /// Clears all samples outside the given window.
-    pub fn retain_window(&mut self, offset: usize, window: usize, chunk_size: usize) {
+    /// Clears all samples outside the given range.
+    pub fn retain_range(&mut self, start: usize, end: usize, chunk_size: usize) {
         let mut ranges: Vec<_> = self.ranges.drain(..).collect();
 
-        let start = offset.saturating_sub(window);
-        let end = offset + window;
-
-        ranges.retain(|x| x.is_within(start) || x.is_within(end));
+        ranges.retain(|x| x.is_range_intersecting(start, end));
 
         for range in ranges.iter_mut() {
             range.retain_range(start, end, chunk_size);
@@ -709,13 +713,25 @@ mod test {
         buffer.write(11, &[20., 21., 22., 23., 24., 25., 26., 27., 28., 29.]);
 
         // 10 is a gap
-        buffer.retain_window(10, 3, 2);
+        buffer.retain_range(6, 13, 2);
 
         assert_eq!(
             buffer.consume_to_vec(),
             //        L   R   L   R          L    R
             vec![vec![7., 8., 9., 10.], vec![21., 22.]],
             "ranges are correctly retained"
+        );
+
+        // Test non-touching intersection
+        let mut buffer = MultiRangeBuffer::new(None);
+
+        buffer.write(20, &[20., 21., 22., 23., 24., 25., 26., 27., 28., 29.]);
+        buffer.retain_range(0, 40, 2);
+
+        assert_eq!(buffer.ranges().len(), 1);
+        assert_eq!(
+            buffer.consume_to_vec(),
+            vec![vec![20., 21., 22., 23., 24., 25., 26., 27., 28., 29.]]
         );
     }
 

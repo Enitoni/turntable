@@ -307,7 +307,10 @@ impl Loader {
                     continue;
                 }
                 // Handle unknown errors.
-                Err(err) => return Err(err.into()),
+                Err(err) => {
+                    println!("unexpected error: {:?}", &err);
+                    return Err(err.into());
+                }
             }
         }
 

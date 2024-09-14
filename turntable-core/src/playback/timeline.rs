@@ -129,7 +129,7 @@ impl Timeline {
         let threshold = self.config.preload_threshold_in_samples();
 
         let mut remaining_to_load = threshold;
-        let mut offset = self.offset.load();
+        let mut playback_offset = self.offset.load();
         let mut result = vec![];
 
         for sink in sinks.iter() {
@@ -138,9 +138,9 @@ impl Timeline {
                 break;
             }
 
-            let available_until_void = sink.distance_from_void(offset);
-            let available_until_end = sink.distance_from_end(offset);
-            let in_full_end_range = sink.in_full_end_range(offset);
+            let available_until_void = sink.distance_from_void(playback_offset);
+            let available_until_end = sink.distance_from_end(playback_offset);
+            let in_full_end_range = sink.in_full_end_range(playback_offset);
 
             // No need to preload if we're under the threshold, or if we satisfied the remaining to load, or if the remaining samples loaded are at the end.
             if available_until_void.distance >= threshold
@@ -153,7 +153,7 @@ impl Timeline {
             // Only try to preload if the sink is loadable.
             if sink.can_load_more() {
                 let how_much_can_preload = available_until_end.min(remaining_to_load);
-                let preload_offset = available_until_void.distance + offset;
+                let preload_offset = available_until_void.distance + playback_offset;
 
                 result.push(TimelinePreload {
                     sink_id: sink.id,
@@ -164,7 +164,7 @@ impl Timeline {
             }
 
             // Set the preload offset to the start for the next sink.
-            offset = 0;
+            playback_offset = 0;
         }
 
         result
