@@ -197,6 +197,19 @@ impl Sink {
         self.write_buffer(|buffer| buffer.retain_window(offset, window, chunk_size));
     }
 
+    /// Finalizes the end of the sink, having it be known
+    fn end(&self) {
+        self.write_buffer(|buffer| {
+            buffer.truncate();
+
+            info!(
+                "Sink #{} ended with discrepancy of {}",
+                self.id,
+                buffer.discrepancy()
+            );
+        })
+    }
+
     /// Returns the expected length of the sink. [None] if unknown.
     pub fn expected_length(&self) -> Option<usize> {
         self.read_buffer(|buffer| buffer.expected_length())
@@ -371,6 +384,11 @@ impl WriteGuard {
     /// Sets the sink to the given error state.
     pub fn error(&self, error: String) {
         self.get_sink().set_load_state(SinkLoadState::Error(error));
+    }
+
+    /// Finalizes the end of the sink, having it be known
+    pub fn end(&self) {
+        self.get_sink().end()
     }
 }
 

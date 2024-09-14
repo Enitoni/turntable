@@ -170,7 +170,7 @@ impl Loader {
         match result {
             Ok(result) => {
                 if result.end_reached {
-                    //guard.seal();
+                    guard.end()
                 }
             }
             Err(e) => {

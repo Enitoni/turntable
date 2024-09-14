@@ -150,6 +150,8 @@ pub struct MultiRangeBuffer {
     ranges: Vec<RangeBuffer>,
     /// The amount of samples that is expected to be written to the buffer.
     expected_length: Option<usize>,
+    /// The actual length discovered
+    actual_length: Option<usize>,
 }
 
 /// Describes the end of a read operation.
@@ -183,6 +185,7 @@ impl MultiRangeBuffer {
     pub fn new(expected_length: Option<usize>) -> Self {
         Self {
             ranges: Default::default(),
+            actual_length: None,
             expected_length,
         }
     }
@@ -264,9 +267,7 @@ impl MultiRangeBuffer {
 
     /// Returns the distance in samples from the offset to the end of the buffer. If the end is unknown, this number is usize::MAX.
     pub fn distance_from_end(&self, offset: usize) -> usize {
-        self.expected_length
-            .unwrap_or(usize::MAX)
-            .saturating_sub(offset)
+        self.length().unwrap_or(usize::MAX).saturating_sub(offset)
     }
 
     /// Clears all samples outside the given window.
@@ -296,10 +297,35 @@ impl MultiRangeBuffer {
 
         if let Some(range) = range {
             let end_offset = range.offset + range.length();
-            return Some(end_offset) >= self.expected_length();
+            return Some(end_offset) >= self.length();
         }
 
         false
+    }
+
+    /// Truncates the actual length to end of the last range, or 0 if there is none
+    pub fn truncate(&mut self) {
+        let range = self.ranges.iter().last();
+
+        if let Some(range) = range {
+            self.actual_length = Some(range.offset + range.length());
+        } else {
+            self.actual_length = Some(0)
+        }
+    }
+
+    /// Returns the length of the buffer, this may be either the expected or actual length.
+    /// If unknown, returns [None]
+    pub fn length(&self) -> Option<usize> {
+        self.actual_length.or(self.expected_length)
+    }
+
+    /// Returns the discrepancy between the actual length and the expected length
+    pub fn discrepancy(&self) -> i32 {
+        let expected_length = self.expected_length.unwrap_or_default();
+        let actual_length = self.actual_length.unwrap_or_default();
+
+        actual_length as i32 - expected_length as i32
     }
 
     /// Merges all ranges that are intersecting or adjacent to each other.
