@@ -42,6 +42,7 @@ enum Target {
     External(String),
     Server,
     Collab,
+    Impls,
     Core,
 }
 
@@ -54,6 +55,7 @@ impl Target {
             "turntable_core" => Self::Core,
             "turntable_server" => Self::Server,
             "turntable_collab" => Self::Collab,
+            "turntable_impls" => Self::Impls,
             other => Target::External(other.to_string()),
         }
     }
@@ -69,6 +71,7 @@ impl Display for Target {
             Target::External(x) => x.as_str().bright_cyan(),
             Target::Server => "SERVER".bright_green(),
             Target::Collab => "COLLAB".bright_purple(),
+            Target::Impls => "IMPLS".bright_cyan(),
             Target::Core => "CORE".blue(),
         };
 
