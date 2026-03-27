@@ -1,14 +1,16 @@
 use async_trait::async_trait;
 use crossbeam::atomic::AtomicCell;
+use log::info;
 use parking_lot::Mutex;
 use rubato::{FftFixedInOut, Resampler};
 use std::{
     error::Error,
     io::{ErrorKind as IoErrorKind, Read, Seek, SeekFrom},
+    sync::Arc,
 };
 use symphonia::core::{
     audio::SampleBuffer,
-    codecs::{Decoder, CODEC_TYPE_NULL},
+    codecs::{CodecRegistry, Decoder, CODEC_TYPE_NULL},
     errors::Error as SymphoniaError,
     formats::{FormatOptions, FormatReader, SeekMode, SeekTo, Track},
     io::{MediaSource, MediaSourceStream},
@@ -16,6 +18,7 @@ use symphonia::core::{
     probe::Hint,
     units::Time,
 };
+use symphonia_adapter_libopus::OpusDecoder;
 use tokio::runtime::Handle;
 
 use turntable_core::{
@@ -31,6 +34,7 @@ pub struct SymphoniaIngestion {
     rt: Handle,
     context: PipelineContext,
     format_options: FormatOptions,
+    registry: Arc<CodecRegistry>,
 }
 
 #[async_trait]
@@ -38,7 +42,11 @@ impl Ingestion for SymphoniaIngestion {
     type Loader = Loader;
 
     fn new(context: &PipelineContext) -> Self {
+        let mut registry = CodecRegistry::default();
+        registry.register_all::<OpusDecoder>();
+
         Self {
+            registry: registry.into(),
             rt: get_or_create_handle(),
             context: context.clone(),
             format_options: FormatOptions {
@@ -97,12 +105,25 @@ impl Ingestion for SymphoniaIngestion {
         let resampler = DynamicResampler::new(sample_rate, &self.context.config)?;
 
         let codec_params = audio_track.codec_params.clone();
+        let registry = self.registry.clone();
+
+        info!(
+            "Symphonia: Probed codec {:?} (Sample rate: {}hz, Channels: {:?}, Channel layout: {:?})",
+            codec_params.codec,
+            codec_params.sample_rate.unwrap_or(0),
+            codec_params.channels,
+            codec_params.channel_layout
+        );
+
         let decoder = self
             .rt
-            .spawn_blocking(move || {
-                symphonia::default::get_codecs().make(&codec_params, &Default::default())
-            })
+            .spawn_blocking(move || registry.make(&codec_params, &Default::default()))
             .await??;
+
+        info!(
+            "Symphonia: Got decoder for codec {:?}",
+            decoder.codec_params().codec,
+        );
 
         // Get the decoded length of the audio track, if possible.
         let potential_decoded_seconds = audio_track

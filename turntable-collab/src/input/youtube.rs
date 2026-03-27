@@ -2,6 +2,7 @@
 // There are many fields we wanna use here, but we're not using them yet. The warnings are annoying, so they're disabled for now.
 
 use async_trait::async_trait;
+use log::info;
 use parking_lot::Mutex;
 use serde::Deserialize;
 use std::env;
@@ -264,7 +265,7 @@ impl LoadableYouTubeVideo {
 
         command
             .arg("-f")
-            .arg("bestaudio[ext=mp3]/best")
+            .arg("bestaudio")
             .arg("-j")
             .arg("--")
             .arg(url)
@@ -300,14 +301,14 @@ impl LoadableYouTubeVideo {
         let entry: PlayableYouTubeVideo =
             serde_json::from_str(&output).map_err(|e| InputError::ParseError(e.to_string()))?;
 
-        let stream_url = entry
+        let format = entry
             .formats
             .iter()
-            .find(|f| f.format_id == entry.format_id)
-            .map(|f| f.url.to_owned())
-            .ok_or(InputError::Other("No supported format found".to_string()))?;
+            .find(|f| f.format_id == entry.format_id).ok_or(InputError::Other("No supported format found".to_string()))?;
 
-        *self.stream.lock() = Some(Arc::new(LoadableNetworkStream::new(stream_url)));
+        info!("YouTube: Using format with codec {:?}", format.acodec);
+
+        *self.stream.lock() = Some(Arc::new(LoadableNetworkStream::new(format.url.to_owned())));
         Ok(())
     }
 
