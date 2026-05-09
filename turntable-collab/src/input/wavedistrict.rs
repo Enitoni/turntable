@@ -94,10 +94,10 @@ impl MediaRef<AudioSource> {
             .filter(|s| s.name != "original")
             .collect();
 
-        let lossless = sources.iter().find(|s| s.mime == "audio/flac");
-        let compressed = sources.iter().find(|s| s.mime == "audio/mpeg");
+        // let lossless = sources.iter().find(|s| s.mime == "audio/flac");
+        let compressed = sources.iter().find(|s| s.name == "high-quality");
 
-        let best_source = lossless.or(compressed)?;
+        let best_source = compressed?;
 
         Some(format!(
             "{}/audio/{}.{}?source={}",
