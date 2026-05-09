@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use crossbeam::atomic::AtomicCell;
-use log::info;
+use log::{error, info};
 use parking_lot::Mutex;
-use rubato::{FftFixedInOut, Resampler};
+use resampler::ResamplerFir;
 use std::{
     error::Error,
     io::{ErrorKind as IoErrorKind, Read, Seek, SeekFrom},
@@ -25,8 +25,6 @@ use turntable_core::{
     get_or_create_handle, BoxedLoadable, Config, Ingest, Ingestion, IntoLoadable, LoadRequest,
     Loadable, LoaderLength, PipelineContext, ReadResult, Sample, WriteGuard,
 };
-
-type SymphoniaResampler = FftFixedInOut<Sample>;
 
 /// An ingestion implementation for Symphonia.
 pub struct SymphoniaIngestion {
@@ -426,6 +424,8 @@ impl Read for LoadableMediaSource {
     }
 }
 
+type SymphoniaResampler = ResamplerFir;
+
 /// A resampler that can take any length of samples as input
 struct DynamicResampler {
     resampler: SymphoniaResampler,
@@ -436,15 +436,16 @@ struct DynamicResampler {
 }
 
 impl DynamicResampler {
-    const CHUNK_SIZE: usize = 1024;
+    const FRAME_CHUNK_SIZE: usize = 4096;
 
     fn new(source_sample_rate: usize, config: &Config) -> Result<Self, Box<dyn Error>> {
-        let resampler = SymphoniaResampler::new(
-            source_sample_rate,
-            config.sample_rate,
-            Self::CHUNK_SIZE,
+        let resampler = SymphoniaResampler::new_from_hz(
             config.channel_count,
-        )?;
+            source_sample_rate.try_into().unwrap(),
+            config.sample_rate.try_into().unwrap(),
+            Default::default(),
+            Default::default(),
+        );
 
         Ok(Self {
             resampler,
@@ -461,48 +462,31 @@ impl DynamicResampler {
             return samples;
         }
 
-        let mut interleaved_result = vec![0f32; 0];
-        let chunked_channels: Vec<_> = uninterleave_samples(samples, self.channel_count)
-            .into_iter()
-            .map(|c| {
-                c.chunks_exact(Self::CHUNK_SIZE)
-                    .map(|c| c.to_vec())
-                    .collect::<Vec<_>>()
-            })
-            .collect();
+        let buffer_size = self.resampler.buffer_size_output();
+        let chunked_samples = samples.chunks(buffer_size);
+        let mut output = vec![0f32; 0];
 
-        let chunk_amount = chunked_channels[0].len();
+        for chunk in chunked_samples {
+            let mut produced_samples = vec![0f32; buffer_size];
 
-        for chunk_index in 0..chunk_amount {
-            let mut chunks = vec![];
+            match self.resampler.resample(chunk, &mut produced_samples) {
+                Ok((_consumed, produced)) => {
+                    produced_samples.truncate(produced);
+                }
+                Err(err) => error!("Resampling error: {}", err),
+            }
 
-            // ok clippy
-            (0..self.channel_count).for_each(|channel_index| {
-                let channel_chunk = &chunked_channels[channel_index][chunk_index];
-                chunks.push(channel_chunk.to_owned());
-            });
-
-            let resampled = self
-                .resampler
-                .process(&chunks, None)
-                .expect("processes without issue");
-
-            let interleaved = interleave_samples(resampled);
-            interleaved_result.extend_from_slice(&interleaved)
+            output.extend_from_slice(&produced_samples);
         }
 
         if !self.did_remove_silence {
             self.did_remove_silence = true;
 
-            let silence_in_samples = self.resampler.output_delay() * self.channel_count;
-
-            return interleaved_result
-                .into_iter()
-                .skip(silence_in_samples)
-                .collect();
+            let silence_in_samples = self.resampler.delay() * self.channel_count;
+            return output.into_iter().skip(silence_in_samples).collect();
         }
 
-        interleaved_result
+        output
     }
 }
 

@@ -10,7 +10,7 @@ turntable-core = { path = "../turntable-core" }
 
 symphonia = { version = "0.5.5", features = ["all"] }
 symphonia-adapter-libopus = "0.2.8"
-rubato = "0.15.0"
+resampler = "0"
 
 async-trait = { workspace = true }
 parking_lot = { workspace = true }
