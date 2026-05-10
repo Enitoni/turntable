@@ -92,7 +92,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             // The most common sample rate
-            sample_rate: 44100,
+            sample_rate: 48000,
             // Stereo audio
             channel_count: 2,
             // A small preload size ensures quick loading
